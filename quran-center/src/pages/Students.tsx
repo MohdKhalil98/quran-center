@@ -3,6 +3,7 @@ import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy 
 import { db } from '../firebase';
 import '../styles/Students.css';
 import ConfirmModal from '../components/ConfirmModal';
+import curriculum from '../data/curriculumData';
 
 interface Student {
   id?: string;
@@ -11,7 +12,8 @@ interface Student {
   phone: string;
   email: string;
   birthDate: string;
-  currentPortion: string;
+  levelId?: number;
+  levelName?: string;
 }
 
 const Students = () => {
@@ -19,6 +21,7 @@ const Students = () => {
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmTargetId, setConfirmTargetId] = useState<string | null>(null);
   const [formData, setFormData] = useState<Student>({
@@ -27,7 +30,8 @@ const Students = () => {
     phone: '',
     email: '',
     birthDate: '',
-    currentPortion: ''
+    levelId: 1,
+    levelName: curriculum.find((l) => l.id === 1)?.name || 'المستوى الأول'
   });
 
   // Fetch students from Firebase
@@ -38,7 +42,11 @@ const Students = () => {
         const snapshot = await getDocs(q);
         const studentsList = snapshot.docs.map((doc) => ({
           id: doc.id,
-          ...doc.data()
+          ...doc.data(),
+          // ensure backward compatibility: if level not set, default to level 1
+          levelId: (doc.data() as any).levelId || 1,
+          levelName:
+            (doc.data() as any).levelName || curriculum.find((l) => l.id === ((doc.data() as any).levelId || 1))?.name
         } as Student));
         setStudents(studentsList);
         setLoading(false);
@@ -51,12 +59,22 @@ const Students = () => {
     fetchStudents();
   }, []);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
       [name]: value
-    }));
+    } as any));
+  };
+
+  const handleLevelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const levelId = parseInt(e.target.value, 10);
+    const level = curriculum.find((l) => l.id === levelId);
+    setFormData((prev) => ({
+      ...prev,
+      levelId,
+      levelName: level?.name || ''
+    } as any));
   };
 
   const handleAddStudent = async (e: React.FormEvent) => {
@@ -67,19 +85,23 @@ const Students = () => {
     }
 
     try {
-      const { id, ...dataToSave } = formData;
+      const { id, ...dataToSave } = formData as any;
+      // ensure levelName exists
+      if (!dataToSave.levelName && dataToSave.levelId) {
+        dataToSave.levelName = curriculum.find((l) => l.id === dataToSave.levelId)?.name || '';
+      }
 
       if (editingId) {
         // Update existing student
         await updateDoc(doc(db, 'students', editingId), dataToSave);
         setStudents((prev) =>
-          prev.map((s) => (s.id === editingId ? { ...dataToSave, id: editingId } : s))
+          prev.map((s) => (s.id === editingId ? { ...(dataToSave as Student), id: editingId } : s))
         );
         setEditingId(null);
       } else {
         // Add new student
         const docRef = await addDoc(collection(db, 'students'), dataToSave);
-        setStudents((prev) => [...prev, { ...dataToSave, id: docRef.id }]);
+        setStudents((prev) => [...prev, { ...(dataToSave as Student), id: docRef.id }]);
       }
 
       setFormData({
@@ -88,7 +110,8 @@ const Students = () => {
         phone: '',
         email: '',
         birthDate: '',
-        currentPortion: ''
+        levelId: 1,
+        levelName: curriculum.find((l) => l.id === 1)?.name || 'المستوى الأول'
       });
       setIsAdding(false);
     } catch (error) {
@@ -131,7 +154,8 @@ const Students = () => {
       phone: '',
       email: '',
       birthDate: '',
-      currentPortion: ''
+      levelId: 1,
+      levelName: curriculum.find((l) => l.id === 1)?.name || 'المستوى الأول'
     });
   };
 
@@ -153,9 +177,27 @@ const Students = () => {
         <p>إدارة بيانات الطلاب ومستوى التقدم.</p>
       </header>
 
-      <button className="btn btn-primary" onClick={() => setIsAdding(true)}>
-        + إضافة طالب جديد
-      </button>
+      <div className="students-header">
+        <button className="btn btn-primary" onClick={() => setIsAdding(true)}>
+          + إضافة طالب جديد
+        </button>
+        <div className="view-mode-toggle">
+          <button 
+            className={`view-btn ${viewMode === 'cards' ? 'active' : ''}`}
+            onClick={() => setViewMode('cards')}
+            title="عرض البطاقات"
+          >
+            📇 البطاقات
+          </button>
+          <button 
+            className={`view-btn ${viewMode === 'table' ? 'active' : ''}`}
+            onClick={() => setViewMode('table')}
+            title="عرض الجدول"
+          >
+            📋 الجدول
+          </button>
+        </div>
+      </div>
 
       {isAdding && (
         <form className="form-card" onSubmit={handleAddStudent}>
@@ -215,15 +257,14 @@ const Students = () => {
             />
           </div>
           <div className="form-group">
-            <label htmlFor="currentPortion">الورد الحالي</label>
-            <input
-              type="text"
-              id="currentPortion"
-              name="currentPortion"
-              placeholder="مثال: جزء عمّ"
-              value={formData.currentPortion}
-              onChange={handleInputChange}
-            />
+            <label htmlFor="levelId">المستوى</label>
+            <select id="levelId" name="levelId" value={formData.levelId as any} onChange={handleLevelChange}>
+              {curriculum.map((lvl) => (
+                <option key={lvl.id} value={lvl.id}>
+                  {lvl.name}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="form-actions">
             <button type="submit" className="btn btn-success">
@@ -236,61 +277,119 @@ const Students = () => {
         </form>
       )}
 
-      <div className="table-card">
-        {students.length === 0 ? (
-          <p>لا توجد بيانات طلاب حتى الآن</p>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>الاسم</th>
-                <th>الرقم الشخصي</th>
-                <th>رقم الهاتف</th>
-                <th>البريد الإلكتروني</th>
-                <th>تاريخ الميلاد</th>
-                <th>الورد الحالي</th>
-                <th>الإجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {students.map((student) => (
-                <tr key={student.id}>
-                  <td>{student.name}</td>
-                  <td>{student.personalId}</td>
-                  <td>{student.phone}</td>
-                  <td>{student.email}</td>
-                  <td className="date-cell">
-                    {student.birthDate
-                      ? new Date(student.birthDate + 'T00:00:00').toLocaleDateString('ar-EG', {
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric'
-                        })
-                      : '-'}
-                  </td>
-                  <td>{student.currentPortion || '-'}</td>
-                  <td>
-                    <div className="card-actions">
-                      <button
-                        className="btn btn-sm btn-warning"
-                        onClick={() => handleEditStudent(student)}
-                      >
-                        تعديل
-                      </button>
-                      <button
-                        className="btn btn-sm btn-danger"
-                        onClick={() => handleDeleteStudent(student.id || '')}
-                      >
-                        حذف
-                      </button>
-                    </div>
-                  </td>
+      {viewMode === 'cards' ? (
+        <div className="students-cards-container">
+          {students.length === 0 ? (
+            <p>لا توجد بيانات طلاب حتى الآن</p>
+          ) : (
+            students.map((student) => (
+              <article key={student.id} className="student-card">
+                <header className="student-header">
+                  <div>
+                    <h3>{student.name}</h3>
+                    <p className="student-id">#{student.personalId}</p>
+                  </div>
+                  <div className="student-portion">
+                    <span>{student.levelName || 'غير محدد'}</span>
+                  </div>
+                </header>
+                <section className="student-body">
+                  <div className="student-row">
+                    <label>رقم الهاتف:</label>
+                    <span>{student.phone}</span>
+                  </div>
+                  <div className="student-row">
+                    <label>البريد الإلكتروني:</label>
+                    <span>{student.email}</span>
+                  </div>
+                  <div className="student-row">
+                    <label>تاريخ الميلاد:</label>
+                    <span>
+                      {student.birthDate
+                        ? new Date(student.birthDate + 'T00:00:00').toLocaleDateString('ar-EG', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          })
+                        : '-'}
+                    </span>
+                  </div>
+                </section>
+                <footer className="student-actions">
+                  <button
+                    className="btn btn-sm btn-warning"
+                    onClick={() => handleEditStudent(student)}
+                  >
+                    ✏️ تعديل
+                  </button>
+                  <button
+                    className="btn btn-sm btn-danger"
+                    onClick={() => handleDeleteStudent(student.id || '')}
+                  >
+                    🗑️ حذف
+                  </button>
+                </footer>
+              </article>
+            ))
+          )}
+        </div>
+      ) : (
+        <div className="table-card">
+          {students.length === 0 ? (
+            <p>لا توجد بيانات طلاب حتى الآن</p>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>الاسم</th>
+                  <th>الرقم الشخصي</th>
+                  <th>رقم الهاتف</th>
+                  <th>البريد الإلكتروني</th>
+                  <th>تاريخ الميلاد</th>
+                  <th>الورد الحالي</th>
+                  <th>الإجراءات</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+              </thead>
+              <tbody>
+                {students.map((student) => (
+                  <tr key={student.id}>
+                    <td>{student.name}</td>
+                    <td>{student.personalId}</td>
+                    <td>{student.phone}</td>
+                    <td>{student.email}</td>
+                    <td className="date-cell">
+                      {student.birthDate
+                        ? new Date(student.birthDate + 'T00:00:00').toLocaleDateString('ar-EG', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          })
+                        : '-'}
+                    </td>
+                    <td>{student.levelName || '-'}</td>
+                    <td>
+                      <div className="card-actions">
+                        <button
+                          className="btn btn-sm btn-warning"
+                          onClick={() => handleEditStudent(student)}
+                        >
+                          تعديل
+                        </button>
+                        <button
+                          className="btn btn-sm btn-danger"
+                          onClick={() => handleDeleteStudent(student.id || '')}
+                        >
+                          حذف
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
       <ConfirmModal
         open={confirmOpen}
         message="هل أنت متأكد من حذف هذا الطالب؟"

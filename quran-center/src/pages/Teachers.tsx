@@ -25,6 +25,7 @@ const Teachers = () => {
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmTargetId, setConfirmTargetId] = useState<string | null>(null);
   const [formData, setFormData] = useState<Teacher>({
@@ -163,9 +164,27 @@ const Teachers = () => {
         <p>إدارة بيانات المعلمين والمشرفين.</p>
       </header>
 
-      <button className="btn btn-primary" onClick={() => setIsAdding(true)}>
-        + إضافة معلم جديد
-      </button>
+      <div className="teachers-header">
+        <button className="btn btn-primary" onClick={() => setIsAdding(true)}>
+          + إضافة معلم جديد
+        </button>
+        <div className="view-mode-toggle">
+          <button 
+            className={`view-btn ${viewMode === 'cards' ? 'active' : ''}`}
+            onClick={() => setViewMode('cards')}
+            title="عرض البطاقات"
+          >
+            📇 البطاقات
+          </button>
+          <button 
+            className={`view-btn ${viewMode === 'table' ? 'active' : ''}`}
+            onClick={() => setViewMode('table')}
+            title="عرض الجدول"
+          >
+            📋 الجدول
+          </button>
+        </div>
+      </div>
 
       {isAdding && (
         <form className="form-card" onSubmit={handleAddTeacher}>
@@ -251,61 +270,119 @@ const Teachers = () => {
         </form>
       )}
 
-      <div className="table-card">
-        {teachers.length === 0 ? (
-          <p>لا توجد بيانات معلمين حتى الآن</p>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>الاسم</th>
-                <th>الرقم الشخصي</th>
-                <th>رقم الهاتف</th>
-                <th>البريد الإلكتروني</th>
-                <th>الوظيفة</th>
-                <th>تاريخ الميلاد</th>
-                <th>الإجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {teachers.map((teacher) => (
-                <tr key={teacher.id}>
-                  <td>{teacher.name}</td>
-                  <td>{teacher.personalId}</td>
-                  <td>{teacher.phone}</td>
-                  <td>{teacher.email}</td>
-                  <td>{getPositionLabel(teacher.position)}</td>
-                  <td className="date-cell">
-                    {teacher.birthDate
-                      ? new Date(teacher.birthDate + 'T00:00:00').toLocaleDateString('ar-EG', {
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric'
-                        })
-                      : '-'}
-                  </td>
-                  <td>
-                    <div className="card-actions">
-                      <button
-                        className="btn btn-sm btn-warning"
-                        onClick={() => handleEditTeacher(teacher)}
-                      >
-                        تعديل
-                      </button>
-                      <button
-                        className="btn btn-sm btn-danger"
-                        onClick={() => handleDeleteTeacher(teacher.id || '')}
-                      >
-                        حذف
-                      </button>
-                    </div>
-                  </td>
+      {viewMode === 'cards' ? (
+        <div className="teachers-cards-container">
+          {teachers.length === 0 ? (
+            <p>لا توجد بيانات معلمين حتى الآن</p>
+          ) : (
+            teachers.map((teacher) => (
+              <article key={teacher.id} className="teacher-card">
+                <header className="teacher-header">
+                  <div>
+                    <h3>{teacher.name}</h3>
+                    <p className="teacher-id">#{teacher.personalId}</p>
+                  </div>
+                  <div className="teacher-position">
+                    <span>{getPositionLabel(teacher.position)}</span>
+                  </div>
+                </header>
+                <section className="teacher-body">
+                  <div className="teacher-row">
+                    <label>رقم الهاتف:</label>
+                    <span>{teacher.phone}</span>
+                  </div>
+                  <div className="teacher-row">
+                    <label>البريد الإلكتروني:</label>
+                    <span>{teacher.email}</span>
+                  </div>
+                  <div className="teacher-row">
+                    <label>تاريخ الميلاد:</label>
+                    <span>
+                      {teacher.birthDate
+                        ? new Date(teacher.birthDate + 'T00:00:00').toLocaleDateString('ar-EG', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          })
+                        : '-'}
+                    </span>
+                  </div>
+                </section>
+                <footer className="teacher-actions">
+                  <button
+                    className="btn btn-sm btn-warning"
+                    onClick={() => handleEditTeacher(teacher)}
+                  >
+                    ✏️ تعديل
+                  </button>
+                  <button
+                    className="btn btn-sm btn-danger"
+                    onClick={() => handleDeleteTeacher(teacher.id || '')}
+                  >
+                    🗑️ حذف
+                  </button>
+                </footer>
+              </article>
+            ))
+          )}
+        </div>
+      ) : (
+        <div className="table-card">
+          {teachers.length === 0 ? (
+            <p>لا توجد بيانات معلمين حتى الآن</p>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>الاسم</th>
+                  <th>الرقم الشخصي</th>
+                  <th>رقم الهاتف</th>
+                  <th>البريد الإلكتروني</th>
+                  <th>الوظيفة</th>
+                  <th>تاريخ الميلاد</th>
+                  <th>الإجراءات</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+              </thead>
+              <tbody>
+                {teachers.map((teacher) => (
+                  <tr key={teacher.id}>
+                    <td>{teacher.name}</td>
+                    <td>{teacher.personalId}</td>
+                    <td>{teacher.phone}</td>
+                    <td>{teacher.email}</td>
+                    <td>{getPositionLabel(teacher.position)}</td>
+                    <td className="date-cell">
+                      {teacher.birthDate
+                        ? new Date(teacher.birthDate + 'T00:00:00').toLocaleDateString('ar-EG', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          })
+                        : '-'}
+                    </td>
+                    <td>
+                      <div className="card-actions">
+                        <button
+                          className="btn btn-sm btn-warning"
+                          onClick={() => handleEditTeacher(teacher)}
+                        >
+                          تعديل
+                        </button>
+                        <button
+                          className="btn btn-sm btn-danger"
+                          onClick={() => handleDeleteTeacher(teacher.id || '')}
+                        >
+                          حذف
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
       <ConfirmModal
         open={confirmOpen}
         message="هل أنت متأكد من حذف هذا المعلم؟"

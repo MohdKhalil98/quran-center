@@ -1,0 +1,31 @@
+/* Additional Attendance Styles for Edit Mode */
+
+.status-btn:disabled {
+  background-color: #ccc !important;
+  color: #999 !important;
+  border-color: #999 !important;
+  cursor: not-allowed;
+  opacity: 0.6;
+  transform: none !important;
+}
+
+.status-btn:disabled:hover {
+  transform: none !important;
+  box-shadow: none !important;
+  background-color: #ccc !important;
+}
+
+.btn-warning {
+  background-color: #ff9800;
+  color: white;
+}
+
+.btn-warning:hover:not(:disabled) {
+  background-color: #e68900;
+}
+
+.btn-warning:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+  opacity: 0.6;
+}

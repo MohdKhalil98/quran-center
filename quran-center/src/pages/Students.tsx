@@ -259,7 +259,15 @@ const Students = () => {
                   <td>{student.personalId}</td>
                   <td>{student.phone}</td>
                   <td>{student.email}</td>
-                  <td>{student.birthDate || '-'}</td>
+                  <td className="date-cell">
+                    {student.birthDate
+                      ? new Date(student.birthDate + 'T00:00:00').toLocaleDateString('ar-EG', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })
+                      : '-'}
+                  </td>
                   <td>{student.currentPortion || '-'}</td>
                   <td>
                     <div className="card-actions">

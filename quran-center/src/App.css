@@ -148,6 +148,76 @@
   padding-right: 1rem;
 }
 
+.attendance-summary-card {
+  background-color: #ffffff;
+  padding: 1.75rem;
+  border-radius: 1.25rem;
+  box-shadow: 0 12px 32px rgba(16, 71, 56, 0.06);
+}
+
+.attendance-summary-card h2 {
+  margin-bottom: 1.5rem;
+  color: var(--color-text-strong);
+  font-size: 1.2rem;
+}
+
+.summary-grid {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.summary-item {
+  padding: 1.25rem;
+  border-radius: 0.75rem;
+  text-align: center;
+  border: 2px solid #e4efe9;
+  transition: all 0.3s ease;
+}
+
+.summary-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+}
+
+.summary-item.total {
+  background-color: rgba(27, 140, 107, 0.08);
+  border-color: var(--color-primary);
+}
+
+.summary-item.present {
+  background-color: rgba(76, 175, 80, 0.08);
+  border-color: #4caf50;
+}
+
+.summary-item.late {
+  background-color: rgba(255, 152, 0, 0.08);
+  border-color: #ff9800;
+}
+
+.summary-item.excused {
+  background-color: rgba(33, 150, 243, 0.08);
+  border-color: #2196f3;
+}
+
+.summary-item.absent {
+  background-color: rgba(244, 67, 54, 0.08);
+  border-color: #f44336;
+}
+
+.summary-label {
+  font-weight: 600;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+.summary-count {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--color-text-strong);
+}
+
 .card-list {
   display: grid;
   gap: 1.5rem;

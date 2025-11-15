@@ -10,6 +10,7 @@ import Students from './pages/Students';
 import Teachers from './pages/Teachers';
 import StudentAchievements from './pages/StudentAchievements';
 import DevTools from './pages/DevTools';
+import Attendance from './pages/Attendance';
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
           <Route path="/teachers" element={<Teachers />} />
           <Route path="/groups" element={<Groups />} />
           <Route path="/achievements" element={<StudentAchievements />} />
+          <Route path="/attendance" element={<Attendance />} />
           <Route path="/curriculum" element={<Curriculum />} />
           <Route path="/dev-tools" element={<DevTools />} />
         </Route>

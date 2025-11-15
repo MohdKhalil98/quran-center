@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 
 interface DashboardStats {
@@ -10,6 +10,14 @@ interface DashboardStats {
   recentUpdates: string[];
   loading: boolean;
   error: string | null;
+}
+
+interface AttendanceSummary {
+  total: number;
+  present: number;
+  late: number;
+  excused: number;
+  absent: number;
 }
 
 const Dashboard = () => {
@@ -23,6 +31,14 @@ const Dashboard = () => {
     error: null
   });
 
+  const [attendanceSummary, setAttendanceSummary] = useState<AttendanceSummary>({
+    total: 0,
+    present: 0,
+    late: 0,
+    excused: 0,
+    absent: 0
+  });
+
   const fetchDashboard = async () => {
     try {
       // students
@@ -32,18 +48,15 @@ const Dashboard = () => {
       // groups (active)
       let activeGroups = 0;
       try {
-        const groupsQuery = query(collection(db, 'groups'), where('status', '==', 'active'));
-        const groupsSnap = await getDocs(groupsQuery);
-        activeGroups = groupsSnap.size;
-      } catch (e) {
-        // If 'status' field doesn't exist, fallback to count all groups
         const groupsSnap = await getDocs(collection(db, 'groups'));
         activeGroups = groupsSnap.size;
+      } catch (e) {
+        console.error('Error fetching groups:', e);
+        activeGroups = 0;
       }
 
       // teachers
-      const teachersQuery = query(collection(db, 'teachers'));
-      const teachersSnap = await getDocs(teachersQuery);
+      const teachersSnap = await getDocs(collection(db, 'teachers'));
       const teachers = teachersSnap.size;
 
       // sessions -> reviews this week
@@ -73,6 +86,50 @@ const Dashboard = () => {
         })
         .slice(0, 3)
         .map((a: any) => a.description || a.title || 'تحديث جديد');
+
+      // Attendance summary for today
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      try {
+        const attendanceSnap = await getDocs(collection(db, 'attendance'));
+        const todayAttendance = attendanceSnap.docs.filter((d) => {
+          const data: any = d.data();
+          let date: Date | null = null;
+          if (data.date && typeof data.date.toDate === 'function') {
+            date = data.date.toDate();
+          } else if (data.date) {
+            date = new Date(data.date);
+          }
+          if (!date) return false;
+          date.setHours(0, 0, 0, 0);
+          return date.getTime() === today.getTime();
+        });
+
+        const presentCount = todayAttendance.filter((d) => (d.data() as any).status === 'حاضر').length;
+        const lateCount = todayAttendance.filter((d) => (d.data() as any).status === 'متأخر').length;
+        const excusedCount = todayAttendance.filter((d) => (d.data() as any).status === 'غائب بعذر').length;
+        const absentCount = todayAttendance.filter((d) => (d.data() as any).status === 'غائب').length;
+
+        setAttendanceSummary({
+          total: todayAttendance.length,
+          present: presentCount,
+          late: lateCount,
+          excused: excusedCount,
+          absent: absentCount
+        });
+      } catch (e) {
+        console.error('Error fetching attendance:', e);
+        setAttendanceSummary({
+          total: 0,
+          present: 0,
+          late: 0,
+          excused: 0,
+          absent: 0
+        });
+      }
 
       setStats({
         totalStudents,
@@ -110,7 +167,7 @@ const Dashboard = () => {
 
   const cards = [
     { title: 'إجمالي الطلاب', value: stats.totalStudents.toString(), description: 'طلاب مسجلون حالياً' },
-    { title: 'المجموعات النشطة', value: stats.activeGroups.toString(), description: 'ضمن فترات مختلفة' },
+    { title: 'المجموعات', value: stats.activeGroups.toString(), description: 'إجمالي عدد المجموعات' },
     { title: 'المدرسون', value: stats.teachers.toString(), description: 'مشرفون على الحلقات' },
     { title: 'المراجعات هذا الأسبوع', value: stats.reviewsThisWeek.toString(), description: 'عدد جلسات المراجعة المكتملة' }
   ];
@@ -148,6 +205,32 @@ const Dashboard = () => {
             <li key={i}>{u}</li>
           ))}
         </ul>
+      </section>
+
+      <section className="attendance-summary-card">
+        <h2>ملخص الحضور اليومي</h2>
+        <div className="summary-grid">
+          <div className="summary-item total">
+            <div className="summary-label">إجمالي</div>
+            <div className="summary-count">{attendanceSummary.total}</div>
+          </div>
+          <div className="summary-item present">
+            <div className="summary-label">حاضرون</div>
+            <div className="summary-count">{attendanceSummary.present}</div>
+          </div>
+          <div className="summary-item late">
+            <div className="summary-label">متأخرون</div>
+            <div className="summary-count">{attendanceSummary.late}</div>
+          </div>
+          <div className="summary-item excused">
+            <div className="summary-label">غائبون بعذر</div>
+            <div className="summary-count">{attendanceSummary.excused}</div>
+          </div>
+          <div className="summary-item absent">
+            <div className="summary-label">غائبون</div>
+            <div className="summary-count">{attendanceSummary.absent}</div>
+          </div>
+        </div>
       </section>
     </section>
   );

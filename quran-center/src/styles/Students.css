@@ -186,3 +186,10 @@
 .table-card tbody tr:last-child td {
   border-bottom: none;
 }
+
+/* Date cell styling */
+.date-cell {
+  color: #2196f3;
+  font-weight: 500;
+  white-space: nowrap;
+}

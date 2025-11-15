@@ -275,7 +275,15 @@ const Teachers = () => {
                   <td>{teacher.phone}</td>
                   <td>{teacher.email}</td>
                   <td>{getPositionLabel(teacher.position)}</td>
-                  <td>{teacher.birthDate || '-'}</td>
+                  <td className="date-cell">
+                    {teacher.birthDate
+                      ? new Date(teacher.birthDate + 'T00:00:00').toLocaleDateString('ar-EG', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })
+                      : '-'}
+                  </td>
                   <td>
                     <div className="card-actions">
                       <button

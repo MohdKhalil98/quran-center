@@ -7,6 +7,9 @@ import Dashboard from './pages/Dashboard';
 import Groups from './pages/Groups';
 import Login from './pages/Login';
 import Students from './pages/Students';
+import Teachers from './pages/Teachers';
+import StudentAchievements from './pages/StudentAchievements';
+import DevTools from './pages/DevTools';
 
 function App() {
   return (
@@ -17,8 +20,11 @@ function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/students" element={<Students />} />
+          <Route path="/teachers" element={<Teachers />} />
           <Route path="/groups" element={<Groups />} />
+          <Route path="/achievements" element={<StudentAchievements />} />
           <Route path="/curriculum" element={<Curriculum />} />
+          <Route path="/dev-tools" element={<DevTools />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

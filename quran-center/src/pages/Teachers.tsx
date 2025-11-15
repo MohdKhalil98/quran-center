@@ -1,57 +1,63 @@
 import { useEffect, useState } from 'react';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
-import '../styles/Students.css';
+import '../styles/Teachers.css';
 import ConfirmModal from '../components/ConfirmModal';
 
-interface Student {
+interface Teacher {
   id?: string;
   name: string;
   personalId: string;
   phone: string;
   email: string;
+  position: 'supervisor' | 'teacher' | 'admin';
   birthDate: string;
-  currentPortion: string;
 }
 
-const Students = () => {
-  const [students, setStudents] = useState<Student[]>([]);
+const POSITIONS = [
+  { value: 'supervisor', label: 'مشرف' },
+  { value: 'teacher', label: 'معلم' },
+  { value: 'admin', label: 'إداري' }
+];
+
+const Teachers = () => {
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmTargetId, setConfirmTargetId] = useState<string | null>(null);
-  const [formData, setFormData] = useState<Student>({
+  const [formData, setFormData] = useState<Teacher>({
     name: '',
     personalId: '',
     phone: '',
     email: '',
-    birthDate: '',
-    currentPortion: ''
+    position: 'teacher',
+    birthDate: ''
   });
 
-  // Fetch students from Firebase
+  // Fetch teachers from Firebase
   useEffect(() => {
-    const fetchStudents = async () => {
+    const fetchTeachers = async () => {
       try {
-        const q = query(collection(db, 'students'), orderBy('name'));
+        const q = query(collection(db, 'teachers'), orderBy('name'));
         const snapshot = await getDocs(q);
-        const studentsList = snapshot.docs.map((doc) => ({
+        const teachersList = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data()
-        } as Student));
-        setStudents(studentsList);
+        } as Teacher));
+        setTeachers(teachersList);
         setLoading(false);
       } catch (error) {
-        console.error('Error fetching students:', error);
+        console.error('Error fetching teachers:', error);
         setLoading(false);
       }
     };
 
-    fetchStudents();
+    fetchTeachers();
   }, []);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
@@ -59,7 +65,7 @@ const Students = () => {
     }));
   };
 
-  const handleAddStudent = async (e: React.FormEvent) => {
+  const handleAddTeacher = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.personalId || !formData.phone || !formData.email) {
       alert('يرجى ملء جميع الحقول المطلوبة');
@@ -70,16 +76,16 @@ const Students = () => {
       const { id, ...dataToSave } = formData;
 
       if (editingId) {
-        // Update existing student
-        await updateDoc(doc(db, 'students', editingId), dataToSave);
-        setStudents((prev) =>
-          prev.map((s) => (s.id === editingId ? { ...dataToSave, id: editingId } : s))
+        // Update existing teacher
+        await updateDoc(doc(db, 'teachers', editingId), dataToSave);
+        setTeachers((prev) =>
+          prev.map((t) => (t.id === editingId ? { ...dataToSave, id: editingId } : t))
         );
         setEditingId(null);
       } else {
-        // Add new student
-        const docRef = await addDoc(collection(db, 'students'), dataToSave);
-        setStudents((prev) => [...prev, { ...dataToSave, id: docRef.id }]);
+        // Add new teacher
+        const docRef = await addDoc(collection(db, 'teachers'), dataToSave);
+        setTeachers((prev) => [...prev, { ...dataToSave, id: docRef.id }]);
       }
 
       setFormData({
@@ -87,38 +93,38 @@ const Students = () => {
         personalId: '',
         phone: '',
         email: '',
-        birthDate: '',
-        currentPortion: ''
+        position: 'teacher',
+        birthDate: ''
       });
       setIsAdding(false);
     } catch (error) {
-      console.error('Error adding/updating student:', error);
+      console.error('Error adding/updating teacher:', error);
       alert('حدث خطأ أثناء حفظ البيانات');
     }
   };
 
-  const handleDeleteStudent = (id: string) => {
+  const handleDeleteTeacher = (id: string) => {
     setConfirmTargetId(id);
     setConfirmOpen(true);
   };
 
-  const performDeleteStudent = async () => {
+  const performDeleteTeacher = async () => {
     const id = confirmTargetId;
     setConfirmOpen(false);
     setConfirmTargetId(null);
     if (!id) return;
     try {
-      await deleteDoc(doc(db, 'students', id));
-      setStudents((prev) => prev.filter((s) => s.id !== id));
+      await deleteDoc(doc(db, 'teachers', id));
+      setTeachers((prev) => prev.filter((t) => t.id !== id));
     } catch (error) {
-      console.error('Error deleting student:', error);
+      console.error('Error deleting teacher:', error);
       alert('حدث خطأ أثناء حذف البيانات');
     }
   };
 
-  const handleEditStudent = (student: Student) => {
-    setFormData(student);
-    setEditingId(student.id || null);
+  const handleEditTeacher = (teacher: Teacher) => {
+    setFormData(teacher);
+    setEditingId(teacher.id || null);
     setIsAdding(true);
   };
 
@@ -130,16 +136,20 @@ const Students = () => {
       personalId: '',
       phone: '',
       email: '',
-      birthDate: '',
-      currentPortion: ''
+      position: 'teacher',
+      birthDate: ''
     });
+  };
+
+  const getPositionLabel = (position: string) => {
+    return POSITIONS.find((p) => p.value === position)?.label || position;
   };
 
   if (loading) {
     return (
       <section className="page">
         <header className="page__header">
-          <h1>الطلاب</h1>
+          <h1>المعلمون</h1>
         </header>
         <p>جاري تحميل البيانات...</p>
       </section>
@@ -149,19 +159,19 @@ const Students = () => {
   return (
     <section className="page">
       <header className="page__header">
-        <h1>الطلاب</h1>
-        <p>إدارة بيانات الطلاب ومستوى التقدم.</p>
+        <h1>المعلمون</h1>
+        <p>إدارة بيانات المعلمين والمشرفين.</p>
       </header>
 
       <button className="btn btn-primary" onClick={() => setIsAdding(true)}>
-        + إضافة طالب جديد
+        + إضافة معلم جديد
       </button>
 
       {isAdding && (
-        <form className="form-card" onSubmit={handleAddStudent}>
-          <h3>{editingId ? 'تعديل بيانات الطالب' : 'إضافة طالب جديد'}</h3>
+        <form className="form-card" onSubmit={handleAddTeacher}>
+          <h3>{editingId ? 'تعديل بيانات المعلم' : 'إضافة معلم جديد'}</h3>
           <div className="form-group">
-            <label htmlFor="name">اسم الطالب *</label>
+            <label htmlFor="name">اسم المعلم *</label>
             <input
               type="text"
               id="name"
@@ -205,23 +215,28 @@ const Students = () => {
             />
           </div>
           <div className="form-group">
+            <label htmlFor="position">الوظيفة *</label>
+            <select
+              id="position"
+              name="position"
+              value={formData.position}
+              onChange={handleInputChange}
+              required
+            >
+              {POSITIONS.map((pos) => (
+                <option key={pos.value} value={pos.value}>
+                  {pos.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
             <label htmlFor="birthDate">تاريخ الميلاد</label>
             <input
               type="date"
               id="birthDate"
               name="birthDate"
               value={formData.birthDate}
-              onChange={handleInputChange}
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="currentPortion">الورد الحالي</label>
-            <input
-              type="text"
-              id="currentPortion"
-              name="currentPortion"
-              placeholder="مثال: جزء عمّ"
-              value={formData.currentPortion}
               onChange={handleInputChange}
             />
           </div>
@@ -237,8 +252,8 @@ const Students = () => {
       )}
 
       <div className="table-card">
-        {students.length === 0 ? (
-          <p>لا توجد بيانات طلاب حتى الآن</p>
+        {teachers.length === 0 ? (
+          <p>لا توجد بيانات معلمين حتى الآن</p>
         ) : (
           <table>
             <thead>
@@ -247,31 +262,31 @@ const Students = () => {
                 <th>الرقم الشخصي</th>
                 <th>رقم الهاتف</th>
                 <th>البريد الإلكتروني</th>
+                <th>الوظيفة</th>
                 <th>تاريخ الميلاد</th>
-                <th>الورد الحالي</th>
                 <th>الإجراءات</th>
               </tr>
             </thead>
             <tbody>
-              {students.map((student) => (
-                <tr key={student.id}>
-                  <td>{student.name}</td>
-                  <td>{student.personalId}</td>
-                  <td>{student.phone}</td>
-                  <td>{student.email}</td>
-                  <td>{student.birthDate || '-'}</td>
-                  <td>{student.currentPortion || '-'}</td>
+              {teachers.map((teacher) => (
+                <tr key={teacher.id}>
+                  <td>{teacher.name}</td>
+                  <td>{teacher.personalId}</td>
+                  <td>{teacher.phone}</td>
+                  <td>{teacher.email}</td>
+                  <td>{getPositionLabel(teacher.position)}</td>
+                  <td>{teacher.birthDate || '-'}</td>
                   <td>
                     <div className="card-actions">
                       <button
                         className="btn btn-sm btn-warning"
-                        onClick={() => handleEditStudent(student)}
+                        onClick={() => handleEditTeacher(teacher)}
                       >
                         تعديل
                       </button>
                       <button
                         className="btn btn-sm btn-danger"
-                        onClick={() => handleDeleteStudent(student.id || '')}
+                        onClick={() => handleDeleteTeacher(teacher.id || '')}
                       >
                         حذف
                       </button>
@@ -285,8 +300,8 @@ const Students = () => {
       </div>
       <ConfirmModal
         open={confirmOpen}
-        message="هل أنت متأكد من حذف هذا الطالب؟"
-        onConfirm={performDeleteStudent}
+        message="هل أنت متأكد من حذف هذا المعلم؟"
+        onConfirm={performDeleteTeacher}
         onCancel={() => {
           setConfirmOpen(false);
           setConfirmTargetId(null);
@@ -296,5 +311,4 @@ const Students = () => {
   );
 };
 
-export default Students;
-
+export default Teachers;

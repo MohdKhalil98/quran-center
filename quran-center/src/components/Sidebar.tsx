@@ -4,7 +4,9 @@ import { useAuth } from '../context/AuthContext';
 const navItems = [
   { path: '/dashboard', label: 'لوحة التحكم' },
   { path: '/students', label: 'الطلاب' },
+  { path: '/teachers', label: 'المعلمون' },
   { path: '/groups', label: 'المجموعات' },
+  { path: '/achievements', label: 'تحصيل الطالب' },
   { path: '/curriculum', label: 'المنهج' }
 ];
 
@@ -39,6 +41,16 @@ const Sidebar = () => {
             {item.label}
           </NavLink>
         ))}
+        {process.env.NODE_ENV === 'development' && (
+          <NavLink
+            to="/dev-tools"
+            className={({ isActive }) =>
+              isActive ? 'sidebar__link sidebar__link--active' : 'sidebar__link'
+            }
+          >
+            أدوات المطور
+          </NavLink>
+        )}
       </nav>
       <button type="button" className="sidebar__logout" onClick={handleLogout}>
         تسجيل الخروج

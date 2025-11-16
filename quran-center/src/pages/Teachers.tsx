@@ -21,9 +21,13 @@ const POSITIONS = [
   { value: 'admin', label: 'إداري' }
 ];
 
+const getPositionLabel = (position: string): string => {
+  return POSITIONS.find((p) => p.value === position)?.label || position;
+};
+
 const Teachers = () => {
-    const [detailsOpen, setDetailsOpen] = useState(false);
-    const [detailsTeacher, setDetailsTeacher] = useState<Teacher | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsTeacher, setDetailsTeacher] = useState<Teacher | null>(null);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
@@ -39,7 +43,6 @@ const Teachers = () => {
     birthDate: ''
   });
 
-  // Fetch teachers from Firebase
   useEffect(() => {
     const fetchTeachers = async () => {
       try {
@@ -79,16 +82,14 @@ const Teachers = () => {
       const { id, ...dataToSave } = formData;
 
       if (editingId) {
-        // Update existing teacher
         await updateDoc(doc(db, 'teachers', editingId), dataToSave);
         setTeachers((prev) =>
-          prev.map((t) => (t.id === editingId ? { ...dataToSave, id: editingId } : t))
+          prev.map((t) => (t.id === editingId ? { ...dataToSave, id: editingId } as Teacher : t))
         );
         setEditingId(null);
       } else {
-        // Add new teacher
         const docRef = await addDoc(collection(db, 'teachers'), dataToSave);
-        setTeachers((prev) => [...prev, { ...dataToSave, id: docRef.id }]);
+        setTeachers((prev) => [...prev, { ...dataToSave, id: docRef.id } as Teacher]);
       }
 
       setFormData({
@@ -129,6 +130,7 @@ const Teachers = () => {
     setFormData(teacher);
     setEditingId(teacher.id || null);
     setIsAdding(true);
+    setDetailsOpen(false);
   };
 
   const handleCancel = () => {
@@ -142,10 +144,6 @@ const Teachers = () => {
       position: 'teacher',
       birthDate: ''
     });
-  };
-
-  const getPositionLabel = (position: string) => {
-    return POSITIONS.find((p) => p.value === position)?.label || position;
   };
 
   if (loading) {
@@ -166,9 +164,11 @@ const Teachers = () => {
         <p>إدارة بيانات المعلمين والمشرفين.</p>
       </header>
 
-      <button className="btn btn-primary" onClick={() => setIsAdding(true)}>
-        + إضافة معلم جديد
-      </button>
+      <div className="teachers-header">
+        <button className="btn btn-primary" onClick={() => setIsAdding(true)}>
+          + إضافة معلم جديد
+        </button>
+      </div>
 
       {isAdding && (
         <form className="form-card" onSubmit={handleAddTeacher}>
@@ -218,13 +218,12 @@ const Teachers = () => {
             />
           </div>
           <div className="form-group">
-            <label htmlFor="position">الوظيفة *</label>
+            <label htmlFor="position">الوظيفة</label>
             <select
               id="position"
               name="position"
               value={formData.position}
               onChange={handleInputChange}
-              required
             >
               {POSITIONS.map((pos) => (
                 <option key={pos.value} value={pos.value}>
@@ -290,41 +289,51 @@ const Teachers = () => {
           </table>
         )}
       </div>
-      <DetailsModal
-        open={detailsOpen}
-        onClose={() => setDetailsOpen(false)}
-        title={detailsTeacher ? detailsTeacher.name : ''}
-        fields={detailsTeacher ? [
-          { label: 'الاسم الكامل', value: detailsTeacher.name },
-          { label: 'الرقم الشخصي', value: detailsTeacher.personalId },
-          { label: 'رقم الهاتف', value: detailsTeacher.phone },
-          { label: 'البريد الإلكتروني', value: detailsTeacher.email },
-          { label: 'الوظيفة', value: getPositionLabel(detailsTeacher.position) },
-          { label: 'تاريخ الميلاد', value: detailsTeacher.birthDate ? new Date(detailsTeacher.birthDate + 'T00:00:00').toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' }) : '-' }
-        ] : []}
-        actions={detailsTeacher ? (
-          <>
-            <button
-              className="btn-modal btn-modal-warning"
-              onClick={() => {
-                setDetailsOpen(false);
-                handleEditTeacher(detailsTeacher);
-              }}
-            >
-              تعديل
-            </button>
-            <button
-              className="btn-modal btn-modal-danger"
-              onClick={() => {
-                setDetailsOpen(false);
-                handleDeleteTeacher(detailsTeacher.id || '');
-              }}
-            >
-              حذف
-            </button>
-          </>
-        ) : null}
-      />
+
+      {detailsTeacher && (
+        <DetailsModal
+          open={detailsOpen}
+          onClose={() => setDetailsOpen(false)}
+          title={detailsTeacher.name}
+          fields={[
+            { label: 'الاسم الكامل', value: detailsTeacher.name },
+            { label: 'الرقم الشخصي', value: detailsTeacher.personalId },
+            { label: 'رقم الهاتف', value: detailsTeacher.phone },
+            { label: 'البريد الإلكتروني', value: detailsTeacher.email },
+            { label: 'الوظيفة', value: getPositionLabel(detailsTeacher.position) },
+            {
+              label: 'تاريخ الميلاد',
+              value: detailsTeacher.birthDate
+                ? new Date(detailsTeacher.birthDate + 'T00:00:00').toLocaleDateString('ar-EG', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  })
+                : '-'
+            }
+          ]}
+          actions={
+            <>
+              <button
+                className="btn-modal btn-modal-warning"
+                onClick={() => handleEditTeacher(detailsTeacher)}
+              >
+                تعديل
+              </button>
+              <button
+                className="btn-modal btn-modal-danger"
+                onClick={() => {
+                  setDetailsOpen(false);
+                  handleDeleteTeacher(detailsTeacher.id || '');
+                }}
+              >
+                حذف
+              </button>
+            </>
+          }
+        />
+      )}
+
       <ConfirmModal
         open={confirmOpen}
         message="هل أنت متأكد من حذف هذا المعلم؟"

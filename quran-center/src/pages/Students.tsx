@@ -16,8 +16,8 @@ interface Student {
 }
 
 const Students = () => {
-    const [detailsOpen, setDetailsOpen] = useState(false);
-    const [detailsStudent, setDetailsStudent] = useState<Student | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsStudent, setDetailsStudent] = useState<Student | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
@@ -33,7 +33,6 @@ const Students = () => {
     currentPortion: ''
   });
 
-  // Fetch students from Firebase
   useEffect(() => {
     const fetchStudents = async () => {
       try {
@@ -54,7 +53,7 @@ const Students = () => {
     fetchStudents();
   }, []);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
@@ -73,16 +72,14 @@ const Students = () => {
       const { id, ...dataToSave } = formData;
 
       if (editingId) {
-        // Update existing student
         await updateDoc(doc(db, 'students', editingId), dataToSave);
         setStudents((prev) =>
-          prev.map((s) => (s.id === editingId ? { ...dataToSave, id: editingId } : s))
+          prev.map((s) => (s.id === editingId ? { ...dataToSave, id: editingId } as Student : s))
         );
         setEditingId(null);
       } else {
-        // Add new student
         const docRef = await addDoc(collection(db, 'students'), dataToSave);
-        setStudents((prev) => [...prev, { ...dataToSave, id: docRef.id }]);
+        setStudents((prev) => [...prev, { ...dataToSave, id: docRef.id } as Student]);
       }
 
       setFormData({
@@ -123,6 +120,7 @@ const Students = () => {
     setFormData(student);
     setEditingId(student.id || null);
     setIsAdding(true);
+    setDetailsOpen(false);
   };
 
   const handleCancel = () => {
@@ -156,9 +154,11 @@ const Students = () => {
         <p>إدارة بيانات الطلاب ومستوى التقدم.</p>
       </header>
 
-      <button className="btn btn-primary" onClick={() => setIsAdding(true)}>
-        + إضافة طالب جديد
-      </button>
+      <div className="students-header">
+        <button className="btn btn-primary" onClick={() => setIsAdding(true)}>
+          + إضافة طالب جديد
+        </button>
+      </div>
 
       {isAdding && (
         <form className="form-card" onSubmit={handleAddStudent}>
@@ -223,9 +223,9 @@ const Students = () => {
               type="text"
               id="currentPortion"
               name="currentPortion"
-              placeholder="مثال: جزء عمّ"
               value={formData.currentPortion}
               onChange={handleInputChange}
+              placeholder="مثال: جزء عمّ"
             />
           </div>
           <div className="form-actions">
@@ -275,41 +275,51 @@ const Students = () => {
           </table>
         )}
       </div>
-      <DetailsModal
-        open={detailsOpen}
-        onClose={() => setDetailsOpen(false)}
-        title={detailsStudent ? detailsStudent.name : ''}
-        fields={detailsStudent ? [
-          { label: 'الاسم الكامل', value: detailsStudent.name },
-          { label: 'الرقم الشخصي', value: detailsStudent.personalId },
-          { label: 'رقم الهاتف', value: detailsStudent.phone },
-          { label: 'البريد الإلكتروني', value: detailsStudent.email },
-          { label: 'تاريخ الميلاد', value: detailsStudent.birthDate ? new Date(detailsStudent.birthDate + 'T00:00:00').toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' }) : '-' },
-          { label: 'الورد الحالي', value: detailsStudent.currentPortion }
-        ] : []}
-        actions={detailsStudent ? (
-          <>
-            <button
-              className="btn-modal btn-modal-warning"
-              onClick={() => {
-                setDetailsOpen(false);
-                handleEditStudent(detailsStudent);
-              }}
-            >
-              تعديل
-            </button>
-            <button
-              className="btn-modal btn-modal-danger"
-              onClick={() => {
-                setDetailsOpen(false);
-                handleDeleteStudent(detailsStudent.id || '');
-              }}
-            >
-              حذف
-            </button>
-          </>
-        ) : null}
-      />
+
+      {detailsStudent && (
+        <DetailsModal
+          open={detailsOpen}
+          onClose={() => setDetailsOpen(false)}
+          title={detailsStudent.name}
+          fields={[
+            { label: 'الاسم الكامل', value: detailsStudent.name },
+            { label: 'الرقم الشخصي', value: detailsStudent.personalId },
+            { label: 'رقم الهاتف', value: detailsStudent.phone },
+            { label: 'البريد الإلكتروني', value: detailsStudent.email },
+            {
+              label: 'تاريخ الميلاد',
+              value: detailsStudent.birthDate
+                ? new Date(detailsStudent.birthDate + 'T00:00:00').toLocaleDateString('ar-EG', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  })
+                : '-'
+            },
+            { label: 'الورد الحالي', value: detailsStudent.currentPortion || '-' }
+          ]}
+          actions={
+            <>
+              <button
+                className="btn-modal btn-modal-warning"
+                onClick={() => handleEditStudent(detailsStudent)}
+              >
+                تعديل
+              </button>
+              <button
+                className="btn-modal btn-modal-danger"
+                onClick={() => {
+                  setDetailsOpen(false);
+                  handleDeleteStudent(detailsStudent.id || '');
+                }}
+              >
+                حذف
+              </button>
+            </>
+          }
+        />
+      )}
+
       <ConfirmModal
         open={confirmOpen}
         message="هل أنت متأكد من حذف هذا الطالب؟"

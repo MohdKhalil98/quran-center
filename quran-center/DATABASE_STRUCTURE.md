@@ -12,7 +12,8 @@
   phone: string,          // رقم الهاتف
   email: string,          // البريد الإلكتروني
   birthDate: string,      // تاريخ الميلاد (YYYY-MM-DD)
-  currentPortion: string  // الورد الحالي (مثال: جزء عمّ)
+  levelId: number         // معرّف المستوى (1..6)
+  levelName: string       // اسم المستوى (مثال: "المستوى الأول - جزء عمّ")
 }
 ```
 

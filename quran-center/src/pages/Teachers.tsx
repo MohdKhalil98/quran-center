@@ -3,6 +3,7 @@ import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy 
 import { db } from '../firebase';
 import '../styles/Teachers.css';
 import ConfirmModal from '../components/ConfirmModal';
+import DetailsModal from '../components/DetailsModal';
 
 interface Teacher {
   id?: string;
@@ -21,6 +22,8 @@ const POSITIONS = [
 ];
 
 const Teachers = () => {
+    const [detailsOpen, setDetailsOpen] = useState(false);
+    const [detailsTeacher, setDetailsTeacher] = useState<Teacher | null>(null);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
@@ -258,12 +261,8 @@ const Teachers = () => {
           <table>
             <thead>
               <tr>
-                <th>الاسم</th>
-                <th>الرقم الشخصي</th>
+                <th>الاسم الكامل</th>
                 <th>رقم الهاتف</th>
-                <th>البريد الإلكتروني</th>
-                <th>الوظيفة</th>
-                <th>تاريخ الميلاد</th>
                 <th>الإجراءات</th>
               </tr>
             </thead>
@@ -271,32 +270,17 @@ const Teachers = () => {
               {teachers.map((teacher) => (
                 <tr key={teacher.id}>
                   <td>{teacher.name}</td>
-                  <td>{teacher.personalId}</td>
                   <td>{teacher.phone}</td>
-                  <td>{teacher.email}</td>
-                  <td>{getPositionLabel(teacher.position)}</td>
-                  <td className="date-cell">
-                    {teacher.birthDate
-                      ? new Date(teacher.birthDate + 'T00:00:00').toLocaleDateString('ar-EG', {
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric'
-                        })
-                      : '-'}
-                  </td>
                   <td>
                     <div className="card-actions">
                       <button
-                        className="btn btn-sm btn-warning"
-                        onClick={() => handleEditTeacher(teacher)}
+                        className="btn btn-sm btn-info"
+                        onClick={() => {
+                          setDetailsTeacher(teacher);
+                          setDetailsOpen(true);
+                        }}
                       >
-                        تعديل
-                      </button>
-                      <button
-                        className="btn btn-sm btn-danger"
-                        onClick={() => handleDeleteTeacher(teacher.id || '')}
-                      >
-                        حذف
+                        المزيد
                       </button>
                     </div>
                   </td>
@@ -306,6 +290,41 @@ const Teachers = () => {
           </table>
         )}
       </div>
+      <DetailsModal
+        open={detailsOpen}
+        onClose={() => setDetailsOpen(false)}
+        title={detailsTeacher ? detailsTeacher.name : ''}
+        fields={detailsTeacher ? [
+          { label: 'الاسم الكامل', value: detailsTeacher.name },
+          { label: 'الرقم الشخصي', value: detailsTeacher.personalId },
+          { label: 'رقم الهاتف', value: detailsTeacher.phone },
+          { label: 'البريد الإلكتروني', value: detailsTeacher.email },
+          { label: 'الوظيفة', value: getPositionLabel(detailsTeacher.position) },
+          { label: 'تاريخ الميلاد', value: detailsTeacher.birthDate ? new Date(detailsTeacher.birthDate + 'T00:00:00').toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' }) : '-' }
+        ] : []}
+        actions={detailsTeacher ? (
+          <>
+            <button
+              className="btn-modal btn-modal-warning"
+              onClick={() => {
+                setDetailsOpen(false);
+                handleEditTeacher(detailsTeacher);
+              }}
+            >
+              تعديل
+            </button>
+            <button
+              className="btn-modal btn-modal-danger"
+              onClick={() => {
+                setDetailsOpen(false);
+                handleDeleteTeacher(detailsTeacher.id || '');
+              }}
+            >
+              حذف
+            </button>
+          </>
+        ) : null}
+      />
       <ConfirmModal
         open={confirmOpen}
         message="هل أنت متأكد من حذف هذا المعلم؟"

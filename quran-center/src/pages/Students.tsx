@@ -3,6 +3,7 @@ import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy 
 import { db } from '../firebase';
 import '../styles/Students.css';
 import ConfirmModal from '../components/ConfirmModal';
+import DetailsModal from '../components/DetailsModal';
 
 interface Student {
   id?: string;
@@ -15,6 +16,8 @@ interface Student {
 }
 
 const Students = () => {
+    const [detailsOpen, setDetailsOpen] = useState(false);
+    const [detailsStudent, setDetailsStudent] = useState<Student | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
@@ -243,12 +246,8 @@ const Students = () => {
           <table>
             <thead>
               <tr>
-                <th>الاسم</th>
-                <th>الرقم الشخصي</th>
+                <th>الاسم الكامل</th>
                 <th>رقم الهاتف</th>
-                <th>البريد الإلكتروني</th>
-                <th>تاريخ الميلاد</th>
-                <th>الورد الحالي</th>
                 <th>الإجراءات</th>
               </tr>
             </thead>
@@ -256,32 +255,17 @@ const Students = () => {
               {students.map((student) => (
                 <tr key={student.id}>
                   <td>{student.name}</td>
-                  <td>{student.personalId}</td>
                   <td>{student.phone}</td>
-                  <td>{student.email}</td>
-                  <td className="date-cell">
-                    {student.birthDate
-                      ? new Date(student.birthDate + 'T00:00:00').toLocaleDateString('ar-EG', {
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric'
-                        })
-                      : '-'}
-                  </td>
-                  <td>{student.currentPortion || '-'}</td>
                   <td>
                     <div className="card-actions">
                       <button
-                        className="btn btn-sm btn-warning"
-                        onClick={() => handleEditStudent(student)}
+                        className="btn btn-sm btn-info"
+                        onClick={() => {
+                          setDetailsStudent(student);
+                          setDetailsOpen(true);
+                        }}
                       >
-                        تعديل
-                      </button>
-                      <button
-                        className="btn btn-sm btn-danger"
-                        onClick={() => handleDeleteStudent(student.id || '')}
-                      >
-                        حذف
+                        المزيد
                       </button>
                     </div>
                   </td>
@@ -291,6 +275,41 @@ const Students = () => {
           </table>
         )}
       </div>
+      <DetailsModal
+        open={detailsOpen}
+        onClose={() => setDetailsOpen(false)}
+        title={detailsStudent ? detailsStudent.name : ''}
+        fields={detailsStudent ? [
+          { label: 'الاسم الكامل', value: detailsStudent.name },
+          { label: 'الرقم الشخصي', value: detailsStudent.personalId },
+          { label: 'رقم الهاتف', value: detailsStudent.phone },
+          { label: 'البريد الإلكتروني', value: detailsStudent.email },
+          { label: 'تاريخ الميلاد', value: detailsStudent.birthDate ? new Date(detailsStudent.birthDate + 'T00:00:00').toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' }) : '-' },
+          { label: 'الورد الحالي', value: detailsStudent.currentPortion }
+        ] : []}
+        actions={detailsStudent ? (
+          <>
+            <button
+              className="btn-modal btn-modal-warning"
+              onClick={() => {
+                setDetailsOpen(false);
+                handleEditStudent(detailsStudent);
+              }}
+            >
+              تعديل
+            </button>
+            <button
+              className="btn-modal btn-modal-danger"
+              onClick={() => {
+                setDetailsOpen(false);
+                handleDeleteStudent(detailsStudent.id || '');
+              }}
+            >
+              حذف
+            </button>
+          </>
+        ) : null}
+      />
       <ConfirmModal
         open={confirmOpen}
         message="هل أنت متأكد من حذف هذا الطالب؟"

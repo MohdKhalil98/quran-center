@@ -108,10 +108,10 @@ const StudentAchievements = () => {
 
   const handlePartChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const partId = parseInt(e.target.value, 10);
-    const part = availableParts.find((p) => p.id === partId);
+    const part = availableParts.find((p: any) => p.جزء_id === partId);
     if (part) {
-      setFormData((prev) => ({ ...prev, portion: part.name }));
-      setAvailableSurahs(part.surahs || []);
+      setFormData((prev) => ({ ...prev, portion: part.اسم_الجزء }));
+      setAvailableSurahs((part.السور || []).map((s: any) => s.اسم_السورة));
     }
   };
 
@@ -275,9 +275,9 @@ const StudentAchievements = () => {
             <label htmlFor="portion">الورد (الجزء → السورة) *</label>
             <select id="partSelect" name="partSelect" onChange={handlePartChange}>
               <option value="">اختر الجزء</option>
-              {availableParts.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
+              {availableParts.map((p: any) => (
+                <option key={p.جزء_id} value={p.جزء_id}>
+                  {p.اسم_الجزء}
                 </option>
               ))}
             </select>

@@ -29,7 +29,7 @@ const Attendance = () => {
   const [attendance, setAttendance] = useState<Map<string, AttendanceRecord>>(new Map());
   const [submitting, setSubmitting] = useState(false);
   const [sessionDate, setSessionDate] = useState(new Date().toISOString().split('T')[0]);
-  const [isEditMode, setIsEditMode] = useState(false);
+
   const [savedRecords, setSavedRecords] = useState<Map<string, AttendanceRecord>>(new Map());
 
   // Fetch groups and students
@@ -126,8 +126,6 @@ const Attendance = () => {
           });
         });
         setAttendance(newAttendance);
-      // Enable edit mode by default (allow clicking immediately)
-      setIsEditMode(true);
       } catch (error) {
         console.error('Error fetching students:', error);
       }

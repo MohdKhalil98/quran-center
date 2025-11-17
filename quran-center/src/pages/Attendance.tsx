@@ -72,11 +72,13 @@ const Attendance = () => {
         // Fetch all students
         const studentsQuery = query(collection(db, 'students'), orderBy('name'));
         const studentsSnapshot = await getDocs(studentsQuery);
-        const allStudents = studentsSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          name: doc.data().name,
-          groupId: selectedGroupId
-        } as Student));
+        const allStudents = studentsSnapshot.docs
+          .map((doc) => ({
+            id: doc.id,
+            name: doc.data().name,
+            groupId: doc.data().groupId
+          } as Student))
+          .filter((student) => student.groupId === selectedGroupId);
 
         setStudents(allStudents);
 
@@ -124,7 +126,8 @@ const Attendance = () => {
           });
         });
         setAttendance(newAttendance);
-      setIsEditMode(saved.size > 0);
+      // Enable edit mode by default (allow clicking immediately)
+      setIsEditMode(true);
       } catch (error) {
         console.error('Error fetching students:', error);
       }
@@ -134,8 +137,6 @@ const Attendance = () => {
 }, [selectedGroupId, groups, sessionDate]);
 
   const handleStatusChange = (studentId: string) => {
-      if (!isEditMode) return;
-
     const currentRecord = attendance.get(studentId);
     if (!currentRecord) return;
 
@@ -211,7 +212,6 @@ const Attendance = () => {
       }
 
       alert('تم حفظ سجل الحضور بنجاح');
-    setIsEditMode(false);
     setSavedRecords(new Map(attendance));
     } catch (error) {
       console.error('Error saving attendance:', error);
@@ -221,10 +221,6 @@ const Attendance = () => {
     }
   };
 
-
-  const handleEditMode = () => {
-    setIsEditMode(true);
-  };
   const getStatusColor = (status: string): string => {
     switch (status) {
       case 'حاضر':
@@ -301,7 +297,6 @@ const Attendance = () => {
               {students.map((student) => {
                 const record = attendance.get(student.id);
                 const status = record?.status || 'حاضر';
-                  const isDisabled = !isEditMode;
                 return (
                   <div key={student.id} className="attendance-row">
                     <div className="student-name">{student.name}</div>
@@ -309,7 +304,6 @@ const Attendance = () => {
                       type="button"
                       className={`status-btn ${getStatusColor(status)}`}
                       onClick={() => handleStatusChange(student.id)}
-                      disabled={isDisabled}
                     >
                       {status}
                     </button>
@@ -321,15 +315,9 @@ const Attendance = () => {
         </div>
 
         <div className="form-actions">
-          {!isEditMode && savedRecords.size > 0 ? (
-            <button type="button" className="btn btn-warning" onClick={handleEditMode} disabled={submitting}>
-              تعديل
-            </button>
-          ) : (
-            <button type="submit" className="btn btn-success" disabled={submitting || students.length === 0}>
-              {submitting ? 'جاري الحفظ...' : 'حفظ سجل الحضور'}
-            </button>
-          )}
+          <button type="submit" className="btn btn-success" disabled={submitting || students.length === 0}>
+            {submitting ? 'جاري الحفظ...' : savedRecords.size > 0 ? 'تحديث سجل الحضور' : 'حفظ سجل الحضور'}
+          </button>
         </div>
       </form>
     </section>

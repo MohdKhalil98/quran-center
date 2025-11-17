@@ -4,6 +4,7 @@ import { db } from '../firebase';
 import '../styles/Students.css';
 import ConfirmModal from '../components/ConfirmModal';
 import DetailsModal from '../components/DetailsModal';
+import curriculumData from '../data/curriculumData';
 
 interface Student {
   id?: string;
@@ -12,13 +13,17 @@ interface Student {
   phone: string;
   email: string;
   birthDate: string;
-  currentPortion: string;
+  levelName: string;
+  partId: number;
+  partName: string;
+  groupId?: string;
 }
 
 const Students = () => {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsStudent, setDetailsStudent] = useState<Student | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
+  const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -30,7 +35,10 @@ const Students = () => {
     phone: '',
     email: '',
     birthDate: '',
-    currentPortion: ''
+    levelName: 'المستوى الأول - الخمسة الأجزاء الأخيرة',
+    partId: 30,
+    partName: 'جزء عمّ',
+    groupId: ''
   });
 
   useEffect(() => {
@@ -43,6 +51,16 @@ const Students = () => {
           ...doc.data()
         } as Student));
         setStudents(studentsList);
+
+        // Fetch groups
+        const groupsQuery = query(collection(db, 'groups'), orderBy('name'));
+        const groupsSnapshot = await getDocs(groupsQuery);
+        const groupsList = groupsSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setGroups(groupsList);
+
         setLoading(false);
       } catch (error) {
         console.error('Error fetching students:', error);
@@ -63,8 +81,8 @@ const Students = () => {
 
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.personalId || !formData.phone || !formData.email) {
-      alert('يرجى ملء جميع الحقول المطلوبة');
+    if (!formData.name || !formData.phone || !formData.groupId) {
+      alert('يرجى ملء جميع الحقول المطلوبة (الاسم، رقم الهاتف، الحلقة)');
       return;
     }
 
@@ -88,7 +106,10 @@ const Students = () => {
         phone: '',
         email: '',
         birthDate: '',
-        currentPortion: ''
+        levelName: 'المستوى الأول - الخمسة الأجزاء الأخيرة',
+        partId: 30,
+        partName: 'جزء عمّ',
+        groupId: ''
       });
       setIsAdding(false);
     } catch (error) {
@@ -132,7 +153,10 @@ const Students = () => {
       phone: '',
       email: '',
       birthDate: '',
-      currentPortion: ''
+      levelName: 'المستوى الأول - الخمسة الأجزاء الأخيرة',
+      partId: 30,
+      partName: 'جزء عمّ',
+      groupId: ''
     });
   };
 
@@ -175,14 +199,13 @@ const Students = () => {
             />
           </div>
           <div className="form-group">
-            <label htmlFor="personalId">الرقم الشخصي *</label>
+            <label htmlFor="personalId">الرقم الشخصي</label>
             <input
               type="text"
               id="personalId"
               name="personalId"
               value={formData.personalId}
               onChange={handleInputChange}
-              required
             />
           </div>
           <div className="form-group">
@@ -197,14 +220,13 @@ const Students = () => {
             />
           </div>
           <div className="form-group">
-            <label htmlFor="email">البريد الإلكتروني *</label>
+            <label htmlFor="email">البريد الإلكتروني</label>
             <input
               type="email"
               id="email"
               name="email"
               value={formData.email}
               onChange={handleInputChange}
-              required
             />
           </div>
           <div className="form-group">
@@ -218,15 +240,61 @@ const Students = () => {
             />
           </div>
           <div className="form-group">
-            <label htmlFor="currentPortion">الورد الحالي</label>
-            <input
-              type="text"
-              id="currentPortion"
-              name="currentPortion"
-              value={formData.currentPortion}
+            <label htmlFor="levelName">المستوى *</label>
+            <select
+              id="levelName"
+              name="levelName"
+              value={formData.levelName}
               onChange={handleInputChange}
-              placeholder="مثال: جزء عمّ"
-            />
+              required
+            >
+              <option value="المستوى الأول - الخمسة الأجزاء الأخيرة">
+                المستوى الأول - الخمسة الأجزاء الأخيرة
+              </option>
+              <option value="المستوى الثاني">المستوى الثاني</option>
+              <option value="المستوى الثالث">المستوى الثالث</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label htmlFor="partId">الجزء *</label>
+            <select
+              id="partId"
+              name="partId"
+              value={formData.partId}
+              onChange={(e) => {
+                const selectedPartId = parseInt(e.target.value);
+                const selectedPart = curriculumData.الأجزاء.find(p => p.جزء_id === selectedPartId);
+                setFormData(prev => ({
+                  ...prev,
+                  partId: selectedPartId,
+                  partName: selectedPart?.اسم_الجزء || ''
+                }));
+              }}
+              required
+            >
+              {curriculumData.الأجزاء.map((part) => (
+                <option key={part.جزء_id} value={part.جزء_id}>
+                  {part.اسم_الجزء}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label htmlFor="groupId">الحلقة *</label>
+            <select
+              id="groupId"
+              name="groupId"
+              value={formData.groupId || ''}
+              onChange={handleInputChange}
+              required
+            >
+              <option value="">اختر الحلقة</option>
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="form-actions">
             <button type="submit" className="btn btn-success">
@@ -296,7 +364,14 @@ const Students = () => {
                   })
                 : '-'
             },
-            { label: 'الورد الحالي', value: detailsStudent.currentPortion || '-' }
+            { label: 'المستوى', value: detailsStudent.levelName || '-' },
+            { label: 'الجزء', value: detailsStudent.partName || '-' },
+            { 
+              label: 'الحلقة', 
+              value: detailsStudent.groupId 
+                ? groups.find((g) => g.id === detailsStudent.groupId)?.name || 'غير محدد' 
+                : '-' 
+            }
           ]}
           actions={
             <>

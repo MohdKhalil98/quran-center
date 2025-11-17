@@ -177,11 +177,6 @@ const Dashboard = () => {
       <header className="page__header">
         <h1>لوحة التحكم</h1>
         <p>مرحباً بك في مركز متابعة تحفيظ القرآن.</p>
-        <div style={{ marginTop: '8px' }}>
-          <button className="btn btn-secondary" onClick={() => { setStats((s) => ({ ...s, loading: true })); fetchDashboard(); }}>
-            إعادة تحميل البيانات
-          </button>
-        </div>
       </header>
 
       {stats.error && (

@@ -13,6 +13,8 @@ interface StudentAchievement {
   fromAya: string;
   toAya: string;
   rating: number;
+  teacherNotes: string;
+  assignmentSurah: string;
   assignmentFromAya: string;
   assignmentToAya: string;
   date: string;
@@ -21,10 +23,12 @@ interface StudentAchievement {
 const StudentAchievements = () => {
   const [achievements, setAchievements] = useState<StudentAchievement[]>([]);
   const [students, setStudents] = useState<any[]>([]);
+  const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filterStudent, setFilterStudent] = useState<string>('');
+  const [filterGroup, setFilterGroup] = useState<string>('');
   const [searchText, setSearchText] = useState<string>('');
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -35,6 +39,8 @@ const StudentAchievements = () => {
     fromAya: '',
     toAya: '',
     rating: 5,
+    teacherNotes: '',
+    assignmentSurah: '',
     assignmentFromAya: '',
     assignmentToAya: '',
     date: new Date().toISOString().split('T')[0]
@@ -58,6 +64,15 @@ const StudentAchievements = () => {
           levelName: (doc.data() as any).levelName || curriculumData.اسم_المستوى
         } as any));
 
+        // Fetch groups
+        const groupsQuery = query(collection(db, 'groups'), orderBy('name'));
+        const groupsSnapshot = await getDocs(groupsQuery);
+        const groupsList = groupsSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          name: doc.data().name,
+          ...doc.data()
+        } as any));
+
         // Fetch achievements
         const achievementsQuery = query(collection(db, 'student_achievements'), orderBy('date', 'desc'));
         const achievementsSnapshot = await getDocs(achievementsQuery);
@@ -73,6 +88,7 @@ const StudentAchievements = () => {
         }));
 
         setStudents(studentsList);
+        setGroups(groupsList);
         setAchievements(achievementsWithNames);
         setLoading(false);
       } catch (error) {
@@ -94,14 +110,21 @@ const StudentAchievements = () => {
 
   const handleStudentSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const studentId = e.target.value;
+    const selectedStudent = students.find(s => s.id === studentId);
+    
     setFormData((prev) => ({ ...prev, studentId }));
-    // Use curriculum data to populate parts - simplified version
-    setAvailableParts(curriculumData.الأجزاء || []);
-    if ((curriculumData.الأجزاء || []).length) {
-      const firstPart = curriculumData.الأجزاء[0];
-      setFormData((prev) => ({ ...prev, portion: firstPart.اسم_الجزء }));
-      setAvailableSurahs(firstPart.السور.map((s: any) => s.اسم_السورة) || []);
+    
+    if (selectedStudent && selectedStudent.partId) {
+      // Filter parts based on student's current part
+      const studentPart = curriculumData.الأجزاء.find(p => p.جزء_id === selectedStudent.partId);
+      if (studentPart) {
+        setAvailableParts([studentPart]);
+        setFormData((prev) => ({ ...prev, portion: '' }));
+        setAvailableSurahs(studentPart.السور.map((s: any) => s.اسم_السورة) || []);
+      }
     } else {
+      // Default to all parts
+      setAvailableParts(curriculumData.الأجزاء || []);
       setAvailableSurahs([]);
     }
   };
@@ -117,7 +140,29 @@ const StudentAchievements = () => {
 
   const handleSurahChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const surah = e.target.value;
-    setFormData((prev) => ({ ...prev, portion: surah }));
+    setFormData((prev) => ({ ...prev, portion: surah, fromAya: '', toAya: '' }));
+  };
+
+  const getMaxAyahForSelectedSurah = () => {
+    const selectedStudent = students.find(s => s.id === formData.studentId);
+    if (!selectedStudent || !selectedStudent.partId || !formData.portion) return 999;
+    
+    const studentPart = curriculumData.الأجزاء.find(p => p.جزء_id === selectedStudent.partId);
+    if (!studentPart) return 999;
+    
+    const selectedSurah = studentPart.السور.find((s: any) => s.اسم_السورة === formData.portion);
+    return selectedSurah ? selectedSurah.عدد_الآيات : 999;
+  };
+
+  const getMaxAyahForAssignmentSurah = () => {
+    const selectedStudent = students.find(s => s.id === formData.studentId);
+    if (!selectedStudent || !selectedStudent.partId || !formData.assignmentSurah) return 999;
+    
+    const studentPart = curriculumData.الأجزاء.find(p => p.جزء_id === selectedStudent.partId);
+    if (!studentPart) return 999;
+    
+    const selectedSurah = studentPart.السور.find((s: any) => s.اسم_السورة === formData.assignmentSurah);
+    return selectedSurah ? selectedSurah.عدد_الآيات : 999;
   };
 
   const handleAddAchievement = async (e: React.FormEvent) => {
@@ -157,6 +202,8 @@ const StudentAchievements = () => {
         fromAya: '',
         toAya: '',
         rating: 5,
+        teacherNotes: '',
+        assignmentSurah: '',
         assignmentFromAya: '',
         assignmentToAya: '',
         date: new Date().toISOString().split('T')[0]
@@ -188,11 +235,24 @@ const StudentAchievements = () => {
   };
 
   const handleEditAchievement = (achievement: StudentAchievement) => {
-    setFormData(achievement);
+    setFormData({
+      ...achievement,
+      teacherNotes: achievement.teacherNotes || '',
+      assignmentSurah: achievement.assignmentSurah || ''
+    });
     setEditingId(achievement.id || null);
     setIsAdding(true);
     // Populate parts/surahs from curriculum
-    setAvailableParts(curriculumData.الأجزاء || []);
+    const selectedStudent = students.find(s => s.id === achievement.studentId);
+    if (selectedStudent && selectedStudent.partId) {
+      const studentPart = curriculumData.الأجزاء.find(p => p.جزء_id === selectedStudent.partId);
+      if (studentPart) {
+        setAvailableParts([studentPart]);
+        setAvailableSurahs(studentPart.السور.map((s: any) => s.اسم_السورة) || []);
+      }
+    } else {
+      setAvailableParts(curriculumData.الأجزاء || []);
+    }
   };
 
   const handleCancel = () => {
@@ -204,6 +264,8 @@ const StudentAchievements = () => {
       fromAya: '',
       toAya: '',
       rating: 5,
+      teacherNotes: '',
+      assignmentSurah: '',
       assignmentFromAya: '',
       assignmentToAya: '',
       date: new Date().toISOString().split('T')[0]
@@ -212,11 +274,12 @@ const StudentAchievements = () => {
 
   const filteredAchievements = achievements.filter((a) => {
     const matchesStudent = !filterStudent || a.studentId === filterStudent;
+    const matchesGroup = !filterGroup || students.find(s => s.id === a.studentId)?.groupId === filterGroup;
     const matchesSearch =
       !searchText ||
       a.studentName?.toLowerCase().includes(searchText.toLowerCase()) ||
       a.portion?.toLowerCase().includes(searchText.toLowerCase());
-    return matchesStudent && matchesSearch;
+    return matchesStudent && matchesGroup && matchesSearch;
   });
 
   const getStudentStats = (studentId: string) => {
@@ -270,19 +333,25 @@ const StudentAchievements = () => {
                 </option>
               ))}
             </select>
+            {formData.studentId && students.find(s => s.id === formData.studentId) && (
+              <div style={{
+                marginTop: '8px',
+                padding: '8px 12px',
+                backgroundColor: 'rgba(27, 140, 107, 0.08)',
+                borderRadius: '6px',
+                fontSize: '0.9em',
+                color: '#1b8c6b'
+              }}>
+                <strong>المستوى:</strong> {students.find(s => s.id === formData.studentId)?.levelName || 'غير محدد'} 
+                <br />
+                <strong>الجزء:</strong> {students.find(s => s.id === formData.studentId)?.partName || 'غير محدد'}
+              </div>
+            )}
           </div>
           <div className="form-group">
-            <label htmlFor="portion">الورد (الجزء → السورة) *</label>
-            <select id="partSelect" name="partSelect" onChange={handlePartChange}>
-              <option value="">اختر الجزء</option>
-              {availableParts.map((p: any) => (
-                <option key={p.جزء_id} value={p.جزء_id}>
-                  {p.اسم_الجزء}
-                </option>
-              ))}
-            </select>
-            {availableSurahs.length > 0 && (
-              <select id="surahSelect" name="surahSelect" onChange={handleSurahChange} value={formData.portion}>
+            <label htmlFor="portion">السورة *</label>
+            {availableSurahs.length > 0 ? (
+              <select id="surahSelect" name="surahSelect" onChange={handleSurahChange} value={formData.portion} required>
                 <option value="">اختر السورة</option>
                 {availableSurahs.map((s) => (
                   <option key={s} value={s}>
@@ -290,13 +359,12 @@ const StudentAchievements = () => {
                   </option>
                 ))}
               </select>
-            )}
-            {!availableSurahs.length && (
+            ) : (
               <input
                 type="text"
                 id="portion"
                 name="portion"
-                placeholder="مثال: جزء عمّ أو سورة الفاتحة"
+                placeholder="مثال: سورة الفاتحة"
                 value={formData.portion}
                 onChange={handleInputChange}
                 required
@@ -307,10 +375,12 @@ const StudentAchievements = () => {
             <div className="form-group">
               <label htmlFor="fromAya">من آية *</label>
               <input
-                type="text"
+                type="number"
                 id="fromAya"
                 name="fromAya"
-                placeholder="مثال: 1"
+                placeholder="1"
+                min="1"
+                max={getMaxAyahForSelectedSurah()}
                 value={formData.fromAya}
                 onChange={handleInputChange}
                 required
@@ -319,14 +389,21 @@ const StudentAchievements = () => {
             <div className="form-group">
               <label htmlFor="toAya">إلى آية *</label>
               <input
-                type="text"
+                type="number"
                 id="toAya"
                 name="toAya"
-                placeholder="مثال: 10"
+                placeholder={`الحد الأقصى: ${getMaxAyahForSelectedSurah()}`}
+                min="1"
+                max={getMaxAyahForSelectedSurah()}
                 value={formData.toAya}
                 onChange={handleInputChange}
                 required
               />
+              {formData.portion && (
+                <small style={{ color: '#5e7c71', fontSize: '0.85em', marginTop: '4px', display: 'block' }}>
+                  عدد الآيات في {formData.portion}: {getMaxAyahForSelectedSurah()}
+                </small>
+              )}
             </div>
           </div>
           <div className="form-group">
@@ -343,16 +420,66 @@ const StudentAchievements = () => {
             />
           </div>
           <div className="form-group">
-            <label>الواجب المطلوب:</label>
+            <label htmlFor="teacherNotes">ملاحظات المعلم</label>
+            <textarea
+              id="teacherNotes"
+              name="teacherNotes"
+              value={formData.teacherNotes}
+              onChange={handleInputChange}
+              rows={3}
+              placeholder="أضف ملاحظات حول أداء الطالب..."
+              style={{
+                width: '100%',
+                padding: '8px',
+                borderRadius: '6px',
+                border: '1px solid #d6e4de',
+                fontFamily: 'Cairo, sans-serif',
+                fontSize: '1em'
+              }}
+            />
+          </div>
+          <div className="form-group">
+            <h3 style={{ margin: '16px 0 8px 0', fontSize: '1.2em', color: '#1b8c6b' }}>
+              الواجب المطلوب
+            </h3>
+          </div>
+          <div className="form-group">
+            <label htmlFor="assignmentSurah">السورة</label>
+            {availableSurahs.length > 0 ? (
+              <select
+                id="assignmentSurah"
+                name="assignmentSurah"
+                value={formData.assignmentSurah}
+                onChange={handleInputChange}
+              >
+                <option value="">اختر السورة للواجب</option>
+                {availableSurahs.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                id="assignmentSurah"
+                name="assignmentSurah"
+                placeholder="مثال: سورة الفاتحة"
+                value={formData.assignmentSurah}
+                onChange={handleInputChange}
+              />
+            )}
           </div>
           <div className="form-row">
             <div className="form-group">
               <label htmlFor="assignmentFromAya">من آية</label>
               <input
-                type="text"
+                type="number"
                 id="assignmentFromAya"
                 name="assignmentFromAya"
-                placeholder="مثال: 11"
+                placeholder="1"
+                min="1"
+                max={getMaxAyahForAssignmentSurah()}
                 value={formData.assignmentFromAya}
                 onChange={handleInputChange}
               />
@@ -360,13 +487,20 @@ const StudentAchievements = () => {
             <div className="form-group">
               <label htmlFor="assignmentToAya">إلى آية</label>
               <input
-                type="text"
+                type="number"
                 id="assignmentToAya"
                 name="assignmentToAya"
-                placeholder="مثال: 20"
+                placeholder={formData.assignmentSurah ? `الحد الأقصى: ${getMaxAyahForAssignmentSurah()}` : 'اختر السورة أولاً'}
+                min="1"
+                max={getMaxAyahForAssignmentSurah()}
                 value={formData.assignmentToAya}
                 onChange={handleInputChange}
               />
+              {formData.assignmentSurah && (
+                <small style={{ color: '#5e7c71', fontSize: '0.85em', marginTop: '4px', display: 'block' }}>
+                  عدد الآيات في {formData.assignmentSurah}: {getMaxAyahForAssignmentSurah()}
+                </small>
+              )}
             </div>
           </div>
           <div className="form-group">
@@ -411,6 +545,18 @@ const StudentAchievements = () => {
             {students.map((student) => (
               <option key={student.id} value={student.id}>
                 {student.name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filterGroup}
+            onChange={(e) => setFilterGroup(e.target.value)}
+            className="filter-select"
+          >
+            <option value="">جميع الحلقات</option>
+            {groups.map((group) => (
+              <option key={group.id} value={group.id}>
+                {group.name}
               </option>
             ))}
           </select>
@@ -459,11 +605,38 @@ const StudentAchievements = () => {
                   <span className="value">{achievement.fromAya} - {achievement.toAya}</span>
                 </div>
 
-                {achievement.assignmentFromAya && achievement.assignmentToAya && (
+                {achievement.teacherNotes && (
                   <div className="achievement-row">
-                    <span className="label">الواجب المطلوب:</span>
-                    <span className="value">{achievement.assignmentFromAya} - {achievement.assignmentToAya}</span>
+                    <span className="label">ملاحظات المعلم:</span>
+                    <span className="value" style={{ whiteSpace: 'pre-wrap' }}>{achievement.teacherNotes}</span>
                   </div>
+                )}
+
+                {(achievement.assignmentSurah || achievement.assignmentFromAya) && (
+                  <>
+                    <div style={{ 
+                      marginTop: '12px', 
+                      paddingTop: '12px', 
+                      borderTop: '2px solid #1b8c6b',
+                      fontWeight: '600',
+                      fontSize: '1.05em',
+                      color: '#1b8c6b'
+                    }}>
+                      الواجب المطلوب
+                    </div>
+                    {achievement.assignmentSurah && (
+                      <div className="achievement-row">
+                        <span className="label">السورة:</span>
+                        <span className="value">{achievement.assignmentSurah}</span>
+                      </div>
+                    )}
+                    {achievement.assignmentFromAya && achievement.assignmentToAya && (
+                      <div className="achievement-row">
+                        <span className="label">الآيات:</span>
+                        <span className="value">{achievement.assignmentFromAya} - {achievement.assignmentToAya}</span>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 <div className="achievement-row">
@@ -505,7 +678,8 @@ const StudentAchievements = () => {
                 <th>من آية</th>
                 <th>إلى آية</th>
                 <th>التقييم</th>
-                <th>الواجب (من - إلى)</th>
+                <th>ملاحظات المعلم</th>
+                <th>الواجب</th>
                 <th>التاريخ</th>
                 <th>الإجراءات</th>
               </tr>
@@ -522,10 +696,18 @@ const StudentAchievements = () => {
                       {achievement.rating}/10
                     </span>
                   </td>
+                  <td style={{ maxWidth: '200px', whiteSpace: 'pre-wrap', fontSize: '0.9em' }}>
+                    {achievement.teacherNotes || '-'}
+                  </td>
                   <td>
-                    {achievement.assignmentFromAya && achievement.assignmentToAya
-                      ? `${achievement.assignmentFromAya} - ${achievement.assignmentToAya}`
-                      : '-'}
+                    {achievement.assignmentSurah || achievement.assignmentFromAya ? (
+                      <>
+                        {achievement.assignmentSurah && <div><strong>{achievement.assignmentSurah}</strong></div>}
+                        {achievement.assignmentFromAya && achievement.assignmentToAya && (
+                          <div>{achievement.assignmentFromAya} - {achievement.assignmentToAya}</div>
+                        )}
+                      </>
+                    ) : '-'}
                   </td>
                   <td>{new Date(achievement.date).toLocaleDateString('ar-SA')}</td>
                   <td>

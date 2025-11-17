@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import '../styles/StudentAchievements.css';
-import curriculum from '../data/curriculumData';
+import curriculumData from '../data/curriculumData';
 import ConfirmModal from '../components/ConfirmModal';
 
 interface StudentAchievement {
@@ -55,7 +55,7 @@ const StudentAchievements = () => {
           name: doc.data().name,
           ...doc.data(),
           levelId: (doc.data() as any).levelId || 1,
-          levelName: (doc.data() as any).levelName || curriculum.find((l) => l.id === ((doc.data() as any).levelId || 1))?.name
+          levelName: (doc.data() as any).levelName || curriculumData.اسم_المستوى
         } as any));
 
         // Fetch achievements
@@ -94,21 +94,14 @@ const StudentAchievements = () => {
 
   const handleStudentSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const studentId = e.target.value;
-    const student = students.find((s) => s.id === studentId);
     setFormData((prev) => ({ ...prev, studentId }));
-    if (student) {
-      const level = curriculum.find((l) => l.id === (student.levelId || 1));
-      const parts = level?.parts || [];
-      setAvailableParts(parts);
-      if (parts.length) {
-        const firstPart = parts[0];
-        setFormData((prev) => ({ ...prev, portion: `${firstPart.name}` }));
-        setAvailableSurahs(firstPart.surahs || []);
-      } else {
-        setAvailableSurahs([]);
-      }
+    // Use curriculum data to populate parts - simplified version
+    setAvailableParts(curriculumData.الأجزاء || []);
+    if ((curriculumData.الأجزاء || []).length) {
+      const firstPart = curriculumData.الأجزاء[0];
+      setFormData((prev) => ({ ...prev, portion: firstPart.اسم_الجزء }));
+      setAvailableSurahs(firstPart.السور.map((s: any) => s.اسم_السورة) || []);
     } else {
-      setAvailableParts([]);
       setAvailableSurahs([]);
     }
   };
@@ -198,16 +191,8 @@ const StudentAchievements = () => {
     setFormData(achievement);
     setEditingId(achievement.id || null);
     setIsAdding(true);
-    // populate parts/surahs according to student's level
-    const student = students.find((s) => s.id === achievement.studentId);
-    if (student) {
-      const level = curriculum.find((l) => l.id === (student.levelId || 1));
-      const parts = level?.parts || [];
-      setAvailableParts(parts);
-      // if portion matches a surah, mark surahs accordingly
-      const matchingPart = parts.find((p) => p.name === achievement.portion) || parts[0];
-      setAvailableSurahs(matchingPart?.surahs || []);
-    }
+    // Populate parts/surahs from curriculum
+    setAvailableParts(curriculumData.الأجزاء || []);
   };
 
   const handleCancel = () => {

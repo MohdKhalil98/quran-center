@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import '../styles/StudentAchievements.css';
-import curriculum from '../data/curriculumData';
+import curriculum, { Level, Part, Surah } from '../data/curriculumData';
 import ConfirmModal from '../components/ConfirmModal';
 
 interface StudentAchievement {
@@ -40,8 +40,8 @@ const StudentAchievements = () => {
     date: new Date().toISOString().split('T')[0]
   });
 
-  const [availableParts, setAvailableParts] = useState<any[]>([]);
-  const [availableSurahs, setAvailableSurahs] = useState<string[]>([]);
+  const [availableParts, setAvailableParts] = useState<Part[]>([]);
+  const [availableSurahs, setAvailableSurahs] = useState<Surah[]>([]);
 
   // Fetch achievements and students from Firebase
   useEffect(() => {
@@ -50,13 +50,18 @@ const StudentAchievements = () => {
         // Fetch students
         const studentsQuery = query(collection(db, 'students'), orderBy('name'));
         const studentsSnapshot = await getDocs(studentsQuery);
-        const studentsList = studentsSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          name: doc.data().name,
-          ...doc.data(),
-          levelId: (doc.data() as any).levelId || 1,
-          levelName: (doc.data() as any).levelName || curriculum.find((l) => l.id === ((doc.data() as any).levelId || 1))?.name
-        } as any));
+        const studentsList = studentsSnapshot.docs.map((doc) => {
+          const data = doc.data();
+          const levelId = data.levelId || 1;
+          const level = curriculum.find((l: Level) => l.id === levelId);
+          return {
+            id: doc.id,
+            name: data.name,
+            ...data,
+            levelId,
+            levelName: level?.name
+          };
+        });
 
         // Fetch achievements
         const achievementsQuery = query(collection(db, 'student_achievements'), orderBy('date', 'desc'));
@@ -97,12 +102,12 @@ const StudentAchievements = () => {
     const student = students.find((s) => s.id === studentId);
     setFormData((prev) => ({ ...prev, studentId }));
     if (student) {
-      const level = curriculum.find((l) => l.id === (student.levelId || 1));
+      const level = curriculum.find((l: Level) => l.id === (student.levelId || 1));
       const parts = level?.parts || [];
       setAvailableParts(parts);
       if (parts.length) {
         const firstPart = parts[0];
-        setFormData((prev) => ({ ...prev, portion: `${firstPart.name}` }));
+        setFormData((prev) => ({ ...prev, portion: firstPart.name }));
         setAvailableSurahs(firstPart.surahs || []);
       } else {
         setAvailableSurahs([]);
@@ -115,7 +120,7 @@ const StudentAchievements = () => {
 
   const handlePartChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const partId = parseInt(e.target.value, 10);
-    const part = availableParts.find((p) => p.id === partId);
+    const part = availableParts.find((p: Part) => p.id === partId);
     if (part) {
       setFormData((prev) => ({ ...prev, portion: part.name }));
       setAvailableSurahs(part.surahs || []);
@@ -201,11 +206,11 @@ const StudentAchievements = () => {
     // populate parts/surahs according to student's level
     const student = students.find((s) => s.id === achievement.studentId);
     if (student) {
-      const level = curriculum.find((l) => l.id === (student.levelId || 1));
+      const level = curriculum.find((l: Level) => l.id === (student.levelId || 1));
       const parts = level?.parts || [];
       setAvailableParts(parts);
-      // if portion matches a surah, mark surahs accordingly
-      const matchingPart = parts.find((p) => p.name === achievement.portion) || parts[0];
+      // if portion matches a part name, show its surahs
+      const matchingPart = parts.find((p: Part) => p.name === achievement.portion) || parts[0];
       setAvailableSurahs(matchingPart?.surahs || []);
     }
   };
@@ -233,16 +238,6 @@ const StudentAchievements = () => {
       a.portion?.toLowerCase().includes(searchText.toLowerCase());
     return matchesStudent && matchesSearch;
   });
-
-  const getStudentStats = (studentId: string) => {
-    const studentAchievements = achievements.filter((a) => a.studentId === studentId);
-    const totalAchievements = studentAchievements.length;
-    const averageRating =
-      totalAchievements > 0
-        ? (studentAchievements.reduce((sum, a) => sum + (a.rating || 0), 0) / totalAchievements).toFixed(1)
-        : 0;
-    return { totalAchievements, averageRating };
-  };
 
   if (loading) {
     return (
@@ -290,7 +285,7 @@ const StudentAchievements = () => {
             <label htmlFor="portion">الورد (الجزء → السورة) *</label>
             <select id="partSelect" name="partSelect" onChange={handlePartChange}>
               <option value="">اختر الجزء</option>
-              {availableParts.map((p) => (
+              {availableParts.map((p: Part) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
@@ -299,9 +294,9 @@ const StudentAchievements = () => {
             {availableSurahs.length > 0 && (
               <select id="surahSelect" name="surahSelect" onChange={handleSurahChange} value={formData.portion}>
                 <option value="">اختر السورة</option>
-                {availableSurahs.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
+                {availableSurahs.map((s: Surah) => (
+                  <option key={s.id} value={s.name}>
+                    {s.name}
                   </option>
                 ))}
               </select>

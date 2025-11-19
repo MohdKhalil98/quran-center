@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import Papa from 'papaparse';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import '../styles/Students.css';
@@ -15,10 +14,20 @@ interface Student {
   birthDate: string;
   levelId?: number;
   levelName?: string;
+  groupId?: string;
+  groupName?: string;
+  partId?: number;
+  partName?: string;
+}
+
+interface Group {
+  id: string;
+  name: string;
 }
 
 const Students = () => {
   const [students, setStudents] = useState<Student[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -32,15 +41,16 @@ const Students = () => {
     email: '',
     birthDate: '',
     levelId: 1,
-    levelName: curriculum.find((l) => l.id === 1)?.name || 'المستوى الأول'
+    levelName: curriculum.find((l) => l.id === 1)?.name || 'المستوى الأول',
+    partId: 30,
+    partName: 'جزء عمّ'
   });
-  const [importRows, setImportRows] = useState<any[]>([]);
-  const [importing, setImporting] = useState(false);
-  const [importStatus, setImportStatus] = useState('');
+
 
   useEffect(() => {
-    const fetchStudents = async () => {
+    const fetchData = async () => {
       try {
+        // Fetch students
         const q = query(collection(db, 'students'), orderBy('name'));
         const snapshot = await getDocs(q);
         const studentsList = snapshot.docs.map((doc) => ({
@@ -52,14 +62,24 @@ const Students = () => {
             (doc.data() as any).levelName || curriculum.find((l) => l.id === ((doc.data() as any).levelId || 1))?.name
         } as Student));
         setStudents(studentsList);
+
+        // Fetch groups
+        const groupsQuery = query(collection(db, 'groups'), orderBy('name'));
+        const groupsSnapshot = await getDocs(groupsQuery);
+        const groupsList = groupsSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          name: (doc.data() as any).name || ''
+        } as Group));
+        setGroups(groupsList);
+
         setLoading(false);
       } catch (error) {
-        console.error('Error fetching students:', error);
+        console.error('Error fetching data:', error);
         setLoading(false);
       }
     };
 
-    fetchStudents();
+    fetchData();
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -73,10 +93,34 @@ const Students = () => {
   const handleLevelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const levelId = parseInt(e.target.value, 10);
     const level = curriculum.find((l) => l.id === levelId);
+    const firstPart = level?.parts?.[0];
     setFormData((prev) => ({
       ...prev,
       levelId,
-      levelName: level?.name || ''
+      levelName: level?.name || '',
+      partId: firstPart?.id || undefined,
+      partName: firstPart?.name || undefined
+    } as any));
+  };
+
+  const handlePartChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const partId = parseInt(e.target.value, 10);
+    const level = curriculum.find((l) => l.id === formData.levelId);
+    const part = level?.parts.find((p) => p.id === partId);
+    setFormData((prev) => ({
+      ...prev,
+      partId: partId || undefined,
+      partName: part?.name || undefined
+    } as any));
+  };
+
+  const handleGroupChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const groupId = e.target.value;
+    const group = groups.find((g) => g.id === groupId);
+    setFormData((prev) => ({
+      ...prev,
+      groupId: groupId || undefined,
+      groupName: group?.name || undefined
     } as any));
   };
 
@@ -112,7 +156,9 @@ const Students = () => {
         email: '',
         birthDate: '',
         levelId: 1,
-        levelName: curriculum.find((l) => l.id === 1)?.name || 'المستوى الأول'
+        levelName: curriculum.find((l) => l.id === 1)?.name || 'المستوى الأول',
+        partId: 30,
+        partName: 'جزء عمّ'
       });
       setIsAdding(false);
     } catch (error) {
@@ -121,38 +167,7 @@ const Students = () => {
     }
   };
 
-  const handleCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
 
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const rows: any[] = (results.data as any[]).map((row: any) => {
-          // normalize keys
-          const map: any = {};
-          Object.keys(row).forEach((key) => {
-            map[key.toLowerCase().trim()] = row[key];
-          });
-          return {
-            name: map['name'] || map['الاسم'] || map['full name'] || map['student'] || '',
-            personalId: map['personalid'] || map['id'] || map['personal_id'] || map['الرقم الشخصي'] || '',
-            phone: map['phone'] || map['phone_number'] || map['الهاتف'] || '',
-            email: map['email'] || map['email_address'] || map['البريد'] || '',
-            birthDate: map['birthdate'] || map['dob'] || map['تاريخ الميلاد'] || '',
-            levelId: map['levelid'] ? parseInt(map['levelid'], 10) : 1
-          };
-        });
-        setImportRows(rows);
-        setImportStatus(`${rows.length} صف تم قراءته من الملف`);
-      },
-      error: (err) => {
-        console.error('CSV parse error:', err);
-        alert('حدث خطأ أثناء قراءة الملف');
-      }
-    });
-  };
 
   const handleDeleteStudent = (id: string) => {
     setConfirmTargetId(id);
@@ -189,46 +204,13 @@ const Students = () => {
       email: '',
       birthDate: '',
       levelId: 1,
-      levelName: curriculum.find((l) => l.id === 1)?.name || 'المستوى الأول'
+      levelName: curriculum.find((l) => l.id === 1)?.name || 'المستوى الأول',
+      partId: 30,
+      partName: 'جزء عمّ'
     });
   };
 
-  const importCsvToFirestore = async () => {
-    if (importRows.length === 0) return;
-    setImporting(true);
-    setImportStatus('جاري إضافة الطلاب إلى قاعدة البيانات...');
-    try {
-      const added: any[] = [];
-      for (const r of importRows) {
-        if (!r.name || !r.personalId) continue; // skip incomplete rows
-        // skip if personalId already exists locally
-        if (students.find((s) => s.personalId === r.personalId)) continue;
-        const studentDoc = {
-          name: r.name,
-          personalId: r.personalId,
-          phone: r.phone || '',
-          email: r.email || '',
-          birthDate: r.birthDate || '',
-          levelId: r.levelId || 1,
-          levelName: curriculum.find((l) => l.id === (r.levelId || 1))?.name || ''
-        };
-        const docRef = await addDoc(collection(db, 'students'), studentDoc);
-        added.push({ ...studentDoc, id: docRef.id });
-      }
-      if (added.length) {
-        setStudents((prev) => [...prev, ...added]);
-        setImportStatus(`تم استيراد ${added.length} طالب بنجاح`);
-      } else {
-        setImportStatus('لا يوجد صفوف صالحة للاستيراد');
-      }
-      setImportRows([]);
-    } catch (error) {
-      console.error('Error importing CSV:', error);
-      setImportStatus('حدث خطأ أثناء استيراد الطلاب');
-      alert('حدث خطأ أثناء استيراد الطلاب');
-    }
-    setImporting(false);
-  };
+
 
   if (loading) {
     return (
@@ -252,15 +234,7 @@ const Students = () => {
         <button className="btn btn-primary" onClick={() => setIsAdding(true)}>
           + إضافة طالب جديد
         </button>
-        <label className="btn btn-outline" style={{ marginLeft: 8 }}>
-          استيراد CSV
-          <input
-            type="file"
-            accept=".csv"
-            style={{ display: 'none' }}
-            onChange={(e) => handleCsvUpload(e)}
-          />
-        </label>
+
         <div className="view-mode-toggle">
           <button 
             className={`view-btn ${viewMode === 'cards' ? 'active' : ''}`}
@@ -346,6 +320,30 @@ const Students = () => {
               ))}
             </select>
           </div>
+          <div className="form-group">
+            <label htmlFor="partId">الجزء</label>
+            <select id="partId" name="partId" value={formData.partId || ''} onChange={handlePartChange}>
+              <option value="">-- اختر جزء --</option>
+              {curriculum
+                .find((l) => l.id === formData.levelId)
+                ?.parts.map((part) => (
+                  <option key={part.id} value={part.id}>
+                    {part.name}
+                  </option>
+                ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label htmlFor="groupId">الحلقة</label>
+            <select id="groupId" name="groupId" value={formData.groupId || ''} onChange={handleGroupChange}>
+              <option value="">-- اختر حلقة --</option>
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="form-actions">
             <button type="submit" className="btn btn-success">
               {editingId ? 'تحديث' : 'حفظ'}
@@ -357,46 +355,7 @@ const Students = () => {
         </form>
       )}
 
-      {importRows.length > 0 && (
-        <div className="import-preview">
-          <h4>معاينة الاستيراد — {importRows.length} سطر</h4>
-          <div style={{ maxHeight: 180, overflow: 'auto' }}>
-            <table className="table-import">
-              <thead>
-                <tr>
-                  <th>الاسم</th>
-                  <th>الرقم الشخصي</th>
-                  <th>الهاتف</th>
-                  <th>البريد</th>
-                </tr>
-              </thead>
-              <tbody>
-                {importRows.slice(0, 10).map((r, idx) => (
-                  <tr key={idx}>
-                    <td>{r.name}</td>
-                    <td>{r.personalId}</td>
-                    <td>{r.phone}</td>
-                    <td>{r.email}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div style={{ marginTop: 8 }}>
-            <button
-              className="btn btn-success"
-              disabled={importing}
-              onClick={() => importCsvToFirestore()}
-            >
-              {importing ? 'جاري الاستيراد...' : `استيراد ${importRows.length} طالب`}
-            </button>
-            <button className="btn btn-secondary" style={{ marginLeft: 8 }} onClick={() => { setImportRows([]); setImportStatus(''); }}>
-              إلغاء
-            </button>
-          </div>
-          {importStatus && <p style={{ marginTop: 8 }}>{importStatus}</p>}
-        </div>
-      )}
+
 
       {viewMode === 'cards' ? (
         <div className="students-cards-container">

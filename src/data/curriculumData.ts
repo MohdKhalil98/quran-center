@@ -1,0 +1,414 @@
+export interface Surah {
+  id: number;
+  name: string;
+  verses: number;
+}
+
+export interface Part {
+  id: number;
+  name: string;
+  pages: number;
+  stage: string;
+  surahs: Surah[];
+}
+
+export interface Level {
+  id: number;
+  name: string;
+  description: string;
+  parts: Part[];
+}
+
+export const curriculum: Level[] = [
+  {
+    id: 1,
+    name: 'المستوى الأول',
+    description: 'حفظ الأجزاء الخمسة الأخيرة من القرآن الكريم (الأجزاء 26-30)',
+    parts: [
+      {
+        id: 30,
+        name: 'جزء عمّ',
+        pages: 20,
+        stage: 'المرحلة الأولى',
+        surahs: [
+          { id: 78, name: 'النبأ', verses: 40 },
+          { id: 79, name: 'النازعات', verses: 46 },
+          { id: 80, name: 'عبس', verses: 42 },
+          { id: 81, name: 'التكوير', verses: 29 },
+          { id: 82, name: 'الانفطار', verses: 19 },
+          { id: 83, name: 'المطففين', verses: 36 },
+          { id: 84, name: 'الانشقاق', verses: 25 },
+          { id: 85, name: 'البروج', verses: 22 },
+          { id: 86, name: 'الطارق', verses: 17 },
+          { id: 87, name: 'الأعلى', verses: 19 },
+          { id: 88, name: 'الغاشية', verses: 26 },
+          { id: 89, name: 'الفجر', verses: 30 },
+          { id: 90, name: 'البلد', verses: 20 },
+          { id: 91, name: 'الشمس', verses: 15 },
+          { id: 92, name: 'الليل', verses: 21 },
+          { id: 93, name: 'الضحى', verses: 11 },
+          { id: 94, name: 'الشرح', verses: 8 },
+          { id: 95, name: 'التين', verses: 8 },
+          { id: 96, name: 'العلق', verses: 19 },
+          { id: 97, name: 'القدر', verses: 5 },
+          { id: 98, name: 'البينة', verses: 8 },
+          { id: 99, name: 'الزلزلة', verses: 8 },
+          { id: 100, name: 'العاديات', verses: 11 },
+          { id: 101, name: 'القارعة', verses: 11 },
+          { id: 102, name: 'التكاثر', verses: 8 },
+          { id: 103, name: 'العصر', verses: 3 },
+          { id: 104, name: 'الهمزة', verses: 9 },
+          { id: 105, name: 'الفيل', verses: 5 },
+          { id: 106, name: 'قريش', verses: 4 },
+          { id: 107, name: 'الماعون', verses: 7 },
+          { id: 108, name: 'الكوثر', verses: 3 },
+          { id: 109, name: 'الكافرون', verses: 6 },
+          { id: 110, name: 'النصر', verses: 3 },
+          { id: 111, name: 'المسد', verses: 5 },
+          { id: 112, name: 'الإخلاص', verses: 4 },
+          { id: 113, name: 'الفلق', verses: 5 },
+          { id: 114, name: 'الناس', verses: 6 }
+        ]
+      },
+      {
+        id: 29,
+        name: 'جزء تبارك',
+        pages: 20,
+        stage: 'المرحلة الأولى',
+        surahs: [
+          { id: 67, name: 'الملك', verses: 30 },
+          { id: 68, name: 'القلم', verses: 52 },
+          { id: 69, name: 'الحاقة', verses: 52 },
+          { id: 70, name: 'المعارج', verses: 44 },
+          { id: 71, name: 'نوح', verses: 28 },
+          { id: 72, name: 'الجن', verses: 28 },
+          { id: 73, name: 'المزمل', verses: 20 },
+          { id: 74, name: 'المدثر', verses: 56 },
+          { id: 75, name: 'القيامة', verses: 40 },
+          { id: 76, name: 'الإنسان', verses: 31 },
+          { id: 77, name: 'المرسلات', verses: 50 }
+        ]
+      },
+      {
+        id: 28,
+        name: 'جزء قد سمع',
+        pages: 20,
+        stage: 'المرحلة الأولى',
+        surahs: [
+          { id: 58, name: 'المجادلة', verses: 22 },
+          { id: 59, name: 'الحشر', verses: 24 },
+          { id: 60, name: 'الممتحنة', verses: 13 },
+          { id: 61, name: 'الصف', verses: 14 },
+          { id: 62, name: 'الجمعة', verses: 11 },
+          { id: 63, name: 'المنافقون', verses: 11 },
+          { id: 64, name: 'التغابن', verses: 18 },
+          { id: 65, name: 'الطلاق', verses: 12 },
+          { id: 66, name: 'التحريم', verses: 12 }
+        ]
+      },
+      {
+        id: 27,
+        name: 'جزء الذاريات',
+        pages: 20,
+        stage: 'المرحلة الأولى',
+        surahs: [
+          { id: 51, name: 'الذاريات', verses: 60 },
+          { id: 52, name: 'الطور', verses: 49 },
+          { id: 53, name: 'النجم', verses: 62 },
+          { id: 54, name: 'القمر', verses: 55 },
+          { id: 55, name: 'الرحمن', verses: 78 },
+          { id: 56, name: 'الواقعة', verses: 96 }
+        ]
+      },
+      {
+        id: 26,
+        name: 'جزء الأحقاف',
+        pages: 20,
+        stage: 'المرحلة الأولى',
+        surahs: [
+          { id: 46, name: 'الأحقاف', verses: 35 },
+          { id: 47, name: 'محمد', verses: 38 },
+          { id: 48, name: 'الفتح', verses: 29 },
+          { id: 49, name: 'الحجرات', verses: 18 },
+          { id: 50, name: 'ق', verses: 45 }
+        ]
+      }
+    ]
+  },
+  {
+    id: 2,
+    name: 'المستوى الثاني',
+    description: 'حفظ الأجزاء من 21 إلى 25',
+    parts: [
+      {
+        id: 25,
+        name: 'جزء الأنعام',
+        pages: 20,
+        stage: 'المرحلة الثانية',
+        surahs: [
+          { id: 40, name: 'غافر', verses: 85 },
+          { id: 41, name: 'فصلت', verses: 54 },
+          { id: 42, name: 'الشورى', verses: 53 },
+          { id: 43, name: 'الزخرف', verses: 89 },
+          { id: 44, name: 'الدخان', verses: 59 },
+          { id: 45, name: 'الجاثية', verses: 37 }
+        ]
+      },
+      {
+        id: 24,
+        name: 'جزء تبيان',
+        pages: 20,
+        stage: 'المرحلة الثانية',
+        surahs: [
+          { id: 35, name: 'فاطر', verses: 45 },
+          { id: 36, name: 'يس', verses: 83 },
+          { id: 37, name: 'الصافات', verses: 182 },
+          { id: 38, name: 'ص', verses: 88 },
+          { id: 39, name: 'الزمر', verses: 75 }
+        ]
+      },
+      {
+        id: 23,
+        name: 'جزء يس',
+        pages: 20,
+        stage: 'المرحلة الثانية',
+        surahs: [
+          { id: 32, name: 'السجدة', verses: 30 },
+          { id: 33, name: 'الأحزاب', verses: 73 },
+          { id: 34, name: 'سبأ', verses: 54 }
+        ]
+      },
+      {
+        id: 22,
+        name: 'جزء الحج',
+        pages: 20,
+        stage: 'المرحلة الثانية',
+        surahs: [
+          { id: 28, name: 'القصص', verses: 88 },
+          { id: 29, name: 'العنكبوت', verses: 69 },
+          { id: 30, name: 'الروم', verses: 60 },
+          { id: 31, name: 'لقمان', verses: 34 }
+        ]
+      },
+      {
+        id: 21,
+        name: 'جزء الأنبياء',
+        pages: 20,
+        stage: 'المرحلة الثانية',
+        surahs: [
+          { id: 25, name: 'الفرقان', verses: 77 },
+          { id: 26, name: 'الشعراء', verses: 227 },
+          { id: 27, name: 'النمل', verses: 93 }
+        ]
+      }
+    ]
+  },
+  {
+    id: 3,
+    name: 'المستوى الثالث',
+    description: 'حفظ الأجزاء من 16 إلى 20',
+    parts: [
+      {
+        id: 20,
+        name: 'جزء طه',
+        pages: 20,
+        stage: 'المرحلة الثالثة',
+        surahs: [
+          { id: 20, name: 'طه', verses: 135 },
+          { id: 21, name: 'الأنبياء', verses: 112 }
+        ]
+      },
+      {
+        id: 19,
+        name: 'جزء مريم',
+        pages: 20,
+        stage: 'المرحلة الثالثة',
+        surahs: [
+          { id: 18, name: 'الكهف', verses: 110 },
+          { id: 19, name: 'مريم', verses: 98 }
+        ]
+      },
+      {
+        id: 18,
+        name: 'جزء النحل',
+        pages: 20,
+        stage: 'المرحلة الثالثة',
+        surahs: [
+          { id: 16, name: 'النحل', verses: 128 },
+          { id: 17, name: 'الإسراء', verses: 111 }
+        ]
+      },
+      {
+        id: 17,
+        name: 'جزء سبحان',
+        pages: 20,
+        stage: 'المرحلة الثالثة',
+        surahs: [
+          { id: 15, name: 'الحجر', verses: 99 }
+        ]
+      },
+      {
+        id: 16,
+        name: 'جزء الفرقان',
+        pages: 20,
+        stage: 'المرحلة الثالثة',
+        surahs: [
+          { id: 14, name: 'إبراهيم', verses: 52 }
+        ]
+      }
+    ]
+  },
+  {
+    id: 4,
+    name: 'المستوى الرابع',
+    description: 'حفظ الأجزاء من 11 إلى 15',
+    parts: [
+      {
+        id: 15,
+        name: 'جزء الحجاج',
+        pages: 20,
+        stage: 'المرحلة الرابعة',
+        surahs: [
+          { id: 12, name: 'يوسف', verses: 111 },
+          { id: 13, name: 'الرعد', verses: 43 }
+        ]
+      },
+      {
+        id: 14,
+        name: 'جزء نوح',
+        pages: 20,
+        stage: 'المرحلة الرابعة',
+        surahs: [
+          { id: 11, name: 'هود', verses: 123 }
+        ]
+      },
+      {
+        id: 13,
+        name: 'جزء يونس',
+        pages: 20,
+        stage: 'المرحلة الرابعة',
+        surahs: [
+          { id: 10, name: 'يونس', verses: 109 }
+        ]
+      },
+      {
+        id: 12,
+        name: 'جزء يا أيها الناس',
+        pages: 20,
+        stage: 'المرحلة الرابعة',
+        surahs: [
+          { id: 9, name: 'التوبة', verses: 129 }
+        ]
+      },
+      {
+        id: 11,
+        name: 'جزء الأنفال',
+        pages: 20,
+        stage: 'المرحلة الرابعة',
+        surahs: [
+          { id: 8, name: 'الأنفال', verses: 75 }
+        ]
+      }
+    ]
+  },
+  {
+    id: 5,
+    name: 'المستوى الخامس',
+    description: 'حفظ الأجزاء من 6 إلى 10',
+    parts: [
+      {
+        id: 10,
+        name: 'جزء الشعراء',
+        pages: 20,
+        stage: 'المرحلة الخامسة',
+        surahs: [
+          { id: 7, name: 'الأعراف', verses: 206 }
+        ]
+      },
+      {
+        id: 9,
+        name: 'جزء قال الملأ',
+        pages: 20,
+        stage: 'المرحلة الخامسة',
+        surahs: [
+          { id: 6, name: 'الأنعام', verses: 165 }
+        ]
+      },
+      {
+        id: 8,
+        name: 'جزء ولو أنا',
+        pages: 20,
+        stage: 'المرحلة الخامسة',
+        surahs: [
+          { id: 5, name: 'المائدة', verses: 120 }
+        ]
+      },
+      {
+        id: 7,
+        name: 'جزء والذين',
+        pages: 20,
+        stage: 'المرحلة الخامسة',
+        surahs: [
+          { id: 4, name: 'النساء', verses: 176 }
+        ]
+      },
+      {
+        id: 6,
+        name: 'جزء عم يتساءلون',
+        pages: 20,
+        stage: 'المرحلة الخامسة',
+        surahs: [
+          { id: 3, name: 'آل عمران', verses: 200 }
+        ]
+      }
+    ]
+  },
+  {
+    id: 6,
+    name: 'المستوى السادس',
+    description: 'حفظ الأجزاء من 1 إلى 5',
+    parts: [
+      {
+        id: 5,
+        name: 'جزء الحمد',
+        pages: 20,
+        stage: 'المرحلة السادسة',
+        surahs: [
+          { id: 2, name: 'البقرة', verses: 286 }
+        ]
+      },
+      {
+        id: 4,
+        name: 'جزء لم يكن',
+        pages: 20,
+        stage: 'المرحلة السادسة',
+        surahs: [
+          { id: 1, name: 'الفاتحة', verses: 7 }
+        ]
+      },
+      {
+        id: 3,
+        name: 'جزء الثالث',
+        pages: 20,
+        stage: 'المرحلة السادسة',
+        surahs: []
+      },
+      {
+        id: 2,
+        name: 'جزء الثاني',
+        pages: 20,
+        stage: 'المرحلة السادسة',
+        surahs: []
+      },
+      {
+        id: 1,
+        name: 'جزء الأول',
+        pages: 20,
+        stage: 'المرحلة السادسة',
+        surahs: []
+      }
+    ]
+  }
+];
+
+export default curriculum;

@@ -519,3 +519,21 @@
   }
 }
 
+/* Import preview */
+.import-preview {
+  border: 1px dashed #ddd;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 18px;
+  background: #fffdf9;
+}
+.table-import {
+  width: 100%;
+  border-collapse: collapse;
+}
+.table-import th, .table-import td {
+  padding: 8px 10px;
+  text-align: right;
+  border-bottom: 1px solid #eee;
+}
+

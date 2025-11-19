@@ -7,8 +7,6 @@ import ConfirmModal from '../components/ConfirmModal';
 interface Group {
   id?: string;
   name: string;
-  teacherId: string;
-  teacherName?: string;
   trackId: string;
   trackName?: string;
   description: string;
@@ -17,7 +15,6 @@ interface Group {
 
 const Groups = () => {
   const [groups, setGroups] = useState<Group[]>([]);
-  const [teachers, setTeachers] = useState<any[]>([]);
   const [tracks, setTracks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
@@ -26,13 +23,12 @@ const Groups = () => {
   const [confirmTargetId, setConfirmTargetId] = useState<string | null>(null);
   const [formData, setFormData] = useState<Group>({
     name: '',
-    teacherId: '',
     trackId: '',
     description: '',
     schedule: ''
   });
 
-  // Fetch groups, teachers and tracks from Firebase
+  // Fetch groups and tracks from Firebase
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -44,15 +40,6 @@ const Groups = () => {
           ...doc.data()
         } as Group));
 
-        // Fetch teachers
-        const teachersQuery = query(collection(db, 'teachers'), orderBy('name'));
-        const teachersSnapshot = await getDocs(teachersQuery);
-        const teachersList = teachersSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          name: doc.data().name,
-          ...doc.data()
-        } as any));
-
         // Fetch tracks
         const tracksQuery = query(collection(db, 'tracks'), orderBy('name'));
         const tracksSnapshot = await getDocs(tracksQuery);
@@ -62,15 +49,13 @@ const Groups = () => {
           ...doc.data()
         } as any));
 
-        // Attach teacher names and track names to groups
+        // Attach track names to groups
         const groupsWithDetails = groupsList.map((group) => ({
           ...group,
-          teacherName: teachersList.find((t) => t.id === group.teacherId)?.name || 'غير محدد',
           trackName: tracksList.find((tr) => tr.id === group.trackId)?.name || 'غير محدد'
         }));
 
         setGroups(groupsWithDetails);
-        setTeachers(teachersList);
         setTracks(tracksList);
         setLoading(false);
       } catch (error) {
@@ -92,14 +77,13 @@ const Groups = () => {
 
   const handleAddGroup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.teacherId || !formData.trackId) {
+    if (!formData.name || !formData.trackId) {
       alert('يرجى ملء جميع الحقول المطلوبة');
       return;
     }
 
     try {
-      const { id, teacherName, trackName, ...dataToSave } = formData;
-      const teacherNameValue = teachers.find((t) => t.id === formData.teacherId)?.name || 'غير محدد';
+      const { id, trackName, ...dataToSave } = formData;
       const trackNameValue = tracks.find((tr) => tr.id === formData.trackId)?.name || 'غير محدد';
 
       if (editingId) {
@@ -108,7 +92,7 @@ const Groups = () => {
         setGroups((prev) =>
           prev.map((g) =>
             g.id === editingId
-              ? { ...dataToSave, id: editingId, teacherName: teacherNameValue, trackName: trackNameValue }
+              ? { ...dataToSave, id: editingId, trackName: trackNameValue }
               : g
           )
         );
@@ -116,12 +100,11 @@ const Groups = () => {
       } else {
         // Add new group
         const docRef = await addDoc(collection(db, 'groups'), dataToSave);
-        setGroups((prev) => [...prev, { ...dataToSave, id: docRef.id, teacherName: teacherNameValue, trackName: trackNameValue }]);
+        setGroups((prev) => [...prev, { ...dataToSave, id: docRef.id, trackName: trackNameValue }]);
       }
 
       setFormData({
         name: '',
-        teacherId: '',
         trackId: '',
         description: '',
         schedule: ''
@@ -163,7 +146,6 @@ const Groups = () => {
     setEditingId(null);
     setFormData({
       name: '',
-      teacherId: '',
       trackId: '',
       description: '',
       schedule: ''
@@ -225,23 +207,6 @@ const Groups = () => {
             </select>
           </div>
           <div className="form-group">
-            <label htmlFor="teacherId">المعلم *</label>
-            <select
-              id="teacherId"
-              name="teacherId"
-              value={formData.teacherId}
-              onChange={handleInputChange}
-              required
-            >
-              <option value="">اختر المعلم</option>
-              {teachers.map((teacher) => (
-                <option key={teacher.id} value={teacher.id}>
-                  {teacher.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="form-group">
             <label htmlFor="description">الوصف</label>
             <textarea
               id="description"
@@ -283,9 +248,6 @@ const Groups = () => {
               <h2>{group.name}</h2>
               <p>
                 <strong>المساق:</strong> {group.trackName}
-              </p>
-              <p>
-                <strong>المعلم:</strong> {group.teacherName}
               </p>
               {group.schedule && (
                 <p>

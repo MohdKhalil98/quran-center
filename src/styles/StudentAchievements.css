@@ -414,6 +414,54 @@
   font-weight: 500;
 }
 
+/* Student Info Display */
+.student-info {
+  margin-top: 12px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.info-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+  color: #1565c0;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: 1px solid #90caf9;
+  box-shadow: 0 2px 4px rgba(21, 101, 192, 0.1);
+}
+
+/* Assignment Section */
+.assignment-section {
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 8px;
+  border: 2px dashed #dee2e6;
+  margin-top: 20px;
+  margin-bottom: 15px;
+}
+
+.assignment-section h4 {
+  margin: 0 0 15px 0;
+  color: #495057;
+  font-size: 1rem;
+  font-weight: 700;
+  text-align: right;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.assignment-section h4::before {
+  content: "📝";
+  font-size: 1.2rem;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .filter-controls {
@@ -447,5 +495,14 @@
 
   .table-card table {
     min-width: 600px;
+  }
+
+  .student-info {
+    flex-direction: column;
+  }
+
+  .info-badge {
+    width: 100%;
+    justify-content: center;
   }
 }

@@ -100,19 +100,71 @@ const DevTools = () => {
     }
   };
 
+  const clearAllData = async () => {
+    const confirmed = window.confirm(
+      '⚠️ تحذير: هذا سيحذف جميع البيانات!\n\nسيتم حذف:\n- جميع الطلاب\n- جميع المعلمين\n- جميع الحلقات\n- سجلات الحضور\n- تحصيل الطالب\n\nهل أنت متأكد من رغبتك في المتابعة؟'
+    );
+    if (!confirmed) return;
+
+    setRunning(true);
+    try {
+      const collectionsToClear = ['students', 'teachers', 'groups', 'attendance', 'student_achievements'];
+      for (const col of collectionsToClear) {
+        const snap = await getDocs(collection(db, col));
+        for (const d of snap.docs) {
+          await deleteDoc(doc(db, col, d.id));
+        }
+      }
+      alert('✅ تم حذف جميع البيانات بنجاح');
+    } catch (error) {
+      console.error('Error clearing all data:', error);
+      alert('❌ حدث خطأ أثناء حذف البيانات');
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const reloadAllData = async () => {
+    setRunning(true);
+    try {
+      window.location.reload();
+    } catch (error) {
+      console.error('Error reloading data:', error);
+      alert('❌ حدث خطأ أثناء إعادة التحميل');
+    } finally {
+      setRunning(false);
+    }
+  };
+
   return (
     <section className="page">
       <header className="page__header">
-        <h1>أدوات المطور (تجريبية)</h1>
-        <p>زرع أو تنظيف بيانات تجريبية في Firestore (مناسبة لبيئة التطوير).</p>
+        <h1>أدوات المطور</h1>
+        <p>أدوات مساعدة لإدارة البيانات والتطوير (زرع، تنظيف، إعادة تحميل).</p>
       </header>
 
-      <div style={{ display: 'flex', gap: '12px', marginTop: 12 }}>
+      <div style={{ display: 'flex', gap: '12px', marginTop: 12, flexWrap: 'wrap' }}>
         <button className="btn btn-primary" onClick={seedDemoData} disabled={running}>
           زرع بيانات تجريبية
         </button>
-        <button className="btn btn-danger" onClick={clearSeeded} disabled={running}>
+        <button className="btn btn-secondary" onClick={clearSeeded} disabled={running}>
           إزالة البيانات التجريبية
+        </button>
+        <button 
+          className="btn btn-secondary" 
+          onClick={reloadAllData} 
+          disabled={running}
+          style={{ fontWeight: 'bold' }}
+        >
+          🔄 إعادة تحميل البيانات
+        </button>
+        <button 
+          className="btn btn-danger" 
+          onClick={clearAllData} 
+          disabled={running}
+          style={{ backgroundColor: '#dc3545', fontWeight: 'bold' }}
+        >
+          🗑️ حذف جميع البيانات
         </button>
       </div>
     </section>

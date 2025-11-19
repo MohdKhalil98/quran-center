@@ -201,6 +201,8 @@ const Students = () => {
       const added: any[] = [];
       for (const r of importRows) {
         if (!r.name || !r.personalId) continue; // skip incomplete rows
+        // skip if personalId already exists locally
+        if (students.find((s) => s.personalId === r.personalId)) continue;
         const studentDoc = {
           name: r.name,
           personalId: r.personalId,

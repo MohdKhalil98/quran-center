@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 
 const navItems = [
   { path: '/dashboard', label: 'لوحة التحكم' },
+  { path: '/tracks', label: 'المساقات' },
   { path: '/teachers', label: 'المعلمون' },
   { path: '/groups', label: 'المجموعات' },
   { path: '/students', label: 'الطلاب' },

@@ -8,6 +8,7 @@ import Groups from './pages/Groups';
 import Login from './pages/Login';
 import Students from './pages/Students';
 import Teachers from './pages/Teachers';
+import Tracks from './pages/Tracks';
 import StudentAchievements from './pages/StudentAchievements';
 import DevTools from './pages/DevTools';
 import Attendance from './pages/Attendance';
@@ -20,6 +21,7 @@ function App() {
         <Route element={<Layout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/tracks" element={<Tracks />} />
           <Route path="/students" element={<Students />} />
           <Route path="/teachers" element={<Teachers />} />
           <Route path="/groups" element={<Groups />} />

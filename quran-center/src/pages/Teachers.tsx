@@ -20,6 +20,10 @@ const POSITIONS = [
   { value: 'admin', label: 'إداري' }
 ];
 
+const getPositionLabel = (position: string): string => {
+  return POSITIONS.find((p) => p.value === position)?.label || position;
+};
+
 const Teachers = () => {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,7 +41,6 @@ const Teachers = () => {
     birthDate: ''
   });
 
-  // Fetch teachers from Firebase
   useEffect(() => {
     const fetchTeachers = async () => {
       try {
@@ -77,16 +80,14 @@ const Teachers = () => {
       const { id, ...dataToSave } = formData;
 
       if (editingId) {
-        // Update existing teacher
         await updateDoc(doc(db, 'teachers', editingId), dataToSave);
         setTeachers((prev) =>
-          prev.map((t) => (t.id === editingId ? { ...dataToSave, id: editingId } : t))
+          prev.map((t) => (t.id === editingId ? { ...dataToSave, id: editingId } as Teacher : t))
         );
         setEditingId(null);
       } else {
-        // Add new teacher
         const docRef = await addDoc(collection(db, 'teachers'), dataToSave);
-        setTeachers((prev) => [...prev, { ...dataToSave, id: docRef.id }]);
+        setTeachers((prev) => [...prev, { ...dataToSave, id: docRef.id } as Teacher]);
       }
 
       setFormData({
@@ -140,10 +141,6 @@ const Teachers = () => {
       position: 'teacher',
       birthDate: ''
     });
-  };
-
-  const getPositionLabel = (position: string) => {
-    return POSITIONS.find((p) => p.value === position)?.label || position;
   };
 
   if (loading) {
@@ -234,13 +231,12 @@ const Teachers = () => {
             />
           </div>
           <div className="form-group">
-            <label htmlFor="position">الوظيفة *</label>
+            <label htmlFor="position">الوظيفة</label>
             <select
               id="position"
               name="position"
               value={formData.position}
               onChange={handleInputChange}
-              required
             >
               {POSITIONS.map((pos) => (
                 <option key={pos.value} value={pos.value}>

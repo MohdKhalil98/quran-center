@@ -52,10 +52,8 @@ const Curriculum = () => {
                           <span className="value">{part.pages}</span>
                         </div>
                         <div className="part-row">
-                          <span className="label">حالة الحفظ:</span>
-                          <span className={`status ${part.status === 'لم يبدأ' ? 'not-started' : 'in-progress'}`}>
-                            {part.status || 'لم يبدأ'}
-                          </span>
+                          <span className="label">عدد السور:</span>
+                          <span className="value">{part.surahs?.length || 0}</span>
                         </div>
                       </div>
                     </article>

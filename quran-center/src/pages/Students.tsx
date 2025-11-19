@@ -34,7 +34,6 @@ const Students = () => {
     levelName: curriculum.find((l) => l.id === 1)?.name || 'المستوى الأول'
   });
 
-  // Fetch students from Firebase
   useEffect(() => {
     const fetchStudents = async () => {
       try {
@@ -92,14 +91,12 @@ const Students = () => {
       }
 
       if (editingId) {
-        // Update existing student
         await updateDoc(doc(db, 'students', editingId), dataToSave);
         setStudents((prev) =>
           prev.map((s) => (s.id === editingId ? { ...(dataToSave as Student), id: editingId } : s))
         );
         setEditingId(null);
       } else {
-        // Add new student
         const docRef = await addDoc(collection(db, 'students'), dataToSave);
         setStudents((prev) => [...prev, { ...(dataToSave as Student), id: docRef.id }]);
       }

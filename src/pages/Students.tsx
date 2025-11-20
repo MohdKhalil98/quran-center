@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
+import '../styles/Shared.css';
 import '../styles/Students.css';
 import ConfirmModal from '../components/ConfirmModal';
 import curriculum from '../data/curriculumData';
@@ -34,6 +35,8 @@ const Students = () => {
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmTargetId, setConfirmTargetId] = useState<string | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [formData, setFormData] = useState<Student>({
     name: '',
     personalId: '',
@@ -126,7 +129,7 @@ const Students = () => {
 
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.personalId || !formData.phone || !formData.email) {
+    if (!formData.name || !formData.personalId || !formData.phone || !formData.email || !formData.groupId) {
       alert('يرجى ملء جميع الحقول المطلوبة');
       return;
     }
@@ -210,7 +213,15 @@ const Students = () => {
     });
   };
 
+  const handleOpenDetailsModal = (student: Student) => {
+    setSelectedStudent(student);
+    setIsDetailsModalOpen(true);
+  };
 
+  const handleCloseDetailsModal = () => {
+    setSelectedStudent(null);
+    setIsDetailsModalOpen(false);
+  };
 
   if (loading) {
     return (
@@ -230,7 +241,7 @@ const Students = () => {
         <p>إدارة بيانات الطلاب ومستوى التقدم.</p>
       </header>
 
-      <div className="students-header">
+      <div className="page-actions-header">
         <button className="btn btn-primary" onClick={() => setIsAdding(true)}>
           + إضافة طالب جديد
         </button>
@@ -334,8 +345,8 @@ const Students = () => {
             </select>
           </div>
           <div className="form-group">
-            <label htmlFor="groupId">الحلقة</label>
-            <select id="groupId" name="groupId" value={formData.groupId || ''} onChange={handleGroupChange}>
+            <label htmlFor="groupId">الحلقة *</label>
+            <select id="groupId" name="groupId" value={formData.groupId || ''} onChange={handleGroupChange} required>
               <option value="">-- اختر حلقة --</option>
               {groups.map((group) => (
                 <option key={group.id} value={group.id}>
@@ -358,31 +369,31 @@ const Students = () => {
 
 
       {viewMode === 'cards' ? (
-        <div className="students-cards-container">
+        <div className="cards-container">
           {students.length === 0 ? (
-            <p>لا توجد بيانات طلاب حتى الآن</p>
+            <p className="empty-state">لا توجد بيانات طلاب حتى الآن</p>
           ) : (
             students.map((student) => (
-              <article key={student.id} className="student-card">
-                <header className="student-header">
+              <article key={student.id} className="data-card">
+                <header className="data-card-header">
                   <div>
                     <h3>{student.name}</h3>
-                    <p className="student-id">#{student.personalId}</p>
+                    <p className="data-card-id">#{student.personalId}</p>
                   </div>
-                  <div className="student-portion">
+                  <div className="data-card-tag">
                     <span>{student.levelName || 'غير محدد'}</span>
                   </div>
                 </header>
-                <section className="student-body">
-                  <div className="student-row">
+                <section className="data-card-body">
+                  <div className="data-card-row">
                     <label>رقم الهاتف:</label>
                     <span>{student.phone}</span>
                   </div>
-                  <div className="student-row">
+                  <div className="data-card-row">
                     <label>البريد الإلكتروني:</label>
                     <span>{student.email}</span>
                   </div>
-                  <div className="student-row">
+                  <div className="data-card-row">
                     <label>تاريخ الميلاد:</label>
                     <span>
                       {student.birthDate
@@ -395,18 +406,12 @@ const Students = () => {
                     </span>
                   </div>
                 </section>
-                <footer className="student-actions">
+                <footer className="data-card-actions">
                   <button
-                    className="btn btn-sm btn-warning"
-                    onClick={() => handleEditStudent(student)}
+                    className="btn btn-sm btn-primary"
+                    onClick={() => handleOpenDetailsModal(student)}
                   >
-                    ✏️ تعديل
-                  </button>
-                  <button
-                    className="btn btn-sm btn-danger"
-                    onClick={() => handleDeleteStudent(student.id || '')}
-                  >
-                    🗑️ حذف
+                    المزيد
                   </button>
                 </footer>
               </article>
@@ -416,7 +421,7 @@ const Students = () => {
       ) : (
         <div className="table-card">
           {students.length === 0 ? (
-            <p>لا توجد بيانات طلاب حتى الآن</p>
+            <p className="empty-state">لا توجد بيانات طلاب حتى الآن</p>
           ) : (
             <table>
               <thead>
@@ -427,6 +432,7 @@ const Students = () => {
                   <th>البريد الإلكتروني</th>
                   <th>تاريخ الميلاد</th>
                   <th>الورد الحالي</th>
+                  <th>الحلقة</th>
                   <th>الإجراءات</th>
                 </tr>
               </thead>
@@ -446,20 +452,15 @@ const Students = () => {
                           })
                         : '-'}
                     </td>
-                    <td>{student.levelName || '-'}</td>
+                    <td className="tag-cell">{student.levelName || '-'}</td>
+                    <td className="tag-cell">{student.groupName || '-'}</td>
                     <td>
                       <div className="card-actions">
                         <button
-                          className="btn btn-sm btn-warning"
-                          onClick={() => handleEditStudent(student)}
+                          className="btn btn-sm btn-primary"
+                          onClick={() => handleOpenDetailsModal(student)}
                         >
-                          تعديل
-                        </button>
-                        <button
-                          className="btn btn-sm btn-danger"
-                          onClick={() => handleDeleteStudent(student.id || '')}
-                        >
-                          حذف
+                          المزيد
                         </button>
                       </div>
                     </td>
@@ -479,6 +480,50 @@ const Students = () => {
           setConfirmTargetId(null);
         }}
       />
+      {isDetailsModalOpen && selectedStudent && (
+        <div className="modal-overlay" onClick={handleCloseDetailsModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>تفاصيل الطالب: {selectedStudent.name}</h2>
+              <button className="close-btn" onClick={handleCloseDetailsModal}>&times;</button>
+            </div>
+            <div className="modal-body">
+              <div className="details-list">
+                <p><strong>الرقم الشخصي:</strong> {selectedStudent.personalId}</p>
+                <p><strong>رقم الهاتف:</strong> {selectedStudent.phone}</p>
+                <p><strong>البريد الإلكتروني:</strong> {selectedStudent.email}</p>
+                <p><strong>تاريخ الميلاد:</strong> {selectedStudent.birthDate ? new Date(selectedStudent.birthDate + 'T00:00:00').toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}</p>
+                <p><strong>المستوى:</strong> {selectedStudent.levelName || 'غير محدد'}</p>
+                <p><strong>الجزء:</strong> {selectedStudent.partName || 'غير محدد'}</p>
+                <p><strong>الحلقة:</strong> {selectedStudent.groupName || 'غير محدد'}</p>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn btn-warning"
+                onClick={() => {
+                  handleCloseDetailsModal();
+                  handleEditStudent(selectedStudent);
+                }}
+              >
+                ✏️ تعديل
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={() => {
+                  handleCloseDetailsModal();
+                  handleDeleteStudent(selectedStudent.id || '');
+                }}
+              >
+                🗑️ حذف
+              </button>
+              <button className="btn btn-secondary" onClick={handleCloseDetailsModal}>
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 };

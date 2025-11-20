@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
+import '../styles/Shared.css';
 import '../styles/Teachers.css';
 import ConfirmModal from '../components/ConfirmModal';
 
@@ -35,6 +36,8 @@ const Teachers = () => {
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmTargetId, setConfirmTargetId] = useState<string | null>(null);
+  const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [formData, setFormData] = useState<Teacher>({
     name: '',
@@ -192,6 +195,16 @@ const Teachers = () => {
     });
   };
 
+  const handleOpenDetailsModal = (teacher: Teacher) => {
+    setSelectedTeacher(teacher);
+    setIsDetailsModalOpen(true);
+  };
+
+  const handleCloseDetailsModal = () => {
+    setSelectedTeacher(null);
+    setIsDetailsModalOpen(false);
+  };
+
   if (loading) {
     return (
       <section className="page">
@@ -210,7 +223,7 @@ const Teachers = () => {
         <p>إدارة بيانات المعلمين والمشرفين.</p>
       </header>
 
-      <div className="teachers-header">
+      <div className="page-actions-header">
         <button className="btn btn-primary" onClick={() => setIsAdding(true)}>
           + إضافة معلم جديد
         </button>
@@ -335,31 +348,31 @@ const Teachers = () => {
       )}
 
       {viewMode === 'cards' ? (
-        <div className="teachers-cards-container">
+        <div className="cards-container">
           {teachers.length === 0 ? (
-            <p>لا توجد بيانات معلمين حتى الآن</p>
+            <p className="empty-state">لا توجد بيانات معلمين حتى الآن</p>
           ) : (
             teachers.map((teacher) => (
-              <article key={teacher.id} className="teacher-card">
-                <header className="teacher-header">
+              <article key={teacher.id} className="data-card">
+                <header className="data-card-header">
                   <div>
                     <h3>{teacher.name}</h3>
-                    <p className="teacher-id">#{teacher.personalId}</p>
+                    <p className="data-card-id">#{teacher.personalId}</p>
                   </div>
-                  <div className="teacher-position">
+                  <div className="data-card-tag">
                     <span>{getPositionLabel(teacher.position)}</span>
                   </div>
                 </header>
-                <section className="teacher-body">
-                  <div className="teacher-row">
+                <section className="data-card-body">
+                  <div className="data-card-row">
                     <label>رقم الهاتف:</label>
                     <span>{teacher.phone}</span>
                   </div>
-                  <div className="teacher-row">
+                  <div className="data-card-row">
                     <label>البريد الإلكتروني:</label>
                     <span>{teacher.email}</span>
                   </div>
-                  <div className="teacher-row">
+                  <div className="data-card-row">
                     <label>تاريخ الميلاد:</label>
                     <span>
                       {teacher.birthDate
@@ -372,24 +385,18 @@ const Teachers = () => {
                     </span>
                   </div>
                   {teacher.groupNames && (
-                    <div className="teacher-row">
+                    <div className="data-card-row">
                       <label>المجموعات:</label>
-                      <span style={{ color: '#1b8c6b', fontWeight: '600' }}>{teacher.groupNames}</span>
+                      <span className="tag-cell">{teacher.groupNames}</span>
                     </div>
                   )}
                 </section>
-                <footer className="teacher-actions">
+                <footer className="data-card-actions">
                   <button
-                    className="btn btn-sm btn-warning"
-                    onClick={() => handleEditTeacher(teacher)}
+                    className="btn btn-sm btn-primary"
+                    onClick={() => handleOpenDetailsModal(teacher)}
                   >
-                    ✏️ تعديل
-                  </button>
-                  <button
-                    className="btn btn-sm btn-danger"
-                    onClick={() => handleDeleteTeacher(teacher.id || '')}
-                  >
-                    🗑️ حذف
+                    المزيد
                   </button>
                 </footer>
               </article>
@@ -422,7 +429,7 @@ const Teachers = () => {
                     <td>{teacher.phone}</td>
                     <td>{teacher.email}</td>
                     <td>{getPositionLabel(teacher.position)}</td>
-                    <td style={{ color: '#1b8c6b', fontWeight: '600' }}>
+                    <td className="tag-cell">
                       {teacher.groupNames || '-'}
                     </td>
                     <td className="date-cell">
@@ -437,16 +444,10 @@ const Teachers = () => {
                     <td>
                       <div className="card-actions">
                         <button
-                          className="btn btn-sm btn-warning"
-                          onClick={() => handleEditTeacher(teacher)}
+                          className="btn btn-sm btn-primary"
+                          onClick={() => handleOpenDetailsModal(teacher)}
                         >
-                          تعديل
-                        </button>
-                        <button
-                          className="btn btn-sm btn-danger"
-                          onClick={() => handleDeleteTeacher(teacher.id || '')}
-                        >
-                          حذف
+                          المزيد
                         </button>
                       </div>
                     </td>
@@ -466,6 +467,49 @@ const Teachers = () => {
           setConfirmTargetId(null);
         }}
       />
+      {isDetailsModalOpen && selectedTeacher && (
+        <div className="modal-overlay" onClick={handleCloseDetailsModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>تفاصيل المعلم: {selectedTeacher.name}</h2>
+              <button className="close-btn" onClick={handleCloseDetailsModal}>&times;</button>
+            </div>
+            <div className="modal-body">
+              <div className="details-list">
+                <p><strong>الرقم الشخصي:</strong> {selectedTeacher.personalId}</p>
+                <p><strong>رقم الهاتف:</strong> {selectedTeacher.phone}</p>
+                <p><strong>البريد الإلكتروني:</strong> {selectedTeacher.email}</p>
+                <p><strong>الوظيفة:</strong> {getPositionLabel(selectedTeacher.position)}</p>
+                <p><strong>تاريخ الميلاد:</strong> {selectedTeacher.birthDate ? new Date(selectedTeacher.birthDate + 'T00:00:00').toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}</p>
+                <p><strong>المجموعات:</strong> <span className="tag-cell">{selectedTeacher.groupNames || 'لا يوجد'}</span></p>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn btn-warning"
+                onClick={() => {
+                  handleCloseDetailsModal();
+                  handleEditTeacher(selectedTeacher);
+                }}
+              >
+                ✏️ تعديل
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={() => {
+                  handleCloseDetailsModal();
+                  handleDeleteTeacher(selectedTeacher.id || '');
+                }}
+              >
+                🗑️ حذف
+              </button>
+              <button className="btn btn-secondary" onClick={handleCloseDetailsModal}>
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 };

@@ -171,29 +171,46 @@ const DevTools = () => {
         <p>أدوات مساعدة لإدارة البيانات والتطوير (زرع، تنظيف، إعادة تحميل).</p>
       </header>
 
-      <div style={{ display: 'flex', gap: '12px', marginTop: 12, flexWrap: 'wrap' }}>
-        <button className="btn btn-primary" onClick={seedDemoData} disabled={running}>
-          زرع بيانات تجريبية
-        </button>
-        <button className="btn btn-secondary" onClick={clearSeeded} disabled={running}>
-          إزالة البيانات التجريبية
-        </button>
-        <button 
-          className="btn btn-secondary" 
-          onClick={reloadAllData} 
-          disabled={running}
-          style={{ fontWeight: 'bold' }}
-        >
-          🔄 إعادة تحميل البيانات
-        </button>
-        <button 
-          className="btn btn-danger" 
-          onClick={clearAllData} 
-          disabled={running}
-          style={{ backgroundColor: '#dc3545', fontWeight: 'bold' }}
-        >
-          🗑️ حذف جميع البيانات
-        </button>
+      <div className="devtools-container">
+        {/* Seeding Card */}
+        <div className="dev-card">
+          <div className="dev-card-header">
+            <h3>🌱 زراعة البيانات</h3>
+            <p>إضافة بيانات تجريبية لتعبئة النظام.</p>
+          </div>
+          <div className="dev-card-body">
+            <button className="btn btn-primary" onClick={seedDemoData} disabled={running}>
+              زرع بيانات تجريبية
+            </button>
+            <button className="btn btn-secondary" onClick={clearSeeded} disabled={running}>
+              إزالة البيانات المزروعة
+            </button>
+          </div>
+        </div>
+
+        {/* Actions Card */}
+        <div className="dev-card">
+          <div className="dev-card-header">
+            <h3>⚙️ إجراءات عامة</h3>
+            <p>أدوات لإعادة تحميل البيانات أو حذفها.</p>
+          </div>
+          <div className="dev-card-body">
+            <button 
+              className="btn btn-secondary" 
+              onClick={reloadAllData} 
+              disabled={running}
+            >
+              🔄 إعادة تحميل البيانات
+            </button>
+            <button 
+              className="btn btn-danger" 
+              onClick={clearAllData} 
+              disabled={running}
+            >
+              🗑️ حذف جميع البيانات
+            </button>
+          </div>
+        </div>
       </div>
 
       {showDeleteModal && (
@@ -205,7 +222,7 @@ const DevTools = () => {
             </div>
             <div className="modal-body">
               {deleteMessage ? (
-                <p style={{ fontSize: '16px', color: deleteMessage.startsWith('✅') ? '#28a745' : '#dc3545', textAlign: 'center', padding: '20px 0' }}>
+                <p className={`delete-message ${deleteMessage.startsWith('✅') ? 'success' : 'error'}`}>
                   {deleteMessage}
                 </p>
               ) : (

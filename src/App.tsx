@@ -5,6 +5,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Curriculum from './pages/Curriculum';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
+import Register from './pages/Register';
+import UserManagement from './pages/UserManagement';
 import Students from './pages/Students';
 import Teachers from './pages/Teachers';
 import Tracks from './pages/Tracks';
@@ -17,6 +19,7 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
@@ -28,6 +31,7 @@ function App() {
           <Route path="/achievements" element={<StudentAchievements />} />
           <Route path="/attendance" element={<Attendance />} />
           <Route path="/curriculum" element={<Curriculum />} />
+          <Route path="/users" element={<UserManagement />} />
           <Route path="/dev-tools" element={<DevTools />} />
         </Route>
       </Route>

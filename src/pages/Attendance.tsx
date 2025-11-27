@@ -21,6 +21,15 @@ interface AttendanceRecord {
   status: 'حاضر' | 'متأخر' | 'غائب بعذر' | 'غائب';
 }
 
+interface StudentAttendanceStats {
+  studentId: string;
+  studentName: string;
+  totalDays: number;
+  presentDays: number;
+  absentDays: number;
+  attendanceRate: number;
+}
+
 const Attendance = () => {
   const [groups, setGroups] = useState<Group[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -31,6 +40,8 @@ const Attendance = () => {
   const [sessionDate, setSessionDate] = useState(new Date().toISOString().split('T')[0]);
 
   const [savedRecords, setSavedRecords] = useState<Map<string, AttendanceRecord>>(new Map());
+  const [attendanceStats, setAttendanceStats] = useState<StudentAttendanceStats[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
 
   // Fetch groups and students
   useEffect(() => {
@@ -133,6 +144,76 @@ const Attendance = () => {
 
   fetchStudents();
 }, [selectedGroupId, groups, sessionDate]);
+
+  // Calculate monthly attendance statistics
+  useEffect(() => {
+    const calculateStats = async () => {
+      if (!selectedGroupId || students.length === 0) {
+        setAttendanceStats([]);
+        return;
+      }
+
+      try {
+        // Get all attendance records for selected group
+        const allAttendanceSnap = await getDocs(collection(db, 'attendance'));
+        const selectedMonthDate = new Date(selectedMonth + '-01');
+        const monthStart = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth(), 1);
+        const monthEnd = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth() + 1, 0, 23, 59, 59);
+
+        // Filter records for this group and month
+        const monthRecords = allAttendanceSnap.docs.filter((docSnap) => {
+          const data = docSnap.data();
+          if (data.groupId !== selectedGroupId) return false;
+
+          let date: Date | null = null;
+          if (data.date && typeof data.date.toDate === 'function') {
+            date = data.date.toDate();
+          } else if (data.date) {
+            date = new Date(data.date);
+          }
+
+          if (!date) return false;
+          return date >= monthStart && date <= monthEnd;
+        });
+
+        // Calculate stats for each student
+        const stats: StudentAttendanceStats[] = students.map((student) => {
+          const studentRecords = monthRecords.filter((docSnap) => {
+            return docSnap.data().studentId === student.id;
+          });
+
+          const presentDays = studentRecords.filter((docSnap) => {
+            const status = docSnap.data().status;
+            return status === 'حاضر' || status === 'متأخر';
+          }).length;
+
+          const absentDays = studentRecords.filter((docSnap) => {
+            const status = docSnap.data().status;
+            return status === 'غائب' || status === 'غائب بعذر';
+          }).length;
+
+          const totalDays = studentRecords.length;
+          const attendanceRate = totalDays > 0 ? (presentDays / totalDays) * 100 : 0;
+
+          return {
+            studentId: student.id,
+            studentName: student.name,
+            totalDays: totalDays,
+            presentDays: presentDays,
+            absentDays: absentDays,
+            attendanceRate: attendanceRate
+          };
+        });
+
+        setAttendanceStats(stats);
+      } catch (error) {
+        console.error('Error calculating attendance stats:', error);
+        setAttendanceStats([]);
+      }
+    };
+
+    calculateStats();
+  }, [selectedGroupId, students, selectedMonth]);
 
   const handleStatusChange = (studentId: string) => {
     const currentRecord = attendance.get(studentId);
@@ -318,6 +399,59 @@ const Attendance = () => {
           </button>
         </div>
       </form>
+
+      {/* Monthly Attendance Statistics */}
+      <div className="attendance-stats-section">
+        <div className="stats-header">
+          <h2>إحصائيات الحضور الشهري</h2>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label htmlFor="monthSelect">اختر الشهر:</label>
+            <input
+              type="month"
+              id="monthSelect"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {attendanceStats.length === 0 ? (
+          <p className="no-data">لا توجد إحصائيات للعرض</p>
+        ) : (
+          <div className="stats-table-container">
+            <table className="stats-table">
+              <thead>
+                <tr>
+                  <th>اسم الطالب</th>
+                  <th>أيام الحضور</th>
+                  <th>أيام الغياب</th>
+                  <th>إجمالي الأيام</th>
+                  <th>نسبة الحضور</th>
+                </tr>
+              </thead>
+              <tbody>
+                {attendanceStats.map((stat) => {
+                  const isLowAttendance = stat.attendanceRate < 50 && stat.totalDays > 0;
+                  return (
+                    <tr key={stat.studentId} className={isLowAttendance ? 'low-attendance' : ''}>
+                      <td>{stat.studentName}</td>
+                      <td>{stat.presentDays}</td>
+                      <td>{stat.absentDays}</td>
+                      <td>{stat.totalDays}</td>
+                      <td>
+                        <span className={`attendance-rate ${isLowAttendance ? 'warning' : ''}`}>
+                          {stat.totalDays > 0 ? `${stat.attendanceRate.toFixed(1)}%` : 'لا توجد بيانات'}
+                        </span>
+                        {isLowAttendance && <span className="alert-icon" title="تنبيه: نسبة حضور منخفضة">⚠️</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </section>
   );
 };

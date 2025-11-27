@@ -348,6 +348,36 @@
   font-size: 0.9rem;
 }
 
+.login-card__hint a {
+  color: var(--color-primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.login-card__hint a:hover {
+  text-decoration: underline;
+}
+
+.register-card {
+  width: min(520px, 100%);
+}
+
+.login-form select {
+  border: 1px solid #d6e4de;
+  border-radius: 0.75rem;
+  padding: 0.85rem 1rem;
+  font-size: 1rem;
+  background-color: #fdfefe;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  font-family: inherit;
+}
+
+.login-form select:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(27, 140, 107, 0.15);
+  outline: none;
+}
+
 .form-error {
   background-color: rgba(220, 53, 69, 0.1);
   color: #b42318;

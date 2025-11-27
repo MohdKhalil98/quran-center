@@ -20,6 +20,15 @@ interface AttendanceSummary {
   absent: number;
 }
 
+interface LowAttendanceAlert {
+  studentId: string;
+  studentName: string;
+  groupName: string;
+  attendanceRate: number;
+  absentDays: number;
+  totalDays: number;
+}
+
 const Dashboard = () => {
   const [stats, setStats] = useState<DashboardStats>({
     totalStudents: 0,
@@ -38,6 +47,8 @@ const Dashboard = () => {
     excused: 0,
     absent: 0
   });
+
+  const [lowAttendanceAlerts, setLowAttendanceAlerts] = useState<LowAttendanceAlert[]>([]);
 
   const fetchDashboard = async () => {
     try {
@@ -108,16 +119,20 @@ const Dashboard = () => {
           return date.getTime() === today.getTime();
         });
 
-        const presentCount = todayAttendance.filter((d) => (d.data() as any).status === 'حاضر').length;
-        const lateCount = todayAttendance.filter((d) => (d.data() as any).status === 'متأخر').length;
-        const excusedCount = todayAttendance.filter((d) => (d.data() as any).status === 'غائب بعذر').length;
-        const absentCount = todayAttendance.filter((d) => (d.data() as any).status === 'غائب').length;
+        const presentCount = todayAttendance.filter((d) => {
+          const status = (d.data() as any).status;
+          return status === 'حاضر' || status === 'متأخر';
+        }).length;
+        const absentCount = todayAttendance.filter((d) => {
+          const status = (d.data() as any).status;
+          return status === 'غائب' || status === 'غائب بعذر';
+        }).length;
 
         setAttendanceSummary({
           total: todayAttendance.length,
           present: presentCount,
-          late: lateCount,
-          excused: excusedCount,
+          late: 0,
+          excused: 0,
           absent: absentCount
         });
       } catch (e) {
@@ -129,9 +144,89 @@ const Dashboard = () => {
           excused: 0,
           absent: 0
         });
-      }
+      }    // Check for low attendance alerts (current month)
+    try {
+      const currentMonth = new Date();
+      const monthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+      const monthEnd = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59);
 
-      setStats({
+      const allAttendanceSnap = await getDocs(collection(db, 'attendance'));
+      const studentsSnap = await getDocs(collection(db, 'students'));
+      const groupsSnap = await getDocs(collection(db, 'groups'));
+
+      // Get all groups map
+      const groupsMap = new Map<string, string>();
+      groupsSnap.docs.forEach((doc) => {
+        groupsMap.set(doc.id, doc.data().name);
+      });
+
+      // Filter month records
+      const monthRecords = allAttendanceSnap.docs.filter((docSnap) => {
+        const data = docSnap.data();
+        let date: Date | null = null;
+        if (data.date && typeof data.date.toDate === 'function') {
+          date = data.date.toDate();
+        } else if (data.date) {
+          date = new Date(data.date);
+        }
+        if (!date) return false;
+        return date >= monthStart && date <= monthEnd;
+      });
+
+      // Group by student and calculate stats
+      const studentStatsMap = new Map<string, { groupId: string; studentName: string; present: number; absent: number; total: number }>();
+      
+      studentsSnap.docs.forEach((studentDoc) => {
+        const studentData = studentDoc.data();
+        const studentId = studentDoc.id;
+        const studentName = studentData.name || 'غير محدد';
+        const groupId = studentData.groupId || '';
+
+        const studentRecords = monthRecords.filter((doc) => doc.data().studentId === studentId);
+        const presentCount = studentRecords.filter((doc) => {
+          const status = doc.data().status;
+          return status === 'حاضر' || status === 'متأخر';
+        }).length;
+        const absentCount = studentRecords.filter((doc) => {
+          const status = doc.data().status;
+          return status === 'غائب' || status === 'غائب بعذر';
+        }).length;
+        const totalCount = studentRecords.length;
+
+        if (totalCount > 0) {
+          studentStatsMap.set(studentId, {
+            groupId,
+            studentName,
+            present: presentCount,
+            absent: absentCount,
+            total: totalCount
+          });
+        }
+      });
+
+      // Find students with low attendance (absent more than half)
+      const alerts: LowAttendanceAlert[] = [];
+      studentStatsMap.forEach((stats, studentId) => {
+        const attendanceRate = stats.total > 0 ? (stats.present / stats.total) * 100 : 0;
+        if (attendanceRate < 50) {
+          alerts.push({
+            studentId,
+            studentName: stats.studentName,
+            groupName: groupsMap.get(stats.groupId) || 'غير محدد',
+            attendanceRate,
+            absentDays: stats.absent,
+            totalDays: stats.total
+          });
+        }
+      });
+
+      // Sort by attendance rate (lowest first)
+      alerts.sort((a, b) => a.attendanceRate - b.attendanceRate);
+      setLowAttendanceAlerts(alerts);
+    } catch (e) {
+      console.error('Error calculating attendance alerts:', e);
+      setLowAttendanceAlerts([]);
+    }      setStats({
         totalStudents,
         activeGroups,
         teachers,
@@ -205,21 +300,9 @@ const Dashboard = () => {
       <section className="attendance-summary-card">
         <h2>ملخص الحضور اليومي</h2>
         <div className="summary-grid">
-          <div className="summary-item total">
-            <div className="summary-label">إجمالي</div>
-            <div className="summary-count">{attendanceSummary.total}</div>
-          </div>
           <div className="summary-item present">
             <div className="summary-label">حاضرون</div>
             <div className="summary-count">{attendanceSummary.present}</div>
-          </div>
-          <div className="summary-item late">
-            <div className="summary-label">متأخرون</div>
-            <div className="summary-count">{attendanceSummary.late}</div>
-          </div>
-          <div className="summary-item excused">
-            <div className="summary-label">غائبون بعذر</div>
-            <div className="summary-count">{attendanceSummary.excused}</div>
           </div>
           <div className="summary-item absent">
             <div className="summary-label">غائبون</div>
@@ -227,6 +310,31 @@ const Dashboard = () => {
           </div>
         </div>
       </section>
+
+      {/* Low Attendance Alerts */}
+      {lowAttendanceAlerts.length > 0 && (
+        <section className="alerts-card">
+          <h2>
+            <span className="alert-icon">⚠️</span>
+            تنبيهات الحضور (الشهر الحالي)
+          </h2>
+          <p className="alerts-description">طلاب غابوا أكثر من نصف الحصص هذا الشهر</p>
+          <div className="alerts-list">
+            {lowAttendanceAlerts.map((alert) => (
+              <div key={alert.studentId} className="alert-item">
+                <div className="alert-content">
+                  <div className="alert-student-name">{alert.studentName}</div>
+                  <div className="alert-group">المجموعة: {alert.groupName}</div>
+                  <div className="alert-stats">
+                    <span className="alert-rate">نسبة الحضور: {alert.attendanceRate.toFixed(1)}%</span>
+                    <span className="alert-days">غاب {alert.absentDays} من {alert.totalDays} يوم</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </section>
   );
 };

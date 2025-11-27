@@ -2,7 +2,32 @@
 
 ## المجموعات (Collections) المطلوبة
 
-### 1. مجموعة `students` (الطلاب)
+### 1. مجموعة `users` (المستخدمون)
+
+```
+{
+  id: "user_id",
+  uid: string,            // معرّف المستخدم من Firebase Auth
+  name: string,           // اسم المستخدم
+  email: string,          // البريد الإلكتروني
+  phone: string,          // رقم الهاتف
+  role: string,           // الدور: "admin" | "supervisor" | "teacher" | "student" | "parent"
+  centerId: string,       // معرّف المركز (للمشرف والمعلم)
+  studentId: string,      // معرّف الطالب (لولي الأمر)
+  createdAt: string,      // تاريخ التسجيل (ISO format)
+  active: boolean         // حالة الحساب (نشط / معطل)
+}
+```
+
+**الأدوار والصلاحيات:**
+
+- **admin (المطور)**: إدارة كاملة للنظام
+- **supervisor (المشرف)**: إدارة المعلمين والمجموعات والطلاب
+- **teacher (المعلم)**: إدارة مجموعته وتسجيل الحضور
+- **student (الطالب)**: عرض التقدم والأنشطة
+- **parent (ولي الأمر)**: متابعة تقدم الطالب والتواصل
+
+### 2. مجموعة `students` (الطلاب)
 
 ```
 {

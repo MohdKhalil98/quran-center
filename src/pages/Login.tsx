@@ -1,5 +1,5 @@
 import { FormEvent, useState } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const Login = () => {
@@ -68,7 +68,7 @@ const Login = () => {
           </button>
         </form>
         <p className="login-card__hint">
-          يمكن إدارة المستخدمين من لوحة Firebase Authentication.
+          ليس لديك حساب؟ <Link to="/register">إنشاء حساب جديد</Link>
         </p>
       </div>
     </div>

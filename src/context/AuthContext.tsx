@@ -23,11 +23,13 @@ export interface UserProfile {
   email: string;
   name: string;
   role: UserRole;
-  centerId?: string; // للمشرف والمعلم
+  centerId?: string; // للمشرف والمعلم والطالب
   studentId?: string; // لولي الأمر
+  groupId?: string; // للطالب - الحلقة المنضم إليها
   phone?: string;
   createdAt: string;
   active: boolean;
+  status?: 'pending' | 'approved' | 'rejected'; // للطلاب - حالة الموافقة
 }
 
 type AuthContextValue = {
@@ -36,13 +38,14 @@ type AuthContextValue = {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  register: (email: string, password: string, name: string, phone: string, role: UserRole) => Promise<void>;
+  register: (email: string, password: string, name: string, phone: string, role: UserRole, centerId?: string) => Promise<void>;
   hasPermission: (permission: string) => boolean;
   isAdmin: boolean;
   isSupervisor: boolean;
   isTeacher: boolean;
   isStudent: boolean;
   isParent: boolean;
+  isPendingApproval: boolean;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -87,7 +90,7 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
     await signOut(auth);
   };
 
-  const register = async (email: string, password: string, name: string, phone: string, role: UserRole) => {
+  const register = async (email: string, password: string, name: string, phone: string, role: UserRole, centerId?: string) => {
     // إنشاء حساب المستخدم
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
@@ -100,7 +103,11 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
       role: role,
       phone: phone,
       createdAt: new Date().toISOString(),
-      active: true
+      active: true,
+      ...(role === 'student' && centerId ? { 
+        centerId: centerId,
+        status: 'pending' as const // الطلاب يحتاجون موافقة المشرف
+      } : {})
     };
 
     await setDoc(doc(db, 'users', user.uid), userProfile);
@@ -140,6 +147,7 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
   const isTeacher = userProfile?.role === 'teacher';
   const isStudent = userProfile?.role === 'student';
   const isParent = userProfile?.role === 'parent';
+  const isPendingApproval = userProfile?.status === 'pending';
 
   const value = useMemo(
     () => ({
@@ -154,7 +162,8 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
       isSupervisor,
       isTeacher,
       isStudent,
-      isParent
+      isParent,
+      isPendingApproval
     }),
     [user, userProfile, loading]
   );

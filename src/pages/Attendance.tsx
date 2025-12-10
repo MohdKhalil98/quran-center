@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, getDocs, query, orderBy, addDoc, deleteDoc, doc, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, addDoc, deleteDoc, doc, Timestamp, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import '../styles/Attendance.css';
 import '../styles/AttendanceExtended.css';
@@ -80,16 +80,23 @@ const Attendance = () => {
         const groupDoc = groups.find((g) => g.id === selectedGroupId);
         if (!groupDoc) return;
 
-        // Fetch all students
-        const studentsQuery = query(collection(db, 'students'), orderBy('name'));
+        // Fetch students from users collection where role='student', status='approved', and groupId matches
+        const studentsQuery = query(
+          collection(db, 'users'),
+          where('role', '==', 'student'),
+          where('status', '==', 'approved'),
+          where('groupId', '==', selectedGroupId)
+        );
         const studentsSnapshot = await getDocs(studentsQuery);
         const allStudents = studentsSnapshot.docs
           .map((doc) => ({
             id: doc.id,
             name: doc.data().name,
             groupId: doc.data().groupId
-          } as Student))
-          .filter((student) => student.groupId === selectedGroupId);
+          } as Student));
+        
+        // Sort by name
+        allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
 
         setStudents(allStudents);
 

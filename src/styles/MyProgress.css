@@ -1,0 +1,274 @@
+/* MyProgress Page Styles */
+
+/* Pending Approval Message */
+.pending-approval-message {
+  text-align: center;
+  padding: 60px 20px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  margin: 20px 0;
+}
+
+.pending-icon {
+  font-size: 4rem;
+  margin-bottom: 20px;
+}
+
+.pending-approval-message h2 {
+  color: #d97706;
+  margin-bottom: 12px;
+}
+
+.pending-approval-message p {
+  color: #666;
+  margin: 8px 0;
+}
+
+/* Group Info Card */
+.group-info-card {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  color: white;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.group-info-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.group-icon {
+  font-size: 2rem;
+}
+
+.group-info-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.group-info-header .track-name {
+  display: block;
+  font-size: 0.9rem;
+  opacity: 0.9;
+  margin-top: 4px;
+}
+
+.teacher-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  opacity: 0.95;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.teacher-icon {
+  font-size: 1.2rem;
+}
+
+/* Stats Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.stat-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.stat-icon {
+  font-size: 2rem;
+  margin-bottom: 8px;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+/* Achievements Section */
+.achievements-section {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.achievements-section h2 {
+  margin: 0 0 20px 0;
+  font-size: 1.25rem;
+  color: #333;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.no-achievements {
+  text-align: center;
+  padding: 40px;
+  background: #f8fafc;
+  border-radius: 10px;
+}
+
+.no-achievements-icon {
+  font-size: 3rem;
+  margin-bottom: 12px;
+}
+
+.no-achievements h3 {
+  margin: 0 0 8px 0;
+  color: #333;
+}
+
+.no-achievements p {
+  color: #666;
+  margin: 0;
+}
+
+/* Achievements List */
+.achievements-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.achievement-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.achievement-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.achievement-date {
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.rating-badge {
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+}
+
+.rating-badge.excellent {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.rating-badge.good {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.rating-badge.average {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.rating-badge.needs-improvement {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.achievement-content {
+  padding: 16px;
+}
+
+.portion-info,
+.assignment-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.portion-info {
+  margin-bottom: 12px;
+}
+
+.portion-label,
+.assignment-label {
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.portion-value,
+.assignment-value {
+  color: #333;
+  font-weight: 500;
+}
+
+.assignment-info {
+  padding-top: 12px;
+  border-top: 1px dashed #e2e8f0;
+}
+
+/* Teacher Notes */
+.teacher-notes {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.notes-label {
+  color: #166534;
+  font-size: 0.9rem;
+  font-weight: 600;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.notes-value {
+  color: #15803d;
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .stat-card {
+    padding: 16px;
+  }
+
+  .stat-value {
+    font-size: 1.5rem;
+  }
+
+  .achievement-header {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+}

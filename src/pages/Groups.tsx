@@ -1,21 +1,32 @@
 import { useEffect, useState } from 'react';
-import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../firebase';
+import { useAuth } from '../context/AuthContext';
 import '../styles/Groups.css';
 import ConfirmModal from '../components/ConfirmModal';
+
+interface Teacher {
+  uid: string;
+  name: string;
+  email: string;
+}
 
 interface Group {
   id?: string;
   name: string;
   trackId: string;
   trackName?: string;
+  teacherId?: string;
+  teacherName?: string;
   description: string;
   schedule?: string;
 }
 
 const Groups = () => {
+  const { userProfile } = useAuth();
   const [groups, setGroups] = useState<Group[]>([]);
   const [tracks, setTracks] = useState<any[]>([]);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -24,6 +35,7 @@ const Groups = () => {
   const [formData, setFormData] = useState<Group>({
     name: '',
     trackId: '',
+    teacherId: '',
     description: '',
     schedule: ''
   });
@@ -49,10 +61,28 @@ const Groups = () => {
           ...doc.data()
         } as any));
 
-        // Attach track names to groups
+        // Fetch teachers from same center
+        let teachersList: Teacher[] = [];
+        if (userProfile?.centerId) {
+          const teachersQuery = query(
+            collection(db, 'users'),
+            where('role', '==', 'teacher'),
+            where('centerId', '==', userProfile.centerId)
+          );
+          const teachersSnapshot = await getDocs(teachersQuery);
+          teachersList = teachersSnapshot.docs.map((doc) => ({
+            uid: doc.data().uid,
+            name: doc.data().name,
+            email: doc.data().email
+          }));
+        }
+        setTeachers(teachersList);
+
+        // Attach track names and teacher names to groups
         const groupsWithDetails = groupsList.map((group) => ({
           ...group,
-          trackName: tracksList.find((tr) => tr.id === group.trackId)?.name || 'غير محدد'
+          trackName: tracksList.find((tr) => tr.id === group.trackId)?.name || 'غير محدد',
+          teacherName: teachersList.find((t) => t.uid === group.teacherId)?.name || 'غير محدد'
         }));
 
         setGroups(groupsWithDetails);
@@ -65,7 +95,7 @@ const Groups = () => {
     };
 
     fetchData();
-  }, []);
+  }, [userProfile]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -83,8 +113,9 @@ const Groups = () => {
     }
 
     try {
-      const { id, trackName, ...dataToSave } = formData;
+      const { id, trackName, teacherName, ...dataToSave } = formData;
       const trackNameValue = tracks.find((tr) => tr.id === formData.trackId)?.name || 'غير محدد';
+      const teacherNameValue = teachers.find((t) => t.uid === formData.teacherId)?.name || 'غير محدد';
 
       if (editingId) {
         // Update existing group
@@ -92,7 +123,7 @@ const Groups = () => {
         setGroups((prev) =>
           prev.map((g) =>
             g.id === editingId
-              ? { ...dataToSave, id: editingId, trackName: trackNameValue }
+              ? { ...dataToSave, id: editingId, trackName: trackNameValue, teacherName: teacherNameValue }
               : g
           )
         );
@@ -100,12 +131,13 @@ const Groups = () => {
       } else {
         // Add new group
         const docRef = await addDoc(collection(db, 'groups'), dataToSave);
-        setGroups((prev) => [...prev, { ...dataToSave, id: docRef.id, trackName: trackNameValue }]);
+        setGroups((prev) => [...prev, { ...dataToSave, id: docRef.id, trackName: trackNameValue, teacherName: teacherNameValue }]);
       }
 
       setFormData({
         name: '',
         trackId: '',
+        teacherId: '',
         description: '',
         schedule: ''
       });
@@ -147,6 +179,7 @@ const Groups = () => {
     setFormData({
       name: '',
       trackId: '',
+      teacherId: '',
       description: '',
       schedule: ''
     });
@@ -207,6 +240,22 @@ const Groups = () => {
             </select>
           </div>
           <div className="form-group">
+            <label htmlFor="teacherId">المعلم</label>
+            <select
+              id="teacherId"
+              name="teacherId"
+              value={formData.teacherId || ''}
+              onChange={handleInputChange}
+            >
+              <option value="">اختر المعلم</option>
+              {teachers.map((teacher) => (
+                <option key={teacher.uid} value={teacher.uid}>
+                  {teacher.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
             <label htmlFor="description">الوصف</label>
             <textarea
               id="description"
@@ -248,6 +297,9 @@ const Groups = () => {
               <h2>{group.name}</h2>
               <p>
                 <strong>المساق:</strong> {group.trackName}
+              </p>
+              <p>
+                <strong>المعلم:</strong> {group.teacherName || 'غير محدد'}
               </p>
               {group.schedule && (
                 <p>

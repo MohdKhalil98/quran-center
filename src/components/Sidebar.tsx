@@ -1,28 +1,65 @@
+import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 
 interface NavItem {
   path: string;
   label: string;
-  permission?: string;
-  adminOnly?: boolean;
-  supervisorOnly?: boolean;
+  roles?: string[]; // الأدوار المسموح لها بالوصول
+  showBadge?: boolean; // لإظهار عداد
 }
 
 const navItems: NavItem[] = [
   { path: '/dashboard', label: 'لوحة التحكم' },
-  { path: '/tracks', label: 'المساقات', permission: 'manage_curriculum' },
-  { path: '/groups', label: 'المجموعات', permission: 'manage_groups' },
-  { path: '/teachers', label: 'المعلمون', supervisorOnly: true },
-  { path: '/students', label: 'الطلاب', permission: 'view_students' },
-  { path: '/attendance', label: 'تسجيل الحضور', permission: 'record_attendance' },
-  { path: '/achievements', label: 'تحصيل الطالب', permission: 'update_achievements' },
-  { path: '/curriculum', label: 'المنهج', permission: 'manage_curriculum' },
-  { path: '/users', label: 'إدارة المستخدمين', adminOnly: true }
+  // صفحات المطور فقط
+  { path: '/centers', label: 'مراكز القرآن', roles: ['admin'] },
+  { path: '/teachers', label: 'المعلمون', roles: ['admin'] },
+  { path: '/students', label: 'الطلاب', roles: ['admin'] },
+  // صفحات المشرف
+  { path: '/pending-requests', label: 'طلبات الانتظار', roles: ['supervisor'], showBadge: true },
+  { path: '/groups', label: 'المجموعات', roles: ['supervisor'] },
+  { path: '/teachers', label: 'المعلمون', roles: ['supervisor'] },
+  { path: '/students', label: 'الطلاب', roles: ['supervisor'] },
+  // صفحات المعلم
+  { path: '/groups', label: 'حلقاتي', roles: ['teacher'] },
+  { path: '/students', label: 'طلابي', roles: ['teacher'] },
+  { path: '/attendance', label: 'تسجيل الحضور', roles: ['teacher'] },
+  { path: '/achievements', label: 'تحصيل الطالب', roles: ['teacher'] },
+  // صفحات الطالب
+  { path: '/my-progress', label: 'تحصيلي', roles: ['student'] },
+  // صفحات عامة
+  { path: '/curriculum', label: 'المنهج', roles: ['supervisor', 'teacher', 'student'] }
 ];
 
 const Sidebar = () => {
-  const { logout, hasPermission, isAdmin, isSupervisor, userProfile } = useAuth();
+  const { logout, isAdmin, userProfile, isSupervisor } = useAuth();
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    const fetchPendingCount = async () => {
+      if (!isSupervisor || !userProfile?.centerId) return;
+      
+      try {
+        const pendingQuery = query(
+          collection(db, 'users'),
+          where('role', '==', 'student'),
+          where('centerId', '==', userProfile.centerId),
+          where('status', '==', 'pending')
+        );
+        const snapshot = await getDocs(pendingQuery);
+        setPendingCount(snapshot.size);
+      } catch (error) {
+        console.error('Error fetching pending count:', error);
+      }
+    };
+
+    fetchPendingCount();
+    // تحديث كل 30 ثانية
+    const interval = setInterval(fetchPendingCount, 30000);
+    return () => clearInterval(interval);
+  }, [isSupervisor, userProfile]);
 
   const handleLogout = async () => {
     try {
@@ -33,20 +70,12 @@ const Sidebar = () => {
   };
 
   const canViewItem = (item: NavItem): boolean => {
-    // Admin يرى كل شيء
-    if (isAdmin) return true;
+    // صفحات بدون تحديد أدوار = للجميع
+    if (!item.roles) return true;
 
-    // صفحات خاصة بالـ Admin فقط
-    if (item.adminOnly) return false;
-
-    // صفحات خاصة بالمشرفين والـ Admin
-    if (item.supervisorOnly) return isSupervisor;
-
-    // صفحات بصلاحيات محددة
-    if (item.permission) return hasPermission(item.permission);
-
-    // صفحات عامة (مثل لوحة التحكم)
-    return true;
+    // التحقق من دور المستخدم
+    if (!userProfile) return false;
+    return item.roles.includes(userProfile.role);
   };
 
   return (
@@ -83,6 +112,9 @@ const Sidebar = () => {
             }
           >
             {item.label}
+            {item.showBadge && pendingCount > 0 && (
+              <span className="sidebar__badge">{pendingCount}</span>
+            )}
           </NavLink>
         ))}
         {process.env.NODE_ENV === 'development' && isAdmin && (

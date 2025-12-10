@@ -14,6 +14,9 @@ import Groups from './pages/Groups';
 import StudentAchievements from './pages/StudentAchievements';
 import DevTools from './pages/DevTools';
 import Attendance from './pages/Attendance';
+import Centers from './pages/Centers';
+import PendingRequests from './pages/PendingRequests';
+import MyProgress from './pages/MyProgress';
 
 function App() {
   return (
@@ -33,6 +36,10 @@ function App() {
           <Route path="/curriculum" element={<Curriculum />} />
           <Route path="/users" element={<UserManagement />} />
           <Route path="/dev-tools" element={<DevTools />} />
+          {/* New Routes */}
+          <Route path="/centers" element={<Centers />} />
+          <Route path="/pending-requests" element={<PendingRequests />} />
+          <Route path="/my-progress" element={<MyProgress />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -1,201 +1,115 @@
 import { useEffect, useState } from 'react';
-import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../firebase';
+import { useAuth, UserProfile } from '../context/AuthContext';
 import '../styles/Shared.css';
 import '../styles/Teachers.css';
-import ConfirmModal from '../components/ConfirmModal';
 
-interface Teacher {
-  id?: string;
-  name: string;
-  personalId: string;
-  phone: string;
-  email: string;
-  position: 'supervisor' | 'teacher' | 'admin';
-  birthDate: string;
+interface TeacherUser extends UserProfile {
   groupIds?: string[];
   groupNames?: string;
+  centerName?: string;
+  groupsCount?: number;
 }
 
-const POSITIONS = [
-  { value: 'supervisor', label: 'مشرف' },
-  { value: 'teacher', label: 'معلم' },
-  { value: 'admin', label: 'إداري' }
-];
+interface Center {
+  id: string;
+  name: string;
+}
 
-const getPositionLabel = (position: string): string => {
-  return POSITIONS.find((p) => p.value === position)?.label || position;
-};
+interface Group {
+  id: string;
+  name: string;
+  teacherId?: string;
+}
 
 const Teachers = () => {
-  const [teachers, setTeachers] = useState<Teacher[]>([]);
-  const [groups, setGroups] = useState<any[]>([]);
+  const { userProfile, isSupervisor, isAdmin } = useAuth();
+  const [teachers, setTeachers] = useState<TeacherUser[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [centers, setCenters] = useState<Center[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isAdding, setIsAdding] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [confirmTargetId, setConfirmTargetId] = useState<string | null>(null);
-  const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
+  const [selectedTeacher, setSelectedTeacher] = useState<TeacherUser | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
-  const [formData, setFormData] = useState<Teacher>({
-    name: '',
-    personalId: '',
-    phone: '',
-    email: '',
-    position: 'teacher',
-    birthDate: '',
-    groupIds: []
-  });
+  const [filterCenterId, setFilterCenterId] = useState<string>('');
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Fetch groups first
-        const groupsQuery = query(collection(db, 'groups'), orderBy('name'));
-        const groupsSnapshot = await getDocs(groupsQuery);
-        const groupsList = groupsSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          name: doc.data().name,
-          ...doc.data()
-        } as any));
-        setGroups(groupsList);
-
-        // Fetch teachers
-        const q = query(collection(db, 'teachers'), orderBy('name'));
-        const snapshot = await getDocs(q);
-        const teachersList = snapshot.docs.map((doc) => {
-          const data = doc.data() as Teacher;
-          const groupIds = data.groupIds || [];
-          const groupNames = groupIds
-            .map(gid => groupsList.find(g => g.id === gid)?.name)
-            .filter(Boolean)
-            .join(', ');
-          return {
-            id: doc.id,
-            ...data,
-            groupNames
-          } as Teacher;
-        });
-        setTeachers(teachersList);
-        setLoading(false);
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        setLoading(false);
-      }
-    };
-
     fetchData();
-  }, []);
+  }, [isSupervisor, userProfile]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const handleAddTeacher = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.name || !formData.personalId || !formData.phone || !formData.email) {
-      alert('يرجى ملء جميع الحقول المطلوبة');
-      return;
-    }
-
+  const fetchData = async () => {
     try {
-      const { id, groupNames, ...dataToSave } = formData;
-      dataToSave.groupIds = selectedGroupIds;
+      // Fetch centers
+      const centersSnapshot = await getDocs(collection(db, 'centers'));
+      const centersList = centersSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        name: doc.data().name
+      }));
+      setCenters(centersList);
 
-      if (editingId) {
-        await updateDoc(doc(db, 'teachers', editingId), dataToSave);
-        const groupNamesStr = selectedGroupIds
-          .map(gid => groups.find(g => g.id === gid)?.name)
-          .filter(Boolean)
-          .join(', ');
-        setTeachers((prev) =>
-          prev.map((t) => (t.id === editingId ? { ...dataToSave, id: editingId, groupNames: groupNamesStr } as Teacher : t))
+      // Fetch groups
+      const groupsQuery = query(collection(db, 'groups'), orderBy('name'));
+      const groupsSnapshot = await getDocs(groupsQuery);
+      const groupsList = groupsSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        name: doc.data().name,
+        teacherId: doc.data().teacherId
+      }));
+      setGroups(groupsList);
+
+      // Fetch teachers from users collection (role = teacher)
+      let teachersQuery;
+      if (isSupervisor && userProfile?.centerId) {
+        teachersQuery = query(
+          collection(db, 'users'),
+          where('role', '==', 'teacher'),
+          where('centerId', '==', userProfile.centerId)
         );
-        setEditingId(null);
+        setFilterCenterId(userProfile.centerId);
       } else {
-        const docRef = await addDoc(collection(db, 'teachers'), dataToSave);
-        const groupNamesStr = selectedGroupIds
-          .map(gid => groups.find(g => g.id === gid)?.name)
-          .filter(Boolean)
-          .join(', ');
-        setTeachers((prev) => [...prev, { ...dataToSave, id: docRef.id, groupNames: groupNamesStr } as Teacher]);
+        teachersQuery = query(
+          collection(db, 'users'),
+          where('role', '==', 'teacher')
+        );
       }
-
-      setFormData({
-        name: '',
-        personalId: '',
-        phone: '',
-        email: '',
-        position: 'teacher',
-        birthDate: '',
-        groupIds: []
+      
+      const snapshot = await getDocs(teachersQuery);
+      const teachersList = snapshot.docs.map((doc) => {
+        const data = doc.data() as TeacherUser;
+        // حساب عدد الحلقات لكل معلم
+        const teacherGroups = groupsList.filter(g => g.teacherId === data.uid);
+        const groupNames = teacherGroups.map(g => g.name).join(', ');
+        
+        return {
+          ...data,
+          groupNames: groupNames || 'لا يوجد',
+          groupsCount: teacherGroups.length,
+          centerName: centersList.find(c => c.id === data.centerId)?.name || ''
+        } as TeacherUser;
       });
-      setSelectedGroupIds([]);
-      setIsAdding(false);
+      
+      setTeachers(teachersList);
+      setLoading(false);
     } catch (error) {
-      console.error('Error adding/updating teacher:', error);
-      alert('حدث خطأ أثناء حفظ البيانات');
+      console.error('Error fetching data:', error);
+      setLoading(false);
     }
   };
 
-  const handleDeleteTeacher = (id: string) => {
-    setConfirmTargetId(id);
-    setConfirmOpen(true);
-  };
-
-  const performDeleteTeacher = async () => {
-    const id = confirmTargetId;
-    setConfirmOpen(false);
-    setConfirmTargetId(null);
-    if (!id) return;
+  const handleToggleStatus = async (teacher: TeacherUser) => {
     try {
-      await deleteDoc(doc(db, 'teachers', id));
-      setTeachers((prev) => prev.filter((t) => t.id !== id));
+      await updateDoc(doc(db, 'users', teacher.uid), {
+        active: !teacher.active
+      });
+      fetchData();
     } catch (error) {
-      console.error('Error deleting teacher:', error);
-      alert('حدث خطأ أثناء حذف البيانات');
+      console.error('Error updating teacher:', error);
+      alert('حدث خطأ أثناء تحديث حالة المعلم');
     }
   };
 
-  const handleEditTeacher = (teacher: Teacher) => {
-    setFormData(teacher);
-    setSelectedGroupIds(teacher.groupIds || []);
-    setEditingId(teacher.id || null);
-    setIsAdding(true);
-  };
-
-  const handleCancel = () => {
-    setIsAdding(false);
-    setEditingId(null);
-    setSelectedGroupIds([]);
-    setFormData({
-      name: '',
-      personalId: '',
-      phone: '',
-      email: '',
-      position: 'teacher',
-      birthDate: '',
-      groupIds: []
-    });
-  };
-
-  const handleGroupCheckboxChange = (groupId: string) => {
-    setSelectedGroupIds((prev) => {
-      if (prev.includes(groupId)) {
-        return prev.filter((id) => id !== groupId);
-      } else {
-        return [...prev, groupId];
-      }
-    });
-  };
-
-  const handleOpenDetailsModal = (teacher: Teacher) => {
+  const handleOpenDetailsModal = (teacher: TeacherUser) => {
     setSelectedTeacher(teacher);
     setIsDetailsModalOpen(true);
   };
@@ -204,6 +118,11 @@ const Teachers = () => {
     setSelectedTeacher(null);
     setIsDetailsModalOpen(false);
   };
+
+  // فلترة المعلمين
+  const filteredTeachers = teachers.filter(t => 
+    !filterCenterId || t.centerId === filterCenterId
+  );
 
   if (loading) {
     return (
@@ -220,13 +139,32 @@ const Teachers = () => {
     <section className="page">
       <header className="page__header">
         <h1>المعلمون</h1>
-        <p>إدارة بيانات المعلمين والمشرفين.</p>
+        <p>عرض بيانات المعلمين.</p>
       </header>
 
       <div className="page-actions-header">
-        <button className="btn btn-primary" onClick={() => setIsAdding(true)}>
-          + إضافة معلم جديد
-        </button>
+        {isAdmin && (
+          <p className="info-note">💡 لإضافة معلم جديد، اذهب إلى صفحة "مراكز القرآن" واختر المركز ثم أضف المعلم</p>
+        )}
+        {isSupervisor && (
+          <p className="info-note">💡 لإضافة معلم جديد، يرجى التواصل مع مدير النظام</p>
+        )}
+
+        <div className="filters-section">
+          {isAdmin && (
+            <select 
+              className="filter-select"
+              value={filterCenterId} 
+              onChange={(e) => setFilterCenterId(e.target.value)}
+            >
+              <option value="">جميع المراكز</option>
+              {centers.map(center => (
+                <option key={center.id} value={center.id}>{center.name}</option>
+              ))}
+            </select>
+          )}
+        </div>
+
         <div className="view-mode-toggle">
           <button 
             className={`view-btn ${viewMode === 'cards' ? 'active' : ''}`}
@@ -245,151 +183,37 @@ const Teachers = () => {
         </div>
       </div>
 
-      {isAdding && (
-        <form className="form-card" onSubmit={handleAddTeacher}>
-          <h3>{editingId ? 'تعديل بيانات المعلم' : 'إضافة معلم جديد'}</h3>
-          <div className="form-group">
-            <label htmlFor="name">اسم المعلم *</label>
-            <input
-              type="text"
-              id="name"
-              name="name"
-              value={formData.name}
-              onChange={handleInputChange}
-              required
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="personalId">الرقم الشخصي *</label>
-            <input
-              type="text"
-              id="personalId"
-              name="personalId"
-              value={formData.personalId}
-              onChange={handleInputChange}
-              required
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="phone">رقم الهاتف *</label>
-            <input
-              type="tel"
-              id="phone"
-              name="phone"
-              value={formData.phone}
-              onChange={handleInputChange}
-              required
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="email">البريد الإلكتروني *</label>
-            <input
-              type="email"
-              id="email"
-              name="email"
-              value={formData.email}
-              onChange={handleInputChange}
-              required
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="position">الوظيفة</label>
-            <select
-              id="position"
-              name="position"
-              value={formData.position}
-              onChange={handleInputChange}
-            >
-              {POSITIONS.map((pos) => (
-                <option key={pos.value} value={pos.value}>
-                  {pos.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="form-group">
-            <label htmlFor="birthDate">تاريخ الميلاد</label>
-            <input
-              type="date"
-              id="birthDate"
-              name="birthDate"
-              value={formData.birthDate}
-              onChange={handleInputChange}
-            />
-          </div>
-          <div className="form-group">
-            <label>المجموعات المسؤول عنها</label>
-            <div className="groups-checkboxes">
-              {groups.length === 0 ? (
-                <p style={{ color: '#999', fontSize: '14px' }}>لا توجد مجموعات متاحة. قم بإضافة مجموعات أولاً.</p>
-              ) : (
-                groups.map((group) => (
-                  <label key={group.id} className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={selectedGroupIds.includes(group.id)}
-                      onChange={() => handleGroupCheckboxChange(group.id)}
-                    />
-                    <span>{group.name}</span>
-                  </label>
-                ))
-              )}
-            </div>
-          </div>
-          <div className="form-actions">
-            <button type="submit" className="btn btn-success">
-              {editingId ? 'تحديث' : 'حفظ'}
-            </button>
-            <button type="button" className="btn btn-secondary" onClick={handleCancel}>
-              إلغاء
-            </button>
-          </div>
-        </form>
-      )}
-
       {viewMode === 'cards' ? (
         <div className="cards-container">
-          {teachers.length === 0 ? (
-            <p className="empty-state">لا توجد بيانات معلمين حتى الآن</p>
+          {filteredTeachers.length === 0 ? (
+            <p className="empty-state">لا يوجد معلمون حتى الآن</p>
           ) : (
-            teachers.map((teacher) => (
-              <article key={teacher.id} className="data-card">
+            filteredTeachers.map((teacher) => (
+              <article key={teacher.uid} className="data-card">
                 <header className="data-card-header">
                   <div>
                     <h3>{teacher.name}</h3>
-                    <p className="data-card-id">#{teacher.personalId}</p>
+                    <p className="data-card-id">{teacher.email}</p>
                   </div>
                   <div className="data-card-tag">
-                    <span>{getPositionLabel(teacher.position)}</span>
+                    <span className={teacher.active ? 'active' : 'inactive'}>
+                      {teacher.active ? 'نشط' : 'معطل'}
+                    </span>
                   </div>
                 </header>
                 <section className="data-card-body">
                   <div className="data-card-row">
                     <label>رقم الهاتف:</label>
-                    <span>{teacher.phone}</span>
+                    <span>{teacher.phone || '-'}</span>
                   </div>
                   <div className="data-card-row">
-                    <label>البريد الإلكتروني:</label>
-                    <span>{teacher.email}</span>
+                    <label>المركز:</label>
+                    <span>{teacher.centerName || '-'}</span>
                   </div>
                   <div className="data-card-row">
-                    <label>تاريخ الميلاد:</label>
-                    <span>
-                      {teacher.birthDate
-                        ? new Date(teacher.birthDate + 'T00:00:00').toLocaleDateString('ar-EG', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric'
-                          })
-                        : '-'}
-                    </span>
+                    <label>الحلقات:</label>
+                    <span className="tag-cell">{teacher.groupNames}</span>
                   </div>
-                  {teacher.groupNames && (
-                    <div className="data-card-row">
-                      <label>المجموعات:</label>
-                      <span className="tag-cell">{teacher.groupNames}</span>
-                    </div>
-                  )}
                 </section>
                 <footer className="data-card-actions">
                   <button
@@ -405,41 +229,33 @@ const Teachers = () => {
         </div>
       ) : (
         <div className="table-card">
-          {teachers.length === 0 ? (
-            <p>لا توجد بيانات معلمين حتى الآن</p>
+          {filteredTeachers.length === 0 ? (
+            <p>لا يوجد معلمون حتى الآن</p>
           ) : (
             <table>
               <thead>
                 <tr>
                   <th>الاسم</th>
-                  <th>الرقم الشخصي</th>
-                  <th>رقم الهاتف</th>
                   <th>البريد الإلكتروني</th>
-                  <th>الوظيفة</th>
-                  <th>المجموعات</th>
-                  <th>تاريخ الميلاد</th>
+                  <th>رقم الهاتف</th>
+                  <th>المركز</th>
+                  <th>الحلقات</th>
+                  <th>الحالة</th>
                   <th>الإجراءات</th>
                 </tr>
               </thead>
               <tbody>
-                {teachers.map((teacher) => (
-                  <tr key={teacher.id}>
+                {filteredTeachers.map((teacher) => (
+                  <tr key={teacher.uid}>
                     <td>{teacher.name}</td>
-                    <td>{teacher.personalId}</td>
-                    <td>{teacher.phone}</td>
                     <td>{teacher.email}</td>
-                    <td>{getPositionLabel(teacher.position)}</td>
-                    <td className="tag-cell">
-                      {teacher.groupNames || '-'}
-                    </td>
-                    <td className="date-cell">
-                      {teacher.birthDate
-                        ? new Date(teacher.birthDate + 'T00:00:00').toLocaleDateString('ar-EG', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric'
-                          })
-                        : '-'}
+                    <td>{teacher.phone || '-'}</td>
+                    <td>{teacher.centerName || '-'}</td>
+                    <td className="tag-cell">{teacher.groupNames}</td>
+                    <td>
+                      <span className={`status-badge ${teacher.active ? 'active' : 'inactive'}`}>
+                        {teacher.active ? 'نشط' : 'معطل'}
+                      </span>
                     </td>
                     <td>
                       <div className="card-actions">
@@ -458,15 +274,7 @@ const Teachers = () => {
           )}
         </div>
       )}
-      <ConfirmModal
-        open={confirmOpen}
-        message="هل أنت متأكد من حذف هذا المعلم؟"
-        onConfirm={performDeleteTeacher}
-        onCancel={() => {
-          setConfirmOpen(false);
-          setConfirmTargetId(null);
-        }}
-      />
+
       {isDetailsModalOpen && selectedTeacher && (
         <div className="modal-overlay" onClick={handleCloseDetailsModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -476,32 +284,24 @@ const Teachers = () => {
             </div>
             <div className="modal-body">
               <div className="details-list">
-                <p><strong>الرقم الشخصي:</strong> {selectedTeacher.personalId}</p>
-                <p><strong>رقم الهاتف:</strong> {selectedTeacher.phone}</p>
                 <p><strong>البريد الإلكتروني:</strong> {selectedTeacher.email}</p>
-                <p><strong>الوظيفة:</strong> {getPositionLabel(selectedTeacher.position)}</p>
-                <p><strong>تاريخ الميلاد:</strong> {selectedTeacher.birthDate ? new Date(selectedTeacher.birthDate + 'T00:00:00').toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}</p>
-                <p><strong>المجموعات:</strong> <span className="tag-cell">{selectedTeacher.groupNames || 'لا يوجد'}</span></p>
+                <p><strong>رقم الهاتف:</strong> {selectedTeacher.phone || '-'}</p>
+                <p><strong>المركز:</strong> {selectedTeacher.centerName || 'غير محدد'}</p>
+                <p><strong>الحلقات:</strong> <span className="tag-cell">{selectedTeacher.groupNames}</span></p>
+                <p><strong>عدد الحلقات:</strong> {selectedTeacher.groupsCount}</p>
+                <p><strong>الحالة:</strong> {selectedTeacher.active ? 'نشط' : 'معطل'}</p>
+                <p><strong>تاريخ الإنشاء:</strong> {new Date(selectedTeacher.createdAt).toLocaleDateString('ar-EG')}</p>
               </div>
             </div>
             <div className="modal-footer">
               <button
-                className="btn btn-warning"
+                className={`btn ${selectedTeacher.active ? 'btn-warning' : 'btn-success'}`}
                 onClick={() => {
+                  handleToggleStatus(selectedTeacher);
                   handleCloseDetailsModal();
-                  handleEditTeacher(selectedTeacher);
                 }}
               >
-                ✏️ تعديل
-              </button>
-              <button
-                className="btn btn-danger"
-                onClick={() => {
-                  handleCloseDetailsModal();
-                  handleDeleteTeacher(selectedTeacher.id || '');
-                }}
-              >
-                🗑️ حذف
+                {selectedTeacher.active ? '⏸️ إيقاف' : '▶️ تفعيل'}
               </button>
               <button className="btn btn-secondary" onClick={handleCloseDetailsModal}>
                 إغلاق

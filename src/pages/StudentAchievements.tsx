@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import '../styles/StudentAchievements.css';
 import curriculum, { Level, Part, Surah } from '../data/curriculumData';
 import ConfirmModal from '../components/ConfirmModal';
+import { useAuth } from '../context/AuthContext';
 
 interface StudentAchievement {
   id?: string;
@@ -13,6 +14,7 @@ interface StudentAchievement {
   fromAya: string;
   toAya: string;
   rating: number;
+  notes?: string;
   assignmentPortion?: string;
   assignmentFromAya: string;
   assignmentToAya: string;
@@ -20,6 +22,7 @@ interface StudentAchievement {
 }
 
 const StudentAchievements = () => {
+  const { userProfile, isTeacher } = useAuth();
   const [achievements, setAchievements] = useState<StudentAchievement[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,6 +39,7 @@ const StudentAchievements = () => {
     fromAya: '',
     toAya: '',
     rating: 5,
+    notes: '',
     assignmentPortion: '',
     assignmentFromAya: '',
     assignmentToAya: '',
@@ -46,13 +50,54 @@ const StudentAchievements = () => {
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [selectedSurah, setSelectedSurah] = useState<Surah | null>(null);
   const [selectedAssignmentSurah, setSelectedAssignmentSurah] = useState<Surah | null>(null);
+  const [teacherGroups, setTeacherGroups] = useState<any[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+  const [groupStudents, setGroupStudents] = useState<any[]>([]);
 
-  // Fetch achievements and students from Firebase
+  // Fetch teacher's groups first
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchTeacherGroups = async () => {
+      if (!isTeacher || !userProfile?.uid) return;
+      
       try {
-        // Fetch students
-        const studentsQuery = query(collection(db, 'students'), orderBy('name'));
+        const groupsQuery = query(
+          collection(db, 'groups'),
+          where('teacherId', '==', userProfile.uid)
+        );
+        const groupsSnapshot = await getDocs(groupsQuery);
+        const groups = groupsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setTeacherGroups(groups);
+        
+        // Auto-select first group if only one
+        if (groups.length === 1) {
+          setSelectedGroupId(groups[0].id);
+        }
+      } catch (error) {
+        console.error('Error fetching teacher groups:', error);
+      }
+    };
+
+    fetchTeacherGroups();
+  }, [isTeacher, userProfile?.uid]);
+
+  // Fetch students when group is selected (for teachers)
+  useEffect(() => {
+    const fetchGroupStudents = async () => {
+      if (!isTeacher || !selectedGroupId) {
+        setGroupStudents([]);
+        return;
+      }
+
+      try {
+        const studentsQuery = query(
+          collection(db, 'users'),
+          where('role', '==', 'student'),
+          where('status', '==', 'approved'),
+          where('groupId', '==', selectedGroupId)
+        );
         const studentsSnapshot = await getDocs(studentsQuery);
         const studentsList = studentsSnapshot.docs.map((doc) => {
           const data = doc.data();
@@ -66,6 +111,79 @@ const StudentAchievements = () => {
             levelName: level?.name
           };
         });
+        
+        // Sort by name
+        studentsList.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
+        setGroupStudents(studentsList);
+      } catch (error) {
+        console.error('Error fetching group students:', error);
+      }
+    };
+
+    fetchGroupStudents();
+  }, [isTeacher, selectedGroupId]);
+
+  // Fetch achievements and all students from Firebase (for display and non-teachers)
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Fetch all approved students for achievements display
+        let studentsList: any[] = [];
+        
+        if (isTeacher && teacherGroups.length > 0) {
+          // Teacher sees only students in their groups
+          const groupIds = teacherGroups.map(g => g.id);
+          const groupBatches = [];
+          for (let i = 0; i < groupIds.length; i += 10) {
+            groupBatches.push(groupIds.slice(i, i + 10));
+          }
+          
+          for (const batch of groupBatches) {
+            const studentsQuery = query(
+              collection(db, 'users'),
+              where('role', '==', 'student'),
+              where('status', '==', 'approved'),
+              where('groupId', 'in', batch)
+            );
+            const studentsSnapshot = await getDocs(studentsQuery);
+            const batchStudents = studentsSnapshot.docs.map((doc) => {
+              const data = doc.data();
+              const levelId = data.levelId || 1;
+              const level = curriculum.find((l: Level) => l.id === levelId);
+              return {
+                id: doc.id,
+                name: data.name,
+                ...data,
+                levelId,
+                levelName: level?.name
+              };
+            });
+            studentsList = [...studentsList, ...batchStudents];
+          }
+        } else if (!isTeacher) {
+          // Admin/Supervisor - fetch all approved students
+          const studentsQuery = query(
+            collection(db, 'users'),
+            where('role', '==', 'student'),
+            where('status', '==', 'approved')
+          );
+          const studentsSnapshot = await getDocs(studentsQuery);
+          studentsList = studentsSnapshot.docs.map((doc) => {
+            const data = doc.data();
+            const levelId = data.levelId || 1;
+            const level = curriculum.find((l: Level) => l.id === levelId);
+            return {
+              id: doc.id,
+              name: data.name,
+              ...data,
+              levelId,
+              levelName: level?.name
+            };
+          });
+        }
+
+        // Sort by name
+        studentsList.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
 
         // Fetch achievements
         const achievementsQuery = query(collection(db, 'student_achievements'), orderBy('date', 'desc'));
@@ -75,8 +193,12 @@ const StudentAchievements = () => {
           ...doc.data()
         } as StudentAchievement));
 
+        // Filter achievements to only show those for students the user can see
+        const studentIds = new Set(studentsList.map(s => s.id));
+        const filteredAchievements = achievementsList.filter(a => studentIds.has(a.studentId));
+
         // Attach student names to achievements
-        const achievementsWithNames = achievementsList.map((achievement) => ({
+        const achievementsWithNames = filteredAchievements.map((achievement) => ({
           ...achievement,
           studentName: studentsList.find((s) => s.id === achievement.studentId)?.name || 'غير محدد'
         }));
@@ -90,8 +212,25 @@ const StudentAchievements = () => {
       }
     };
 
+    // Wait for teacher groups to load if teacher
+    if (isTeacher && teacherGroups.length === 0) {
+      return;
+    }
+    
     fetchData();
-  }, []);
+  }, [isTeacher, teacherGroups]);
+
+  // Handle group selection
+  const handleGroupSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const groupId = e.target.value;
+    setSelectedGroupId(groupId);
+    // Reset student selection when group changes
+    setFormData(prev => ({ ...prev, studentId: '', portion: '', fromAya: '', toAya: '', assignmentPortion: '', assignmentFromAya: '', assignmentToAya: '' }));
+    setSelectedStudent(null);
+    setSelectedSurah(null);
+    setSelectedAssignmentSurah(null);
+    setAvailableSurahs([]);
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -170,6 +309,7 @@ const StudentAchievements = () => {
         fromAya: '',
         toAya: '',
         rating: 5,
+        notes: '',
         assignmentPortion: '',
         assignmentFromAya: '',
         assignmentToAya: '',
@@ -236,6 +376,7 @@ const StudentAchievements = () => {
       fromAya: '',
       toAya: '',
       rating: 5,
+      notes: '',
       assignmentPortion: '',
       assignmentFromAya: '',
       assignmentToAya: '',
@@ -270,168 +411,220 @@ const StudentAchievements = () => {
         <p>تسجيل وتتبع تقدم الطلاب في حفظ وتسميع القرآن.</p>
       </header>
 
-      <button className="btn btn-primary" onClick={() => setIsAdding(true)}>
-        + تسجيل تحصيل جديد
-      </button>
-
-      {isAdding && (
-        <form className="form-card" onSubmit={handleAddAchievement}>
-          <h3>{editingId ? 'تعديل التحصيل' : 'تسجيل تحصيل جديد'}</h3>
+      {/* نموذج التسجيل - يظهر دائماً */}
+      <form className="form-card" onSubmit={handleAddAchievement}>
+        <h3>{editingId ? 'تعديل التحصيل' : 'تسجيل تحصيل جديد'}</h3>
+        
+        {/* اختيار الحلقة للمعلم */}
+        {isTeacher && teacherGroups.length > 0 && (
           <div className="form-group">
-            <label htmlFor="studentId">الطالب *</label>
+            <label htmlFor="groupSelect">الحلقة *</label>
             <select
-              id="studentId"
-              name="studentId"
-              value={formData.studentId}
-              onChange={handleStudentSelect}
+              id="groupSelect"
+              name="groupSelect"
+              value={selectedGroupId}
+              onChange={handleGroupSelect}
               required
             >
-              <option value="">اختر الطالب</option>
-              {students.map((student) => (
-                <option key={student.id} value={student.id}>
-                  {student.name}
+              <option value="">اختر الحلقة</option>
+              {teacherGroups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
                 </option>
               ))}
             </select>
-            {selectedStudent && (
-              <div className="student-info">
-                <span className="info-badge">📚 {selectedStudent.levelName || 'المستوى الأول'}</span>
+          </div>
+        )}
+
+        <div className="form-group">
+          <label htmlFor="studentId">الطالب *</label>
+          <select
+            id="studentId"
+            name="studentId"
+            value={formData.studentId}
+            onChange={handleStudentSelect}
+            required
+            disabled={isTeacher && !selectedGroupId}
+          >
+            <option value="">{isTeacher && !selectedGroupId ? 'اختر الحلقة أولاً' : 'اختر الطالب'}</option>
+            {(isTeacher ? groupStudents : students).map((student) => (
+              <option key={student.id} value={student.id}>
+                {student.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* عرض مستوى الطالب والورد المطلوب */}
+        {selectedStudent && (
+          <div className="student-level-section">
+            <div className="level-info-box">
+              <h4>📚 مستوى الطالب</h4>
+              <div className="level-details">
+                <span className="level-badge">{selectedStudent.levelName || 'المستوى الأول'}</span>
                 {selectedStudent.partName && (
-                  <span className="info-badge">📖 {selectedStudent.partName}</span>
+                  <span className="part-badge">{selectedStudent.partName}</span>
                 )}
               </div>
-            )}
+            </div>
+            
+            <div className="required-portion-section">
+              <h4>📖 الورد المطلوب</h4>
+              {availableSurahs.length > 0 && (
+                <div className="form-group">
+                  <label htmlFor="surahSelect">السورة *</label>
+                  <select id="surahSelect" name="surahSelect" onChange={handleSurahChange} value={formData.portion} required>
+                    <option value="">اختر السورة</option>
+                    {availableSurahs.map((s: Surah) => (
+                      <option key={s.id} value={s.name}>
+                        {s.name} ({s.verses} آية)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {selectedSurah && (
+                <div className="form-row">
+                  <div className="form-group">
+                    <label htmlFor="fromAya">من آية *</label>
+                    <input
+                      type="number"
+                      id="fromAya"
+                      name="fromAya"
+                      placeholder="1"
+                      min="1"
+                      max={selectedSurah.verses}
+                      value={formData.fromAya}
+                      onChange={handleInputChange}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="toAya">إلى آية *</label>
+                    <input
+                      type="number"
+                      id="toAya"
+                      name="toAya"
+                      placeholder={selectedSurah.verses.toString()}
+                      min="1"
+                      max={selectedSurah.verses}
+                      value={formData.toAya}
+                      onChange={handleInputChange}
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-          {availableSurahs.length > 0 && (
+        )}
+
+        {/* ملاحظات المعلم - تظهر بعد اختيار السورة */}
+        {selectedSurah && (
+          <>
             <div className="form-group">
-              <label htmlFor="surahSelect">السورة *</label>
-              <select id="surahSelect" name="surahSelect" onChange={handleSurahChange} value={formData.portion} required>
-                <option value="">اختر السورة</option>
-                {availableSurahs.map((s: Surah) => (
-                  <option key={s.id} value={s.name}>
-                    {s.name} ({s.verses} آية)
-                  </option>
-                ))}
-              </select>
+              <label htmlFor="notes">ملاحظات المعلم</label>
+              <textarea
+                id="notes"
+                name="notes"
+                placeholder="أضف ملاحظاتك هنا..."
+                value={formData.notes || ''}
+                onChange={handleInputChange}
+                rows={3}
+              />
             </div>
-          )}
-          {selectedSurah && (
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="fromAya">من آية *</label>
-                <input
-                  type="number"
-                  id="fromAya"
-                  name="fromAya"
-                  placeholder="1"
-                  min="1"
-                  max={selectedSurah.verses}
-                  value={formData.fromAya}
-                  onChange={handleInputChange}
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="toAya">إلى آية *</label>
-                <input
-                  type="number"
-                  id="toAya"
-                  name="toAya"
-                  placeholder={selectedSurah.verses.toString()}
-                  min="1"
-                  max={selectedSurah.verses}
-                  value={formData.toAya}
-                  onChange={handleInputChange}
-                  required
-                />
-              </div>
+
+            <div className="form-group">
+              <label htmlFor="rating">تقييم الطالب (1-10) *</label>
+              <input
+                type="number"
+                id="rating"
+                name="rating"
+                min="1"
+                max="10"
+                value={formData.rating}
+                onChange={handleInputChange}
+                required
+              />
             </div>
-          )}
-          <div className="form-group">
-            <label htmlFor="rating">التقييم (1-10) *</label>
-            <input
-              type="number"
-              id="rating"
-              name="rating"
-              min="1"
-              max="10"
-              value={formData.rating}
-              onChange={handleInputChange}
-              required
-            />
-          </div>
-          <div className="assignment-section">
-            <h4>الواجب المطلوب</h4>
-            {availableSurahs.length > 0 && (
-              <div className="form-group">
-                <label htmlFor="assignmentSurahSelect">السورة</label>
-                <select 
-                  id="assignmentSurahSelect" 
-                  name="assignmentSurahSelect" 
-                  onChange={handleAssignmentSurahChange}
-                  value={selectedAssignmentSurah?.name || ''}
-                >
-                  <option value="">اختر السورة</option>
-                  {availableSurahs.map((s: Surah) => (
-                    <option key={s.id} value={s.name}>
-                      {s.name} ({s.verses} آية)
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            {selectedAssignmentSurah && (
-              <div className="form-row">
+
+            <div className="assignment-section">
+              <h4>📝 الواجب المطلوب</h4>
+              {availableSurahs.length > 0 && (
                 <div className="form-group">
-                  <label htmlFor="assignmentFromAya">من آية</label>
-                  <input
-                    type="number"
-                    id="assignmentFromAya"
-                    name="assignmentFromAya"
-                    placeholder="1"
-                    min="1"
-                    max={selectedAssignmentSurah.verses}
-                    value={formData.assignmentFromAya}
-                    onChange={handleInputChange}
-                  />
+                  <label htmlFor="assignmentSurahSelect">السورة</label>
+                  <select 
+                    id="assignmentSurahSelect" 
+                    name="assignmentSurahSelect" 
+                    onChange={handleAssignmentSurahChange}
+                    value={selectedAssignmentSurah?.name || ''}
+                  >
+                    <option value="">اختر السورة</option>
+                    {availableSurahs.map((s: Surah) => (
+                      <option key={s.id} value={s.name}>
+                        {s.name} ({s.verses} آية)
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <div className="form-group">
-                  <label htmlFor="assignmentToAya">إلى آية</label>
-                  <input
-                    type="number"
-                    id="assignmentToAya"
-                    name="assignmentToAya"
-                    placeholder={selectedAssignmentSurah.verses.toString()}
-                    min="1"
-                    max={selectedAssignmentSurah.verses}
-                    value={formData.assignmentToAya}
-                    onChange={handleInputChange}
-                  />
+              )}
+              {selectedAssignmentSurah && (
+                <div className="form-row">
+                  <div className="form-group">
+                    <label htmlFor="assignmentFromAya">من آية</label>
+                    <input
+                      type="number"
+                      id="assignmentFromAya"
+                      name="assignmentFromAya"
+                      placeholder="1"
+                      min="1"
+                      max={selectedAssignmentSurah.verses}
+                      value={formData.assignmentFromAya}
+                      onChange={handleInputChange}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="assignmentToAya">إلى آية</label>
+                    <input
+                      type="number"
+                      id="assignmentToAya"
+                      name="assignmentToAya"
+                      placeholder={selectedAssignmentSurah.verses.toString()}
+                      min="1"
+                      max={selectedAssignmentSurah.verses}
+                      value={formData.assignmentToAya}
+                      onChange={handleInputChange}
+                    />
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-          <div className="form-group">
-            <label htmlFor="date">التاريخ *</label>
-            <input
-              type="date"
-              id="date"
-              name="date"
-              value={formData.date}
-              onChange={handleInputChange}
-              required
-            />
-          </div>
+              )}
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="date">التاريخ *</label>
+              <input
+                type="date"
+                id="date"
+                name="date"
+                value={formData.date}
+                onChange={handleInputChange}
+                required
+              />
+            </div>
+          </>
+        )}
+
           <div className="form-actions">
-            <button type="submit" className="btn btn-success">
+            <button type="submit" className="btn btn-success" disabled={!selectedSurah}>
               {editingId ? 'تحديث' : 'حفظ'}
             </button>
-            <button type="button" className="btn btn-secondary" onClick={handleCancel}>
-              إلغاء
-            </button>
+            {editingId && (
+              <button type="button" className="btn btn-secondary" onClick={handleCancel}>
+                إلغاء التعديل
+              </button>
+            )}
           </div>
         </form>
-      )}
 
       <div className="filter-section">
         <div className="filter-controls">

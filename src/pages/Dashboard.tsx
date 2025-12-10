@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
+import { useAuth } from '../context/AuthContext';
 
 interface DashboardStats {
   totalStudents: number;
   activeGroups: number;
   teachers: number;
   reviewsThisWeek: number;
-  recentUpdates: string[];
+  recentUpdates: { text: string; date: string }[];
   loading: boolean;
   error: string | null;
 }
@@ -30,6 +31,7 @@ interface LowAttendanceAlert {
 }
 
 const Dashboard = () => {
+  const { userProfile, isTeacher, isAdmin, isSupervisor } = useAuth();
   const [stats, setStats] = useState<DashboardStats>({
     totalStudents: 0,
     activeGroups: 0,
@@ -49,54 +51,167 @@ const Dashboard = () => {
   });
 
   const [lowAttendanceAlerts, setLowAttendanceAlerts] = useState<LowAttendanceAlert[]>([]);
+  const [teacherGroups, setTeacherGroups] = useState<string[]>([]);
 
   const fetchDashboard = async () => {
     try {
-      // students
-      const studentsSnap = await getDocs(collection(db, 'students'));
-      const totalStudents = studentsSnap.size;
-
-      // groups (active)
+      let totalStudents = 0;
       let activeGroups = 0;
-      try {
-        const groupsSnap = await getDocs(collection(db, 'groups'));
-        activeGroups = groupsSnap.size;
-      } catch (e) {
-        console.error('Error fetching groups:', e);
-        activeGroups = 0;
-      }
+      let teachers = 0;
+      let reviewsThisWeek = 0;
+      let recentUpdates: { text: string; date: string }[] = [];
 
-      // teachers
-      const teachersSnap = await getDocs(collection(db, 'teachers'));
-      const teachers = teachersSnap.size;
+      // For teachers - get their groups first
+      let teacherGroupIds: string[] = [];
+      if (isTeacher && userProfile?.uid) {
+        const groupsQuery = query(
+          collection(db, 'groups'),
+          where('teacherId', '==', userProfile.uid)
+        );
+        const groupsSnapshot = await getDocs(groupsQuery);
+        teacherGroupIds = groupsSnapshot.docs.map(doc => doc.id);
+        setTeacherGroups(teacherGroupIds);
+        activeGroups = teacherGroupIds.length;
 
-      // sessions -> reviews this week
-      const now = new Date();
-      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      const sessionsSnap = await getDocs(collection(db, 'sessions'));
-      const reviewsThisWeek = sessionsSnap.docs.filter((d) => {
-        const data: any = d.data();
-        const type = data.type;
-        let date: Date | null = null;
-        if (data.date && typeof data.date.toDate === 'function') {
-          date = data.date.toDate();
-        } else if (data.date) {
-          date = new Date(data.date);
+        // Count students in teacher's groups
+        if (teacherGroupIds.length > 0) {
+          for (const groupId of teacherGroupIds) {
+            const studentsQuery = query(
+              collection(db, 'users'),
+              where('role', '==', 'student'),
+              where('status', '==', 'approved'),
+              where('groupId', '==', groupId)
+            );
+            const studentsSnapshot = await getDocs(studentsQuery);
+            totalStudents += studentsSnapshot.size;
+          }
         }
-        return type === 'review' && date && date >= weekAgo && date <= now;
-      }).length;
 
-      // recent activities
-      const activitiesSnap = await getDocs(collection(db, 'activities'));
-      const recentUpdates = activitiesSnap.docs
-        .map((d) => ({ ...(d.data() as any) }))
-        .sort((a: any, b: any) => {
-          const da = a.date && typeof a.date.toDate === 'function' ? a.date.toDate() : new Date(a.date || 0);
-          const dbt = b.date && typeof b.date.toDate === 'function' ? b.date.toDate() : new Date(b.date || 0);
-          return dbt.getTime() - da.getTime();
-        })
-        .slice(0, 3)
-        .map((a: any) => a.description || a.title || 'تحديث جديد');
+        // Get teacher's recent achievements (تحصيل)
+        const achievementsSnap = await getDocs(collection(db, 'student_achievements'));
+        const teacherAchievements = achievementsSnap.docs
+          .filter(doc => {
+            const data = doc.data();
+            // Filter by students in teacher's groups
+            return true; // We'll filter by date mainly
+          })
+          .map(doc => {
+            const data = doc.data();
+            let dateStr = '';
+            if (data.date) {
+              dateStr = data.date;
+            }
+            return {
+              ...data,
+              id: doc.id,
+              dateStr
+            };
+          })
+          .sort((a: any, b: any) => {
+            return new Date(b.dateStr).getTime() - new Date(a.dateStr).getTime();
+          })
+          .slice(0, 5);
+
+        // Get student names for achievements
+        const studentsMap = new Map<string, string>();
+        if (teacherGroupIds.length > 0) {
+          for (const groupId of teacherGroupIds) {
+            const studentsQuery = query(
+              collection(db, 'users'),
+              where('role', '==', 'student'),
+              where('groupId', '==', groupId)
+            );
+            const studentsSnapshot = await getDocs(studentsQuery);
+            studentsSnapshot.docs.forEach(doc => {
+              studentsMap.set(doc.id, doc.data().name);
+            });
+          }
+        }
+
+        // Format recent updates from achievements
+        recentUpdates = teacherAchievements
+          .filter((a: any) => studentsMap.has(a.studentId))
+          .map((a: any) => ({
+            text: `تم تسجيل تحصيل للطالب ${studentsMap.get(a.studentId) || 'غير محدد'} - ${a.portion || ''} (${a.fromAya}-${a.toAya})`,
+            date: a.dateStr
+          }))
+          .slice(0, 5);
+
+        // Get attendance records count this week
+        const now = new Date();
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const attendanceSnap = await getDocs(collection(db, 'attendance'));
+        reviewsThisWeek = attendanceSnap.docs.filter(doc => {
+          const data = doc.data();
+          if (!teacherGroupIds.includes(data.groupId)) return false;
+          let date: Date | null = null;
+          if (data.date && typeof data.date.toDate === 'function') {
+            date = data.date.toDate();
+          } else if (data.date) {
+            date = new Date(data.date);
+          }
+          return date && date >= weekAgo && date <= now;
+        }).length;
+
+      } else {
+        // Admin/Supervisor view
+        // students from users collection
+        const studentsQuery = query(
+          collection(db, 'users'),
+          where('role', '==', 'student'),
+          where('status', '==', 'approved')
+        );
+        const studentsSnap = await getDocs(studentsQuery);
+        totalStudents = studentsSnap.size;
+
+        // groups (active)
+        try {
+          const groupsSnap = await getDocs(collection(db, 'groups'));
+          activeGroups = groupsSnap.size;
+        } catch (e) {
+          console.error('Error fetching groups:', e);
+          activeGroups = 0;
+        }
+
+        // teachers from users collection
+        const teachersQuery = query(
+          collection(db, 'users'),
+          where('role', '==', 'teacher')
+        );
+        const teachersSnap = await getDocs(teachersQuery);
+        teachers = teachersSnap.size;
+
+        // sessions -> reviews this week
+        const now = new Date();
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const sessionsSnap = await getDocs(collection(db, 'sessions'));
+        reviewsThisWeek = sessionsSnap.docs.filter((d) => {
+          const data: any = d.data();
+          const type = data.type;
+          let date: Date | null = null;
+          if (data.date && typeof data.date.toDate === 'function') {
+            date = data.date.toDate();
+          } else if (data.date) {
+            date = new Date(data.date);
+          }
+          return type === 'review' && date && date >= weekAgo && date <= now;
+        }).length;
+
+        // recent activities
+        const activitiesSnap = await getDocs(collection(db, 'activities'));
+        recentUpdates = activitiesSnap.docs
+          .map((d) => ({ ...(d.data() as any) }))
+          .sort((a: any, b: any) => {
+            const da = a.date && typeof a.date.toDate === 'function' ? a.date.toDate() : new Date(a.date || 0);
+            const dbt = b.date && typeof b.date.toDate === 'function' ? b.date.toDate() : new Date(b.date || 0);
+            return dbt.getTime() - da.getTime();
+          })
+          .slice(0, 3)
+          .map((a: any) => ({
+            text: a.description || a.title || 'تحديث جديد',
+            date: ''
+          }));
+      }
 
       // Attendance summary for today
       const today = new Date();
@@ -231,11 +346,13 @@ const Dashboard = () => {
         activeGroups,
         teachers,
         reviewsThisWeek,
-        recentUpdates: recentUpdates.length ? recentUpdates : [
-          'تم إضافة مجموعة جديدة لحفظ جزء عمّ.',
-          'اكتمل تسميع خمسة طلاب لجزء تبارك هذا الأسبوع.',
-          'بدء التسجيل للفصل الصيفي القادم.'
-        ],
+        recentUpdates: recentUpdates.length ? recentUpdates : (isTeacher ? [
+          { text: 'لم تقم بتسجيل أي تحصيل بعد', date: '' }
+        ] : [
+          { text: 'تم إضافة مجموعة جديدة لحفظ جزء عمّ.', date: '' },
+          { text: 'اكتمل تسميع خمسة طلاب لجزء تبارك هذا الأسبوع.', date: '' },
+          { text: 'بدء التسجيل للفصل الصيفي القادم.', date: '' }
+        ]),
         loading: false,
         error: null
       });
@@ -260,7 +377,11 @@ const Dashboard = () => {
     );
   }
 
-  const cards = [
+  const cards = isTeacher ? [
+    { title: 'طلابي', value: stats.totalStudents.toString(), description: 'طلاب في حلقاتي' },
+    { title: 'حلقاتي', value: stats.activeGroups.toString(), description: 'عدد الحلقات المسندة إلي' },
+    { title: 'تسجيلات الحضور', value: stats.reviewsThisWeek.toString(), description: 'تسجيلات هذا الأسبوع' }
+  ] : [
     { title: 'إجمالي الطلاب', value: stats.totalStudents.toString(), description: 'طلاب مسجلون حالياً' },
     { title: 'المجموعات', value: stats.activeGroups.toString(), description: 'إجمالي عدد المجموعات' },
     { title: 'المدرسون', value: stats.teachers.toString(), description: 'مشرفون على الحلقات' },
@@ -271,7 +392,7 @@ const Dashboard = () => {
     <section className="page">
       <header className="page__header">
         <h1>لوحة التحكم</h1>
-        <p>مرحباً بك في مركز متابعة تحفيظ القرآن.</p>
+        <p>{isTeacher ? `مرحباً ${userProfile?.name || 'بك'}، هذه لوحة التحكم الخاصة بك.` : 'مرحباً بك في مركز متابعة تحفيظ القرآن.'}</p>
       </header>
 
       {stats.error && (
@@ -289,10 +410,13 @@ const Dashboard = () => {
       </div>
 
       <section className="overview-card">
-        <h2>آخر التحديثات</h2>
+        <h2>{isTeacher ? 'آخر أعمالي' : 'آخر التحديثات'}</h2>
         <ul className="overview-list">
           {stats.recentUpdates.map((u, i) => (
-            <li key={i}>{u}</li>
+            <li key={i}>
+              {u.text}
+              {u.date && <span className="update-date"> - {u.date}</span>}
+            </li>
           ))}
         </ul>
       </section>

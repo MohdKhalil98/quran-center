@@ -17,6 +17,7 @@ import Attendance from './pages/Attendance';
 import Centers from './pages/Centers';
 import PendingRequests from './pages/PendingRequests';
 import MyProgress from './pages/MyProgress';
+import Leaderboard from './pages/Leaderboard';
 
 function App() {
   return (
@@ -40,6 +41,7 @@ function App() {
           <Route path="/centers" element={<Centers />} />
           <Route path="/pending-requests" element={<PendingRequests />} />
           <Route path="/my-progress" element={<MyProgress />} />
+          <Route path="/leaderboard" element={<Leaderboard />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

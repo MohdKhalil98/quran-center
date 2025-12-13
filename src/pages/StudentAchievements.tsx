@@ -2,23 +2,66 @@ import { useEffect, useState } from 'react';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import '../styles/StudentAchievements.css';
-import curriculum, { Level, Part, Surah } from '../data/curriculumData';
 import ConfirmModal from '../components/ConfirmModal';
 import { useAuth } from '../context/AuthContext';
+
+// Challenge types for the 3-challenge system
+type ChallengeType = 'memorization' | 'near_review' | 'far_review';
 
 interface StudentAchievement {
   id?: string;
   studentId: string;
   studentName?: string;
-  portion: string;
-  fromAya: string;
-  toAya: string;
-  rating: number;
+  // Legacy fields for backward compatibility
+  portion?: string;
+  fromAya?: string;
+  toAya?: string;
+  rating?: number;
   notes?: string;
   assignmentPortion?: string;
-  assignmentFromAya: string;
-  assignmentToAya: string;
+  assignmentFromAya?: string;
+  assignmentToAya?: string;
   date: string;
+  completedStage?: boolean;
+  // New challenge fields
+  challengeType?: ChallengeType;
+  challengeContent?: string;
+  challengePassed?: boolean;
+  levelId?: string;
+  levelName?: string;
+  stageId?: string;
+  stageName?: string;
+}
+
+// Points configuration
+const POINTS_SYSTEM = {
+  MEMORIZATION: 30,
+  NEAR_REVIEW: 20,
+  FAR_REVIEW: 20,
+  STAGE_COMPLETION: 30,
+  LEVEL_COMPLETION: 200,
+  PERFECT_RATING_BONUS: 10,
+  RETRY_PENALTY: -5,
+};
+
+// Firebase curriculum stage interface
+interface CurriculumStage {
+  id: string;
+  name: string;
+  order: number;
+  memorization: string;
+  nearReview: string;
+  farReview: string;
+  stageBonus: number;
+}
+
+interface CurriculumLevel {
+  id: string;
+  name: string;
+  order: number;
+  stages: CurriculumStage[];
+  levelBonus: number;
+  centerId?: string;
 }
 
 const StudentAchievements = () => {
@@ -26,35 +69,62 @@ const StudentAchievements = () => {
   const [achievements, setAchievements] = useState<StudentAchievement[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filterStudent, setFilterStudent] = useState<string>('');
   const [searchText, setSearchText] = useState<string>('');
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmTargetId, setConfirmTargetId] = useState<string | null>(null);
-  const [formData, setFormData] = useState<StudentAchievement>({
-    studentId: '',
-    portion: '',
-    fromAya: '',
-    toAya: '',
-    rating: 5,
-    notes: '',
-    assignmentPortion: '',
-    assignmentFromAya: '',
-    assignmentToAya: '',
-    date: new Date().toISOString().split('T')[0]
-  });
-
-  const [availableSurahs, setAvailableSurahs] = useState<Surah[]>([]);
-  const [selectedStudent, setSelectedStudent] = useState<any>(null);
-  const [selectedSurah, setSelectedSurah] = useState<Surah | null>(null);
-  const [selectedAssignmentSurah, setSelectedAssignmentSurah] = useState<Surah | null>(null);
+  
+  // Curriculum from Firebase
+  const [curriculumLevels, setCurriculumLevels] = useState<CurriculumLevel[]>([]);
+  
+  // Teacher groups
   const [teacherGroups, setTeacherGroups] = useState<any[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string>('');
   const [groupStudents, setGroupStudents] = useState<any[]>([]);
+  
+  // Selected student and their progress
+  const [selectedStudent, setSelectedStudent] = useState<any>(null);
+  const [studentLevel, setStudentLevel] = useState<CurriculumLevel | null>(null);
+  const [studentStage, setStudentStage] = useState<CurriculumStage | null>(null);
+  
+  // Challenge recording state
+  const [selectedChallengeType, setSelectedChallengeType] = useState<ChallengeType | ''>('');
+  const [challengeRating, setChallengeRating] = useState<number>(5);
+  const [challengeNotes, setChallengeNotes] = useState<string>('');
+  const [challengePassed, setChallengePassed] = useState<boolean>(true);
+  const [recordDate, setRecordDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
-  // Fetch teacher's groups first
+  // Fetch curriculum from Firebase
+  useEffect(() => {
+    const fetchCurriculum = async () => {
+      if (!userProfile?.centerId) return;
+      
+      try {
+        const curriculumRef = collection(db, 'curriculum');
+        const q = query(curriculumRef, where('centerId', '==', userProfile.centerId));
+        const snapshot = await getDocs(q);
+        
+        const levels: CurriculumLevel[] = [];
+        snapshot.forEach(docSnap => {
+          levels.push({
+            id: docSnap.id,
+            ...docSnap.data()
+          } as CurriculumLevel);
+        });
+        
+        levels.sort((a, b) => a.order - b.order);
+        setCurriculumLevels(levels);
+      } catch (error) {
+        console.error('Error fetching curriculum:', error);
+      }
+    };
+
+    fetchCurriculum();
+  }, [userProfile?.centerId]);
+
+  // Fetch teacher's groups
   useEffect(() => {
     const fetchTeacherGroups = async () => {
       if (!isTeacher || !userProfile?.uid) return;
@@ -71,7 +141,6 @@ const StudentAchievements = () => {
         }));
         setTeacherGroups(groups);
         
-        // Auto-select first group if only one
         if (groups.length === 1) {
           setSelectedGroupId(groups[0].id);
         }
@@ -83,7 +152,7 @@ const StudentAchievements = () => {
     fetchTeacherGroups();
   }, [isTeacher, userProfile?.uid]);
 
-  // Fetch students when group is selected (for teachers)
+  // Fetch students when group is selected
   useEffect(() => {
     const fetchGroupStudents = async () => {
       if (!isTeacher || !selectedGroupId) {
@@ -101,18 +170,13 @@ const StudentAchievements = () => {
         const studentsSnapshot = await getDocs(studentsQuery);
         const studentsList = studentsSnapshot.docs.map((doc) => {
           const data = doc.data();
-          const levelId = data.levelId || 1;
-          const level = curriculum.find((l: Level) => l.id === levelId);
           return {
             id: doc.id,
             name: data.name,
-            ...data,
-            levelId,
-            levelName: level?.name
+            ...data
           };
         });
         
-        // Sort by name
         studentsList.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
         setGroupStudents(studentsList);
       } catch (error) {
@@ -123,15 +187,13 @@ const StudentAchievements = () => {
     fetchGroupStudents();
   }, [isTeacher, selectedGroupId]);
 
-  // Fetch achievements and all students from Firebase (for display and non-teachers)
+  // Fetch achievements and all students
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch all approved students for achievements display
         let studentsList: any[] = [];
         
         if (isTeacher && teacherGroups.length > 0) {
-          // Teacher sees only students in their groups
           const groupIds = teacherGroups.map(g => g.id);
           const groupBatches = [];
           for (let i = 0; i < groupIds.length; i += 10) {
@@ -148,20 +210,15 @@ const StudentAchievements = () => {
             const studentsSnapshot = await getDocs(studentsQuery);
             const batchStudents = studentsSnapshot.docs.map((doc) => {
               const data = doc.data();
-              const levelId = data.levelId || 1;
-              const level = curriculum.find((l: Level) => l.id === levelId);
               return {
                 id: doc.id,
                 name: data.name,
-                ...data,
-                levelId,
-                levelName: level?.name
+                ...data
               };
             });
             studentsList = [...studentsList, ...batchStudents];
           }
         } else if (!isTeacher) {
-          // Admin/Supervisor - fetch all approved students
           const studentsQuery = query(
             collection(db, 'users'),
             where('role', '==', 'student'),
@@ -170,22 +227,16 @@ const StudentAchievements = () => {
           const studentsSnapshot = await getDocs(studentsQuery);
           studentsList = studentsSnapshot.docs.map((doc) => {
             const data = doc.data();
-            const levelId = data.levelId || 1;
-            const level = curriculum.find((l: Level) => l.id === levelId);
             return {
               id: doc.id,
               name: data.name,
-              ...data,
-              levelId,
-              levelName: level?.name
+              ...data
             };
           });
         }
 
-        // Sort by name
         studentsList.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
 
-        // Fetch achievements
         const achievementsQuery = query(collection(db, 'student_achievements'), orderBy('date', 'desc'));
         const achievementsSnapshot = await getDocs(achievementsQuery);
         const achievementsList = achievementsSnapshot.docs.map((doc) => ({
@@ -193,11 +244,9 @@ const StudentAchievements = () => {
           ...doc.data()
         } as StudentAchievement));
 
-        // Filter achievements to only show those for students the user can see
         const studentIds = new Set(studentsList.map(s => s.id));
         const filteredAchievements = achievementsList.filter(a => studentIds.has(a.studentId));
 
-        // Attach student names to achievements
         const achievementsWithNames = filteredAchievements.map((achievement) => ({
           ...achievement,
           studentName: studentsList.find((s) => s.id === achievement.studentId)?.name || 'غير محدد'
@@ -224,105 +273,211 @@ const StudentAchievements = () => {
   const handleGroupSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const groupId = e.target.value;
     setSelectedGroupId(groupId);
-    // Reset student selection when group changes
-    setFormData(prev => ({ ...prev, studentId: '', portion: '', fromAya: '', toAya: '', assignmentPortion: '', assignmentFromAya: '', assignmentToAya: '' }));
-    setSelectedStudent(null);
-    setSelectedSurah(null);
-    setSelectedAssignmentSurah(null);
-    setAvailableSurahs([]);
+    resetForm();
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: name === 'rating' ? parseInt(value) : value
-    }));
-  };
-
+  // Handle student selection
   const handleStudentSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const studentId = e.target.value;
-    const student = students.find((s) => s.id === studentId);
-    setSelectedStudent(student);
-    setFormData((prev) => ({ ...prev, studentId, portion: '', fromAya: '', toAya: '', assignmentPortion: '', assignmentFromAya: '', assignmentToAya: '' }));
-    setSelectedSurah(null);
-    setSelectedAssignmentSurah(null);
-    if (student) {
-      const level = curriculum.find((l: Level) => l.id === (student.levelId || 1));
-      const parts = level?.parts || [];
-      // استخدام جزء الطالب المحفوظ
-      const studentPart = parts.find((p: Part) => p.id === student.partId) || parts[0];
-      setAvailableSurahs(studentPart?.surahs || []);
+    const student = (isTeacher ? groupStudents : students).find((s) => s.id === studentId);
+    setSelectedStudent(student || null);
+    setSelectedChallengeType('');
+    
+    if (student && curriculumLevels.length > 0) {
+      // Find student's current level and stage from Firebase curriculum
+      const level = curriculumLevels.find(l => l.id === student.levelId) || curriculumLevels[0];
+      setStudentLevel(level);
+      
+      if (level && level.stages.length > 0) {
+        const stage = level.stages.find(s => s.id === student.stageId) || level.stages[0];
+        setStudentStage(stage);
+      } else {
+        setStudentStage(null);
+      }
     } else {
-      setAvailableSurahs([]);
+      setStudentLevel(null);
+      setStudentStage(null);
     }
   };
 
-  const handleSurahChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const surahName = e.target.value;
-    const surah = availableSurahs.find((s: Surah) => s.name === surahName);
-    setSelectedSurah(surah || null);
-    setFormData((prev) => ({ ...prev, portion: surahName, fromAya: '', toAya: '' }));
+  // Get challenge content based on type
+  const getChallengeContent = (type: ChallengeType): string => {
+    if (!studentStage) return '';
+    switch (type) {
+      case 'memorization':
+        return studentStage.memorization;
+      case 'near_review':
+        return studentStage.nearReview;
+      case 'far_review':
+        return studentStage.farReview;
+      default:
+        return '';
+    }
   };
 
-  const handleAssignmentSurahChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const surahName = e.target.value;
-    const surah = availableSurahs.find((s: Surah) => s.name === surahName);
-    setSelectedAssignmentSurah(surah || null);
-    setFormData((prev) => ({ ...prev, assignmentPortion: surahName, assignmentFromAya: '', assignmentToAya: '' }));
+  // Get challenge label
+  const getChallengeLabel = (type: ChallengeType): string => {
+    switch (type) {
+      case 'memorization':
+        return '📖 الحفظ';
+      case 'near_review':
+        return '🔄 المراجعة القريبة';
+      case 'far_review':
+        return '📚 المراجعة البعيدة';
+      default:
+        return '';
+    }
   };
 
-  const handleAddAchievement = async (e: React.FormEvent) => {
+  // Get points for challenge type
+  const getChallengePoints = (type: ChallengeType, passed: boolean, rating: number): number => {
+    if (!passed) return POINTS_SYSTEM.RETRY_PENALTY;
+    
+    let basePoints = 0;
+    switch (type) {
+      case 'memorization':
+        basePoints = POINTS_SYSTEM.MEMORIZATION;
+        break;
+      case 'near_review':
+        basePoints = POINTS_SYSTEM.NEAR_REVIEW;
+        break;
+      case 'far_review':
+        basePoints = POINTS_SYSTEM.FAR_REVIEW;
+        break;
+    }
+    
+    // Add perfect rating bonus
+    if (rating >= 9) {
+      basePoints += POINTS_SYSTEM.PERFECT_RATING_BONUS;
+    }
+    
+    return basePoints;
+  };
+
+  // Check if all 3 challenges are completed for current stage
+  const checkStageCompletion = async (studentId: string, stageId: string): Promise<boolean> => {
+    try {
+      const achievementsQuery = query(
+        collection(db, 'student_achievements'),
+        where('studentId', '==', studentId),
+        where('stageId', '==', stageId),
+        where('challengePassed', '==', true)
+      );
+      const snapshot = await getDocs(achievementsQuery);
+      
+      const completedTypes = new Set<string>();
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        if (data.challengeType) {
+          completedTypes.add(data.challengeType);
+        }
+      });
+      
+      return completedTypes.has('memorization') && 
+             completedTypes.has('near_review') && 
+             completedTypes.has('far_review');
+    } catch (error) {
+      console.error('Error checking stage completion:', error);
+      return false;
+    }
+  };
+
+  // Handle recording a challenge
+  const handleRecordChallenge = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.studentId || !formData.portion || !formData.fromAya || !formData.toAya) {
-      alert('يرجى ملء جميع الحقول المطلوبة');
+    
+    if (!selectedStudent || !selectedChallengeType || !studentLevel || !studentStage) {
+      alert('يرجى اختيار الطالب ونوع التحدي');
       return;
     }
 
     try {
-      const studentName = students.find((s) => s.id === formData.studentId)?.name || 'غير محدد';
-      const { id, studentName: _, ...dataToSave } = formData;
+      const challengeContent = getChallengeContent(selectedChallengeType);
+      const points = getChallengePoints(selectedChallengeType, challengePassed, challengeRating);
+      
+      const achievementData: Omit<StudentAchievement, 'id'> = {
+        studentId: selectedStudent.id,
+        challengeType: selectedChallengeType,
+        challengeContent: challengeContent,
+        challengePassed: challengePassed,
+        rating: challengeRating,
+        notes: challengeNotes,
+        date: recordDate,
+        levelId: studentLevel.id,
+        levelName: studentLevel.name,
+        stageId: studentStage.id,
+        stageName: studentStage.name,
+      };
 
       if (editingId) {
-        // Update existing achievement
-        await updateDoc(doc(db, 'student_achievements', editingId), dataToSave);
-        setAchievements((prev) =>
-          prev.map((a) =>
+        await updateDoc(doc(db, 'student_achievements', editingId), achievementData);
+        setAchievements(prev =>
+          prev.map(a =>
             a.id === editingId
-              ? { ...dataToSave, id: editingId, studentName } as StudentAchievement
+              ? { ...achievementData, id: editingId, studentName: selectedStudent.name }
               : a
           )
         );
         setEditingId(null);
       } else {
-        // Add new achievement
-        const docRef = await addDoc(collection(db, 'student_achievements'), dataToSave);
-        setAchievements((prev) => [
-          { ...dataToSave, id: docRef.id, studentName } as StudentAchievement,
+        const docRef = await addDoc(collection(db, 'student_achievements'), achievementData);
+        setAchievements(prev => [
+          { ...achievementData, id: docRef.id, studentName: selectedStudent.name },
           ...prev
         ]);
+
+        // Update student's points
+        const newPoints = (selectedStudent.totalPoints || 0) + points;
+        await updateDoc(doc(db, 'users', selectedStudent.id), {
+          totalPoints: newPoints
+        });
+
+        // Check if all 3 challenges are completed after adding this one
+        if (challengePassed) {
+          const allCompleted = await checkStageCompletion(selectedStudent.id, studentStage.id);
+          
+          if (allCompleted) {
+            // All challenges completed - set pending supervisor approval
+            const isLastStage = studentStage.order === studentLevel.stages.length;
+            const nextStage = isLastStage ? null : studentLevel.stages.find(s => s.order === studentStage.order + 1);
+            
+            // Add stage completion bonus
+            const bonusPoints = newPoints + POINTS_SYSTEM.STAGE_COMPLETION;
+            
+            await updateDoc(doc(db, 'users', selectedStudent.id), {
+              stageStatus: 'pending_supervisor',
+              pendingStageId: isLastStage ? null : nextStage?.id,
+              pendingStageName: isLastStage ? null : nextStage?.name,
+              pendingLevelUp: isLastStage,
+              totalPoints: bonusPoints
+            });
+            
+            if (isLastStage) {
+              alert('🎉 تم إتمام جميع تحديات المستوى! بانتظار اعتماد المشرف للانتقال للمستوى التالي.');
+            } else {
+              alert(`✅ تم إتمام جميع تحديات المرحلة! بانتظار اعتماد المشرف للانتقال إلى ${nextStage?.name}`);
+            }
+          }
+        }
       }
 
-      setFormData({
-        studentId: '',
-        portion: '',
-        fromAya: '',
-        toAya: '',
-        rating: 5,
-        notes: '',
-        assignmentPortion: '',
-        assignmentFromAya: '',
-        assignmentToAya: '',
-        date: new Date().toISOString().split('T')[0]
-      });
-      setSelectedStudent(null);
-      setSelectedSurah(null);
-      setSelectedAssignmentSurah(null);
-      setIsAdding(false);
+      resetForm();
     } catch (error) {
-      console.error('Error adding/updating achievement:', error);
+      console.error('Error recording challenge:', error);
       alert('حدث خطأ أثناء حفظ البيانات');
     }
+  };
+
+  const resetForm = () => {
+    setSelectedStudent(null);
+    setStudentLevel(null);
+    setStudentStage(null);
+    setSelectedChallengeType('');
+    setChallengeRating(5);
+    setChallengeNotes('');
+    setChallengePassed(true);
+    setRecordDate(new Date().toISOString().split('T')[0]);
+    setEditingId(null);
   };
 
   const handleDeleteAchievement = (id: string) => {
@@ -345,43 +500,24 @@ const StudentAchievements = () => {
   };
 
   const handleEditAchievement = (achievement: StudentAchievement) => {
-    setFormData(achievement);
-    setEditingId(achievement.id || null);
-    setIsAdding(true);
-    // populate parts/surahs according to student's level
     const student = students.find((s) => s.id === achievement.studentId);
-    setSelectedStudent(student);
-    if (student) {
-      const level = curriculum.find((l: Level) => l.id === (student.levelId || 1));
-      const parts = level?.parts || [];
-      // استخدام جزء الطالب المحفوظ
-      const studentPart = parts.find((p: Part) => p.id === student.partId) || parts[0];
-      const surahs = studentPart?.surahs || [];
-      setAvailableSurahs(surahs);
-      const surah = surahs.find((s: Surah) => s.name === achievement.portion);
-      setSelectedSurah(surah || null);
-      setSelectedAssignmentSurah(surah || null);
+    setSelectedStudent(student || null);
+    setEditingId(achievement.id || null);
+    
+    if (student && curriculumLevels.length > 0) {
+      const level = curriculumLevels.find(l => l.id === achievement.levelId);
+      setStudentLevel(level || null);
+      if (level) {
+        const stage = level.stages.find(s => s.id === achievement.stageId);
+        setStudentStage(stage || null);
+      }
     }
-  };
-
-  const handleCancel = () => {
-    setIsAdding(false);
-    setEditingId(null);
-    setSelectedStudent(null);
-    setSelectedSurah(null);
-    setSelectedAssignmentSurah(null);
-    setFormData({
-      studentId: '',
-      portion: '',
-      fromAya: '',
-      toAya: '',
-      rating: 5,
-      notes: '',
-      assignmentPortion: '',
-      assignmentFromAya: '',
-      assignmentToAya: '',
-      date: new Date().toISOString().split('T')[0]
-    });
+    
+    setSelectedChallengeType(achievement.challengeType || '');
+    setChallengeRating(achievement.rating || 5);
+    setChallengeNotes(achievement.notes || '');
+    setChallengePassed(achievement.challengePassed ?? true);
+    setRecordDate(achievement.date);
   };
 
   const filteredAchievements = achievements.filter((a) => {
@@ -389,7 +525,7 @@ const StudentAchievements = () => {
     const matchesSearch =
       !searchText ||
       a.studentName?.toLowerCase().includes(searchText.toLowerCase()) ||
-      a.portion?.toLowerCase().includes(searchText.toLowerCase());
+      (a.challengeContent || a.portion || '').toLowerCase().includes(searchText.toLowerCase());
     return matchesStudent && matchesSearch;
   });
 
@@ -407,15 +543,15 @@ const StudentAchievements = () => {
   return (
     <section className="page">
       <header className="page__header">
-        <h1>تحصيل الطالب</h1>
-        <p>تسجيل وتتبع تقدم الطلاب في حفظ وتسميع القرآن.</p>
+        <h1>🎯 تسجيل تحديات الطلاب</h1>
+        <p>تسجيل اجتياز تحديات الحفظ والمراجعة للطلاب</p>
       </header>
 
-      {/* نموذج التسجيل - يظهر دائماً */}
-      <form className="form-card" onSubmit={handleAddAchievement}>
-        <h3>{editingId ? 'تعديل التحصيل' : 'تسجيل تحصيل جديد'}</h3>
+      {/* Challenge Recording Form */}
+      <form className="form-card challenge-form" onSubmit={handleRecordChallenge}>
+        <h3>{editingId ? '✏️ تعديل التحدي' : '📝 تسجيل تحدي جديد'}</h3>
         
-        {/* اختيار الحلقة للمعلم */}
+        {/* Group Selection for Teachers */}
         {isTeacher && teacherGroups.length > 0 && (
           <div className="form-group">
             <label htmlFor="groupSelect">الحلقة *</label>
@@ -436,12 +572,13 @@ const StudentAchievements = () => {
           </div>
         )}
 
+        {/* Student Selection */}
         <div className="form-group">
           <label htmlFor="studentId">الطالب *</label>
           <select
             id="studentId"
             name="studentId"
-            value={formData.studentId}
+            value={selectedStudent?.id || ''}
             onChange={handleStudentSelect}
             required
             disabled={isTeacher && !selectedGroupId}
@@ -455,183 +592,150 @@ const StudentAchievements = () => {
           </select>
         </div>
 
-        {/* عرض مستوى الطالب والورد المطلوب */}
-        {selectedStudent && (
-          <div className="student-level-section">
-            <div className="level-info-box">
-              <h4>📚 مستوى الطالب</h4>
-              <div className="level-details">
-                <span className="level-badge">{selectedStudent.levelName || 'المستوى الأول'}</span>
-                {selectedStudent.partName && (
-                  <span className="part-badge">{selectedStudent.partName}</span>
-                )}
+        {/* Student Level & Stage Info */}
+        {selectedStudent && studentLevel && studentStage && (
+          <div className="student-progress-info">
+            <div className="progress-header">
+              <h4>📊 موقع الطالب الحالي</h4>
+            </div>
+            <div className="progress-badges">
+              <span className="level-badge">{studentLevel.name}</span>
+              <span className="stage-badge">{studentStage.name}</span>
+            </div>
+            
+            {/* Three Challenges Display */}
+            <div className="challenges-grid">
+              <div 
+                className={`challenge-card memorization ${selectedChallengeType === 'memorization' ? 'selected' : ''}`}
+                onClick={() => setSelectedChallengeType('memorization')}
+              >
+                <div className="challenge-icon">📖</div>
+                <div className="challenge-title">الحفظ</div>
+                <div className="challenge-content">{studentStage.memorization}</div>
+                <div className="challenge-points">{POINTS_SYSTEM.MEMORIZATION} نقطة</div>
+              </div>
+              
+              <div 
+                className={`challenge-card near-review ${selectedChallengeType === 'near_review' ? 'selected' : ''} ${studentStage.nearReview === '-' ? 'disabled' : ''}`}
+                onClick={() => studentStage.nearReview !== '-' && setSelectedChallengeType('near_review')}
+              >
+                <div className="challenge-icon">🔄</div>
+                <div className="challenge-title">المراجعة القريبة</div>
+                <div className="challenge-content">{studentStage.nearReview}</div>
+                <div className="challenge-points">{studentStage.nearReview !== '-' ? `${POINTS_SYSTEM.NEAR_REVIEW} نقطة` : '-'}</div>
+              </div>
+              
+              <div 
+                className={`challenge-card far-review ${selectedChallengeType === 'far_review' ? 'selected' : ''} ${studentStage.farReview === '-' ? 'disabled' : ''}`}
+                onClick={() => studentStage.farReview !== '-' && setSelectedChallengeType('far_review')}
+              >
+                <div className="challenge-icon">📚</div>
+                <div className="challenge-title">المراجعة البعيدة</div>
+                <div className="challenge-content">{studentStage.farReview}</div>
+                <div className="challenge-points">{studentStage.farReview !== '-' ? `${POINTS_SYSTEM.FAR_REVIEW} نقطة` : '-'}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Challenge Recording Fields */}
+        {selectedChallengeType && (
+          <div className="challenge-recording-section">
+            <h4>📋 تسجيل نتيجة: {getChallengeLabel(selectedChallengeType)}</h4>
+            <p className="challenge-description">المحتوى: {getChallengeContent(selectedChallengeType)}</p>
+            
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="challengeRating">التقييم (1-10) *</label>
+                <input
+                  type="number"
+                  id="challengeRating"
+                  min="1"
+                  max="10"
+                  value={challengeRating}
+                  onChange={(e) => setChallengeRating(Number(e.target.value))}
+                  required
+                />
+              </div>
+              
+              <div className="form-group">
+                <label htmlFor="recordDate">التاريخ *</label>
+                <input
+                  type="date"
+                  id="recordDate"
+                  value={recordDate}
+                  onChange={(e) => setRecordDate(e.target.value)}
+                  required
+                />
               </div>
             </div>
             
-            <div className="required-portion-section">
-              <h4>📖 الورد المطلوب</h4>
-              {availableSurahs.length > 0 && (
-                <div className="form-group">
-                  <label htmlFor="surahSelect">السورة *</label>
-                  <select id="surahSelect" name="surahSelect" onChange={handleSurahChange} value={formData.portion} required>
-                    <option value="">اختر السورة</option>
-                    {availableSurahs.map((s: Surah) => (
-                      <option key={s.id} value={s.name}>
-                        {s.name} ({s.verses} آية)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {selectedSurah && (
-                <div className="form-row">
-                  <div className="form-group">
-                    <label htmlFor="fromAya">من آية *</label>
-                    <input
-                      type="number"
-                      id="fromAya"
-                      name="fromAya"
-                      placeholder="1"
-                      min="1"
-                      max={selectedSurah.verses}
-                      value={formData.fromAya}
-                      onChange={handleInputChange}
-                      required
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="toAya">إلى آية *</label>
-                    <input
-                      type="number"
-                      id="toAya"
-                      name="toAya"
-                      placeholder={selectedSurah.verses.toString()}
-                      min="1"
-                      max={selectedSurah.verses}
-                      value={formData.toAya}
-                      onChange={handleInputChange}
-                      required
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ملاحظات المعلم - تظهر بعد اختيار السورة */}
-        {selectedSurah && (
-          <>
             <div className="form-group">
-              <label htmlFor="notes">ملاحظات المعلم</label>
+              <label htmlFor="challengeNotes">ملاحظات المعلم</label>
               <textarea
-                id="notes"
-                name="notes"
+                id="challengeNotes"
                 placeholder="أضف ملاحظاتك هنا..."
-                value={formData.notes || ''}
-                onChange={handleInputChange}
+                value={challengeNotes}
+                onChange={(e) => setChallengeNotes(e.target.value)}
                 rows={3}
               />
             </div>
-
-            <div className="form-group">
-              <label htmlFor="rating">تقييم الطالب (1-10) *</label>
-              <input
-                type="number"
-                id="rating"
-                name="rating"
-                min="1"
-                max="10"
-                value={formData.rating}
-                onChange={handleInputChange}
-                required
-              />
+            
+            <div className="pass-fail-section">
+              <label className="result-label">نتيجة التحدي:</label>
+              <div className="result-buttons">
+                <button
+                  type="button"
+                  className={`result-btn pass ${challengePassed ? 'active' : ''}`}
+                  onClick={() => setChallengePassed(true)}
+                >
+                  ✅ ناجح
+                </button>
+                <button
+                  type="button"
+                  className={`result-btn retry ${!challengePassed ? 'active' : ''}`}
+                  onClick={() => setChallengePassed(false)}
+                >
+                  🔄 إعادة
+                </button>
+              </div>
             </div>
-
-            <div className="assignment-section">
-              <h4>📝 الواجب المطلوب</h4>
-              {availableSurahs.length > 0 && (
-                <div className="form-group">
-                  <label htmlFor="assignmentSurahSelect">السورة</label>
-                  <select 
-                    id="assignmentSurahSelect" 
-                    name="assignmentSurahSelect" 
-                    onChange={handleAssignmentSurahChange}
-                    value={selectedAssignmentSurah?.name || ''}
-                  >
-                    <option value="">اختر السورة</option>
-                    {availableSurahs.map((s: Surah) => (
-                      <option key={s.id} value={s.name}>
-                        {s.name} ({s.verses} آية)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {selectedAssignmentSurah && (
-                <div className="form-row">
-                  <div className="form-group">
-                    <label htmlFor="assignmentFromAya">من آية</label>
-                    <input
-                      type="number"
-                      id="assignmentFromAya"
-                      name="assignmentFromAya"
-                      placeholder="1"
-                      min="1"
-                      max={selectedAssignmentSurah.verses}
-                      value={formData.assignmentFromAya}
-                      onChange={handleInputChange}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="assignmentToAya">إلى آية</label>
-                    <input
-                      type="number"
-                      id="assignmentToAya"
-                      name="assignmentToAya"
-                      placeholder={selectedAssignmentSurah.verses.toString()}
-                      min="1"
-                      max={selectedAssignmentSurah.verses}
-                      value={formData.assignmentToAya}
-                      onChange={handleInputChange}
-                    />
-                  </div>
-                </div>
+            
+            <div className="points-preview">
+              <span className="points-label">النقاط المتوقعة:</span>
+              <span className={`points-value ${!challengePassed ? 'negative' : ''}`}>
+                {getChallengePoints(selectedChallengeType, challengePassed, challengeRating)} نقطة
+              </span>
+              {challengeRating >= 9 && challengePassed && (
+                <span className="bonus-indicator">+{POINTS_SYSTEM.PERFECT_RATING_BONUS} مكافأة تميز!</span>
               )}
             </div>
-
-            <div className="form-group">
-              <label htmlFor="date">التاريخ *</label>
-              <input
-                type="date"
-                id="date"
-                name="date"
-                value={formData.date}
-                onChange={handleInputChange}
-                required
-              />
-            </div>
-          </>
+          </div>
         )}
 
-          <div className="form-actions">
-            <button type="submit" className="btn btn-success" disabled={!selectedSurah}>
-              {editingId ? 'تحديث' : 'حفظ'}
+        <div className="form-actions">
+          <button 
+            type="submit" 
+            className="btn btn-success" 
+            disabled={!selectedStudent || !selectedChallengeType}
+          >
+            {editingId ? 'تحديث' : 'حفظ التحدي'}
+          </button>
+          {editingId && (
+            <button type="button" className="btn btn-secondary" onClick={resetForm}>
+              إلغاء
             </button>
-            {editingId && (
-              <button type="button" className="btn btn-secondary" onClick={handleCancel}>
-                إلغاء التعديل
-              </button>
-            )}
-          </div>
-        </form>
+          )}
+        </div>
+      </form>
 
+      {/* Filter Section */}
       <div className="filter-section">
         <div className="filter-controls">
           <div className="search-box">
             <input
               type="text"
-              placeholder="ابحث عن طالب أو ورد..."
+              placeholder="ابحث عن طالب أو تحدي..."
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               className="search-input"
@@ -668,14 +772,15 @@ const StudentAchievements = () => {
         </div>
       </div>
 
+      {/* Achievements Display */}
       {filteredAchievements.length === 0 ? (
         <div className="empty-state">
-          <p>لا توجد بيانات تحصيل حتى الآن</p>
+          <p>لا توجد تحديات مسجلة حتى الآن</p>
         </div>
       ) : viewMode === 'cards' ? (
         <div className="achievements-cards-container">
           {filteredAchievements.map((achievement) => (
-            <article key={achievement.id} className="achievement-card">
+            <article key={achievement.id} className="achievement-card challenge-card-display">
               <div className="achievement-header">
                 <h3>{achievement.studentName}</h3>
                 <span className={`rating rating-badge rating-${achievement.rating}`}>
@@ -684,23 +789,55 @@ const StudentAchievements = () => {
               </div>
               
               <div className="achievement-body">
+                {/* Challenge Type Badge */}
                 <div className="achievement-row">
-                  <span className="label">الورد:</span>
-                  <span className="value">{achievement.portion}</span>
+                  <span className="label">نوع التحدي:</span>
+                  <span className={`challenge-type-badge ${achievement.challengeType}`}>
+                    {achievement.challengeType === 'memorization' && '📖 الحفظ'}
+                    {achievement.challengeType === 'near_review' && '🔄 المراجعة القريبة'}
+                    {achievement.challengeType === 'far_review' && '📚 المراجعة البعيدة'}
+                    {!achievement.challengeType && achievement.portion}
+                  </span>
                 </div>
                 
+                {/* Content */}
                 <div className="achievement-row">
-                  <span className="label">الآيات المحفوظة:</span>
-                  <span className="value">{achievement.fromAya} - {achievement.toAya}</span>
+                  <span className="label">المحتوى:</span>
+                  <span className="value">{achievement.challengeContent || achievement.portion}</span>
                 </div>
 
-                {achievement.assignmentFromAya && achievement.assignmentToAya && (
+                {/* Level & Stage */}
+                {achievement.levelName && (
                   <div className="achievement-row">
-                    <span className="label">الواجب المطلوب:</span>
-                    <span className="value">{achievement.assignmentFromAya} - {achievement.assignmentToAya}</span>
+                    <span className="label">المستوى:</span>
+                    <span className="value">{achievement.levelName}</span>
+                  </div>
+                )}
+                
+                {achievement.stageName && (
+                  <div className="achievement-row">
+                    <span className="label">المرحلة:</span>
+                    <span className="value">{achievement.stageName}</span>
                   </div>
                 )}
 
+                {/* Pass/Fail Status */}
+                <div className="achievement-row">
+                  <span className="label">النتيجة:</span>
+                  <span className={`status-badge ${achievement.challengePassed ? 'passed' : 'retry'}`}>
+                    {achievement.challengePassed !== false ? '✅ ناجح' : '🔄 إعادة'}
+                  </span>
+                </div>
+
+                {/* Notes */}
+                {achievement.notes && (
+                  <div className="achievement-row">
+                    <span className="label">ملاحظات:</span>
+                    <span className="value notes">{achievement.notes}</span>
+                  </div>
+                )}
+
+                {/* Date */}
                 <div className="achievement-row">
                   <span className="label">التاريخ:</span>
                   <span className="value date">
@@ -736,11 +873,11 @@ const StudentAchievements = () => {
             <thead>
               <tr>
                 <th>الطالب</th>
-                <th>الورد</th>
-                <th>من آية</th>
-                <th>إلى آية</th>
+                <th>نوع التحدي</th>
+                <th>المحتوى</th>
+                <th>المستوى/المرحلة</th>
                 <th>التقييم</th>
-                <th>الواجب (من - إلى)</th>
+                <th>النتيجة</th>
                 <th>التاريخ</th>
                 <th>الإجراءات</th>
               </tr>
@@ -749,18 +886,25 @@ const StudentAchievements = () => {
               {filteredAchievements.map((achievement) => (
                 <tr key={achievement.id}>
                   <td>{achievement.studentName}</td>
-                  <td>{achievement.portion}</td>
-                  <td>{achievement.fromAya}</td>
-                  <td>{achievement.toAya}</td>
+                  <td>
+                    <span className={`challenge-type-badge ${achievement.challengeType}`}>
+                      {achievement.challengeType === 'memorization' && '📖 حفظ'}
+                      {achievement.challengeType === 'near_review' && '🔄 قريبة'}
+                      {achievement.challengeType === 'far_review' && '📚 بعيدة'}
+                      {!achievement.challengeType && '-'}
+                    </span>
+                  </td>
+                  <td>{achievement.challengeContent || achievement.portion || '-'}</td>
+                  <td>{achievement.levelName || '-'} / {achievement.stageName || '-'}</td>
                   <td>
                     <span className={`rating rating-${achievement.rating}`}>
                       {achievement.rating}/10
                     </span>
                   </td>
                   <td>
-                    {achievement.assignmentFromAya && achievement.assignmentToAya
-                      ? `${achievement.assignmentFromAya} - ${achievement.assignmentToAya}`
-                      : '-'}
+                    <span className={`status-badge ${achievement.challengePassed !== false ? 'passed' : 'retry'}`}>
+                      {achievement.challengePassed !== false ? '✅' : '🔄'}
+                    </span>
                   </td>
                   <td>{new Date(achievement.date).toLocaleDateString('ar-SA')}</td>
                   <td>
@@ -783,15 +927,16 @@ const StudentAchievements = () => {
           </table>
         </div>
       )}
-        <ConfirmModal
-          open={confirmOpen}
-          message="هل أنت متأكد من حذف هذا التحصيل؟"
-          onConfirm={performDeleteAchievement}
-          onCancel={() => {
-            setConfirmOpen(false);
-            setConfirmTargetId(null);
-          }}
-        />
+      
+      <ConfirmModal
+        open={confirmOpen}
+        message="هل أنت متأكد من حذف هذا التحدي؟"
+        onConfirm={performDeleteAchievement}
+        onCancel={() => {
+          setConfirmOpen(false);
+          setConfirmTargetId(null);
+        }}
+      />
     </section>
   );
 };

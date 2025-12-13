@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext';
 import { Navigate } from 'react-router-dom';
 import '../styles/MyProgress.css';
 
+import curriculum, { Level } from '../data/curriculumData';
+
 interface Achievement {
   id: string;
   portion: string;
@@ -34,6 +36,20 @@ const MyProgress = () => {
     averageRating: 0,
     thisMonth: 0
   });
+
+  // Calculate Progress Percentage
+  const currentLevelId = userProfile?.levelId || 1;
+  const currentLevel = curriculum.find(l => l.id === currentLevelId);
+  const currentPartId = userProfile?.partId;
+  
+  let progressPercentage = 0;
+  if (currentLevel) {
+    const totalParts = currentLevel.parts.length;
+    const currentPartIndex = currentLevel.parts.findIndex(p => p.id === currentPartId);
+    if (currentPartIndex !== -1) {
+      progressPercentage = Math.round(((currentPartIndex) / totalParts) * 100);
+    }
+  }
 
   useEffect(() => {
     if (userProfile?.uid) {
@@ -190,6 +206,73 @@ const MyProgress = () => {
       )}
 
       {/* الإحصائيات */}
+      {/* Journey Map Section */}
+      <div className="journey-section" style={{ marginBottom: '2rem', background: 'white', padding: '1.5rem', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+        <h2 style={{ marginBottom: '1.5rem', color: '#2c3e50' }}>🗺️ رحلة الحفظ</h2>
+        
+        {/* Current Status Banner */}
+        <div className="status-banner" style={{ background: '#f0f9ff', padding: '1rem', borderRadius: '8px', marginBottom: '2rem', border: '1px solid #bae6fd' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+            <div>
+              <h3 style={{ margin: 0, color: '#0284c7' }}>{currentLevel?.name || 'المستوى الأول'}</h3>
+              <p style={{ margin: '0.5rem 0 0', color: '#64748b' }}>{currentLevel?.description}</p>
+            </div>
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontSize: '0.9rem', color: '#64748b', marginBottom: '0.25rem' }}>نسبة إنجاز المستوى</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ width: '150px', height: '8px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+                  <div style={{ width: `${progressPercentage}%`, height: '100%', background: '#0ea5e9', borderRadius: '4px' }}></div>
+                </div>
+                <span style={{ fontWeight: 'bold', color: '#0ea5e9' }}>{progressPercentage}%</span>
+              </div>
+            </div>
+          </div>
+          
+          {userProfile?.levelStatus === 'pending_supervisor' && (
+            <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#fff7ed', border: '1px solid #fdba74', borderRadius: '6px', color: '#c2410c', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span>⏳</span>
+              <strong>بانتظار اعتماد المشرف للانتقال للمستوى التالي</strong>
+            </div>
+          )}
+        </div>
+
+        {/* Levels Timeline */}
+        <div className="levels-timeline" style={{ display: 'flex', justifyContent: 'space-between', position: 'relative', padding: '2rem 0' }}>
+          {/* Connecting Line */}
+          <div style={{ position: 'absolute', top: '50%', left: '0', right: '0', height: '4px', background: '#e2e8f0', zIndex: 0, transform: 'translateY(-50%)' }}></div>
+          
+          {curriculum.map((level) => {
+            const isCompleted = (userProfile?.completedLevels || 0) >= level.id;
+            const isCurrent = (userProfile?.levelId || 1) === level.id;
+            const isLocked = !isCompleted && !isCurrent;
+            
+            return (
+              <div key={level.id} style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', width: '120px' }}>
+                <div style={{ 
+                  width: '40px', 
+                  height: '40px', 
+                  borderRadius: '50%', 
+                  background: isCompleted ? '#22c55e' : (isCurrent ? '#3b82f6' : '#cbd5e1'),
+                  color: 'white',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 'bold',
+                  border: isCurrent ? '4px solid #dbeafe' : '4px solid white',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                }}>
+                  {isCompleted ? '✓' : level.id}
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontWeight: 'bold', color: isLocked ? '#94a3b8' : '#334155', fontSize: '0.9rem' }}>{level.name}</div>
+                  {isCurrent && <span className="badge badge--primary" style={{ fontSize: '0.7rem', marginTop: '0.25rem' }}>الحالي</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-icon">📖</div>

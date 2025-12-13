@@ -30,6 +30,22 @@ export interface UserProfile {
   createdAt: string;
   active: boolean;
   status?: 'pending' | 'approved' | 'rejected'; // للطلاب - حالة الموافقة
+  
+  // Progress Tracking
+  currentLevel?: number;
+  currentStage?: number;
+  levelId?: number; // Added for compatibility
+  levelName?: string; // Added for compatibility
+  partId?: number; // Added for compatibility
+  partName?: string; // Added for compatibility
+  completedLevels?: number;
+  totalPoints?: number;
+  levelStatus?: 'in-progress' | 'pending_supervisor' | 'completed';
+  // Stage advancement tracking
+  stageStatus?: 'in-progress' | 'pending_supervisor';
+  pendingPartId?: number | null;
+  pendingPartName?: string | null;
+  pendingLevelUp?: boolean;
 }
 
 type AuthContextValue = {

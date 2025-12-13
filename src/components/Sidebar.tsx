@@ -30,7 +30,8 @@ const navItems: NavItem[] = [
   // صفحات الطالب
   { path: '/my-progress', label: 'تحصيلي', roles: ['student'] },
   // صفحات عامة
-  { path: '/curriculum', label: 'المنهج', roles: ['supervisor', 'teacher', 'student'] }
+  { path: '/curriculum', label: 'المنهج', roles: ['supervisor', 'teacher', 'student'] },
+  { path: '/leaderboard', label: 'المتصدرين', roles: ['supervisor', 'teacher', 'student'] }
 ];
 
 const Sidebar = () => {

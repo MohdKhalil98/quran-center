@@ -3,9 +3,10 @@ import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firesto
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { Navigate } from 'react-router-dom';
+import { quranCurriculum, QuranJuz, QuranSurah } from '../data/quranCurriculum';
 import '../styles/MyProgress.css';
 
-// New Challenge System Interfaces
+// Adapted interfaces for Quran curriculum
 interface CurriculumStage {
   id: string;
   name: string;
@@ -13,6 +14,7 @@ interface CurriculumStage {
   memorization: string;
   nearReview: string;
   farReview: string;
+  ayahCount?: number;
 }
 
 interface CurriculumLevel {
@@ -20,6 +22,7 @@ interface CurriculumLevel {
   name: string;
   order: number;
   stages: CurriculumStage[];
+  juzNumber?: number;
 }
 
 interface Achievement {
@@ -74,55 +77,75 @@ const MyProgress = () => {
     }
   }, [userProfile]);
 
-  // Fetch curriculum from Firebase
-  const fetchCurriculum = async () => {
-    if (!userProfile?.centerId) return;
+  // Convert QuranJuz to CurriculumLevel format
+  const convertToCurriculumLevel = (juz: QuranJuz, index: number): CurriculumLevel => {
+    const stages: CurriculumStage[] = juz.surahs.map((surah, surahIndex) => {
+      // Get previous surah for near review
+      const prevSurah = surahIndex > 0 ? juz.surahs[surahIndex - 1] : null;
+      // Get surah 2 positions back for far review  
+      const farSurah = surahIndex > 1 ? juz.surahs[surahIndex - 2] : null;
+      
+      return {
+        id: surah.id,
+        name: `سورة ${surah.name}`,
+        order: surah.order,
+        memorization: `سورة ${surah.name} (${surah.ayahCount} آية)`,
+        nearReview: prevSurah ? `سورة ${prevSurah.name}` : 'لا يوجد',
+        farReview: farSurah ? `سورة ${farSurah.name}` : 'لا يوجد',
+        ayahCount: surah.ayahCount
+      };
+    });
 
+    return {
+      id: juz.id,
+      name: juz.name,
+      order: juz.order,
+      stages,
+      juzNumber: juz.juzNumber
+    };
+  };
+
+  // Fetch curriculum from local data
+  const fetchCurriculum = async () => {
     try {
-      const curriculumRef = collection(db, 'curriculum');
-      const q = query(curriculumRef, where('centerId', '==', userProfile.centerId));
-      const snapshot = await getDocs(q);
+      // Convert quranCurriculum to CurriculumLevel format
+      const levels: CurriculumLevel[] = quranCurriculum.map((juz, index) => 
+        convertToCurriculumLevel(juz, index)
+      );
       
-      const levels: CurriculumLevel[] = [];
-      snapshot.forEach(docSnap => {
-        levels.push({
-          id: docSnap.id,
-          ...docSnap.data()
-        } as CurriculumLevel);
-      });
-      
-      levels.sort((a, b) => a.order - b.order);
       setCurriculumLevels(levels);
       
-      // Find current level and stage
+      // Find current level and stage based on user's levelId/stageId
       if (levels.length > 0) {
-        const level = levels.find(l => l.id === userProfile.levelId) || levels[0];
+        const level = levels.find(l => l.id === userProfile?.levelId) || levels[0];
         setCurrentLevel(level);
         
         if (level.stages && level.stages.length > 0) {
-          const stage = level.stages.find(s => s.id === userProfile.stageId) || level.stages[0];
+          const stage = level.stages.find(s => s.id === userProfile?.stageId) || level.stages[0];
           setCurrentStage(stage);
           
-          // Fetch completed challenges for current stage
-          const achievementsQuery = query(
-            collection(db, 'student_achievements'),
-            where('studentId', '==', userProfile.uid),
-            where('stageId', '==', stage.id),
-            where('challengePassed', '==', true)
-          );
-          const achievementsSnap = await getDocs(achievementsQuery);
-          const completed = new Set<string>();
-          achievementsSnap.forEach(doc => {
-            const data = doc.data();
-            if (data.challengeType) {
-              completed.add(data.challengeType);
-            }
-          });
-          setCompletedChallenges(completed);
+          // Fetch completed challenges for current stage from Firebase
+          if (userProfile?.uid) {
+            const achievementsQuery = query(
+              collection(db, 'student_achievements'),
+              where('studentId', '==', userProfile.uid),
+              where('stageId', '==', stage.id),
+              where('challengePassed', '==', true)
+            );
+            const achievementsSnap = await getDocs(achievementsQuery);
+            const completed = new Set<string>();
+            achievementsSnap.forEach(doc => {
+              const data = doc.data();
+              if (data.challengeType) {
+                completed.add(data.challengeType);
+              }
+            });
+            setCompletedChallenges(completed);
+          }
         }
       }
     } catch (error) {
-      console.error('Error fetching curriculum:', error);
+      console.error('Error loading curriculum:', error);
     }
   };
 

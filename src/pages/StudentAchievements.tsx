@@ -3,7 +3,9 @@ import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy,
 import { db } from '../firebase';
 import '../styles/StudentAchievements.css';
 import ConfirmModal from '../components/ConfirmModal';
+import MessageBox from '../components/MessageBox';
 import { useAuth } from '../context/AuthContext';
+import quranCurriculum, { QuranJuz, QuranSurah, getDefaultLevel, getDefaultStage } from '../data/quranCurriculum';
 
 // Challenge types for the 3-challenge system
 type ChallengeType = 'memorization' | 'near_review' | 'far_review';
@@ -44,7 +46,7 @@ const POINTS_SYSTEM = {
   RETRY_PENALTY: -5,
 };
 
-// Firebase curriculum stage interface
+// Curriculum stage interface (adapted from QuranSurah)
 interface CurriculumStage {
   id: string;
   name: string;
@@ -61,8 +63,66 @@ interface CurriculumLevel {
   order: number;
   stages: CurriculumStage[];
   levelBonus: number;
-  centerId?: string;
 }
+
+// Convert QuranSurah to CurriculumStage format
+const convertSurahToStage = (surah: QuranSurah, juzIndex: number, surahIndex: number): CurriculumStage => {
+  // Calculate near review (previous 2 surahs)
+  const nearReviewParts: string[] = [];
+  const currentJuz = quranCurriculum[juzIndex];
+  
+  // Get previous surahs from current juz
+  for (let i = surahIndex - 1; i >= Math.max(0, surahIndex - 2); i--) {
+    nearReviewParts.push(currentJuz.surahs[i].name);
+  }
+  
+  // If we need more surahs, get from previous juz
+  if (nearReviewParts.length < 2 && juzIndex > 0) {
+    const prevJuz = quranCurriculum[juzIndex - 1];
+    const remaining = 2 - nearReviewParts.length;
+    for (let i = prevJuz.surahs.length - 1; i >= Math.max(0, prevJuz.surahs.length - remaining); i--) {
+      nearReviewParts.push(prevJuz.surahs[i].name);
+    }
+  }
+  
+  // Calculate far review (from earlier completed juz)
+  let farReview = '-';
+  if (juzIndex > 0) {
+    // Review from 2 juz back if available
+    const farJuzIndex = Math.max(0, juzIndex - 2);
+    const farJuz = quranCurriculum[farJuzIndex];
+    if (farJuz.surahs.length > 0) {
+      const randomSurah = farJuz.surahs[Math.floor(surahIndex % farJuz.surahs.length)];
+      farReview = randomSurah.name;
+    }
+  }
+  
+  return {
+    id: surah.id,
+    name: surah.name,
+    order: surah.order,
+    memorization: `${surah.name} (${surah.ayahCount} آية)`,
+    nearReview: nearReviewParts.length > 0 ? nearReviewParts.join(' + ') : '-',
+    farReview: farReview,
+    stageBonus: 30
+  };
+};
+
+// Convert QuranJuz to CurriculumLevel format
+const convertJuzToLevel = (juz: QuranJuz, juzIndex: number): CurriculumLevel => {
+  return {
+    id: juz.id,
+    name: juz.name,
+    order: juz.order,
+    stages: juz.surahs.map((surah, surahIndex) => convertSurahToStage(surah, juzIndex, surahIndex)),
+    levelBonus: 200
+  };
+};
+
+// Get all curriculum levels from quranCurriculum
+const getCurriculumLevels = (): CurriculumLevel[] => {
+  return quranCurriculum.map((juz, index) => convertJuzToLevel(juz, index));
+};
 
 const StudentAchievements = () => {
   const { userProfile, isTeacher } = useAuth();
@@ -76,8 +136,8 @@ const StudentAchievements = () => {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmTargetId, setConfirmTargetId] = useState<string | null>(null);
   
-  // Curriculum from Firebase
-  const [curriculumLevels, setCurriculumLevels] = useState<CurriculumLevel[]>([]);
+  // Curriculum from local data (quranCurriculum.ts)
+  const [curriculumLevels] = useState<CurriculumLevel[]>(getCurriculumLevels());
   
   // Teacher groups
   const [teacherGroups, setTeacherGroups] = useState<any[]>([]);
@@ -97,33 +157,19 @@ const StudentAchievements = () => {
   const [challengePassed, setChallengePassed] = useState<boolean>(true);
   const [recordDate, setRecordDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
-  // Fetch curriculum from Firebase
-  useEffect(() => {
-    const fetchCurriculum = async () => {
-      if (!userProfile?.centerId) return;
-      
-      try {
-        const curriculumRef = collection(db, 'curriculum');
-        const q = query(curriculumRef, where('centerId', '==', userProfile.centerId));
-        const snapshot = await getDocs(q);
-        
-        const levels: CurriculumLevel[] = [];
-        snapshot.forEach(docSnap => {
-          levels.push({
-            id: docSnap.id,
-            ...docSnap.data()
-          } as CurriculumLevel);
-        });
-        
-        levels.sort((a, b) => a.order - b.order);
-        setCurriculumLevels(levels);
-      } catch (error) {
-        console.error('Error fetching curriculum:', error);
-      }
-    };
+  // Message Box state
+  const [messageBox, setMessageBox] = useState<{
+    open: boolean;
+    type: 'success' | 'error' | 'warning' | 'info';
+    title: string;
+    message: string;
+  }>({ open: false, type: 'info', title: '', message: '' });
 
-    fetchCurriculum();
-  }, [userProfile?.centerId]);
+  const showMessage = (type: 'success' | 'error' | 'warning' | 'info', title: string, message: string) => {
+    setMessageBox({ open: true, type, title, message });
+  };
+
+  // Curriculum is now loaded from local quranCurriculum.ts - no Firebase fetch needed
 
   // Fetch teacher's groups
   useEffect(() => {
@@ -459,7 +505,7 @@ const StudentAchievements = () => {
     e.preventDefault();
     
     if (!selectedStudent || !selectedChallengeType || !studentLevel || !studentStage) {
-      alert('يرجى اختيار الطالب ونوع التحدي');
+      showMessage('warning', 'تنبيه', 'يرجى اختيار الطالب ونوع التحدي');
       return;
     }
 
@@ -554,7 +600,7 @@ const StudentAchievements = () => {
                   : s
               ));
               
-              alert('🎉 تم إتمام جميع تحديات المستوى! بانتظار اعتماد المشرف للانتقال للمستوى التالي.');
+              showMessage('success', '🎉 أحسنت!', 'تم إتمام جميع تحديات المستوى!\nبانتظار اعتماد المشرف للانتقال للمستوى التالي.');
             } else {
               // Not last stage - automatically move to next stage (no supervisor needed)
               await updateDoc(doc(db, 'users', selectedStudent.id), {
@@ -577,7 +623,7 @@ const StudentAchievements = () => {
                 setCompletedChallenges(new Set()); // Reset completed challenges for new stage
               }
               
-              alert(`✅ تم إتمام المرحلة بنجاح! تم الانتقال تلقائياً إلى ${nextStage?.name}`);
+              showMessage('success', '✅ تم إتمام المرحلة', `تم إتمام المرحلة بنجاح!\nتم الانتقال تلقائياً إلى ${nextStage?.name}`);
             }
             
             // Only reset challenge selection, keep student selected to continue
@@ -595,7 +641,7 @@ const StudentAchievements = () => {
             };
             
             if (nextChallenge) {
-              alert(`✅ تم اجتياز ${challengeLabels[selectedChallengeType]}! التحدي التالي: ${challengeLabels[nextChallenge]}`);
+              showMessage('success', '✅ أحسنت!', `تم اجتياز ${challengeLabels[selectedChallengeType]}!\nالتحدي التالي: ${challengeLabels[nextChallenge]}`);
             }
             
             // Only reset challenge selection, keep student selected
@@ -611,7 +657,7 @@ const StudentAchievements = () => {
       resetForm();
     } catch (error) {
       console.error('Error recording challenge:', error);
-      alert('حدث خطأ أثناء حفظ البيانات');
+      showMessage('error', 'خطأ', 'حدث خطأ أثناء حفظ البيانات. يرجى المحاولة مرة أخرى.');
     }
   };
 
@@ -643,7 +689,7 @@ const StudentAchievements = () => {
       setAchievements((prev) => prev.filter((a) => a.id !== id));
     } catch (error) {
       console.error('Error deleting achievement:', error);
-      alert('حدث خطأ أثناء حذف البيانات');
+      showMessage('error', 'خطأ', 'حدث خطأ أثناء حذف البيانات. يرجى المحاولة مرة أخرى.');
     }
   };
 
@@ -1122,6 +1168,15 @@ const StudentAchievements = () => {
           setConfirmOpen(false);
           setConfirmTargetId(null);
         }}
+      />
+
+      {/* Message Box */}
+      <MessageBox
+        open={messageBox.open}
+        type={messageBox.type}
+        title={messageBox.title}
+        message={messageBox.message}
+        onClose={() => setMessageBox({ ...messageBox, open: false })}
       />
     </section>
   );

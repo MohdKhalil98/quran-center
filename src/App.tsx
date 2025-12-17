@@ -18,6 +18,17 @@ import Centers from './pages/Centers';
 import PendingRequests from './pages/PendingRequests';
 import MyProgress from './pages/MyProgress';
 import Leaderboard from './pages/Leaderboard';
+import { useAuth } from './context/AuthContext';
+
+// Component to handle default redirect based on role
+const DefaultRedirect = () => {
+  const { userProfile } = useAuth();
+  
+  if (userProfile?.role === 'student') {
+    return <Navigate to="/my-progress" replace />;
+  }
+  return <Navigate to="/dashboard" replace />;
+};
 
 function App() {
   return (
@@ -26,7 +37,7 @@ function App() {
       <Route path="/register" element={<Register />} />
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
-          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route index element={<DefaultRedirect />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/tracks" element={<Tracks />} />
           <Route path="/groups" element={<Groups />} />
@@ -44,7 +55,7 @@ function App() {
           <Route path="/leaderboard" element={<Leaderboard />} />
         </Route>
       </Route>
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<DefaultRedirect />} />
     </Routes>
   );
 }

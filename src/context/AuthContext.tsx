@@ -31,20 +31,16 @@ export interface UserProfile {
   active: boolean;
   status?: 'pending' | 'approved' | 'rejected'; // للطلاب - حالة الموافقة
   
-  // Progress Tracking
-  currentLevel?: number;
-  currentStage?: number;
-  levelId?: number; // Added for compatibility
-  levelName?: string; // Added for compatibility
-  partId?: number; // Added for compatibility
-  partName?: string; // Added for compatibility
+  // Progress Tracking - New Firebase-based curriculum
+  levelId?: string; // Firebase document ID for level
+  levelName?: string;
+  stageId?: string; // Firebase document ID for stage
+  stageName?: string;
+  currentChallenge?: 'memorization' | 'near_review' | 'far_review';
   completedLevels?: number;
   totalPoints?: number;
   levelStatus?: 'in-progress' | 'pending_supervisor' | 'completed';
-  // Stage advancement tracking
   stageStatus?: 'in-progress' | 'pending_supervisor';
-  pendingPartId?: number | null;
-  pendingPartName?: string | null;
   pendingLevelUp?: boolean;
 }
 

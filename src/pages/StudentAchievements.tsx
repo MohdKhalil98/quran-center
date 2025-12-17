@@ -88,6 +88,7 @@ const StudentAchievements = () => {
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [studentLevel, setStudentLevel] = useState<CurriculumLevel | null>(null);
   const [studentStage, setStudentStage] = useState<CurriculumStage | null>(null);
+  const [completedChallenges, setCompletedChallenges] = useState<Set<ChallengeType>>(new Set());
   
   // Challenge recording state
   const [selectedChallengeType, setSelectedChallengeType] = useState<ChallengeType | ''>('');
@@ -277,26 +278,81 @@ const StudentAchievements = () => {
   };
 
   // Handle student selection
-  const handleStudentSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleStudentSelect = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const studentId = e.target.value;
-    const student = (isTeacher ? groupStudents : students).find((s) => s.id === studentId);
-    setSelectedStudent(student || null);
-    setSelectedChallengeType('');
-    
-    if (student && curriculumLevels.length > 0) {
-      // Find student's current level and stage from Firebase curriculum
-      const level = curriculumLevels.find(l => l.id === student.levelId) || curriculumLevels[0];
-      setStudentLevel(level);
-      
-      if (level && level.stages.length > 0) {
-        const stage = level.stages.find(s => s.id === student.stageId) || level.stages[0];
-        setStudentStage(stage);
-      } else {
-        setStudentStage(null);
-      }
-    } else {
+    if (!studentId) {
+      setSelectedStudent(null);
       setStudentLevel(null);
       setStudentStage(null);
+      setCompletedChallenges(new Set());
+      return;
+    }
+    
+    setSelectedChallengeType('');
+    setCompletedChallenges(new Set());
+    
+    try {
+      // Fetch fresh student data from Firebase to get latest stageId/levelId
+      const studentDoc = await getDocs(query(
+        collection(db, 'users'),
+        where('__name__', '==', studentId)
+      ));
+      
+      let freshStudent: any = null;
+      if (!studentDoc.empty) {
+        const docData = studentDoc.docs[0].data();
+        freshStudent = {
+          id: studentDoc.docs[0].id,
+          ...docData
+        };
+      } else {
+        // Fallback to local data
+        freshStudent = (isTeacher ? groupStudents : students).find((s) => s.id === studentId);
+      }
+      
+      setSelectedStudent(freshStudent || null);
+      
+      if (freshStudent && curriculumLevels.length > 0) {
+        // Find student's current level and stage from Firebase curriculum
+        const level = curriculumLevels.find(l => l.id === freshStudent.levelId) || curriculumLevels[0];
+        setStudentLevel(level);
+        
+        let currentStage: CurriculumStage | null = null;
+        if (level && level.stages.length > 0) {
+          currentStage = level.stages.find(s => s.id === freshStudent.stageId) || level.stages[0];
+          setStudentStage(currentStage);
+        } else {
+          setStudentStage(null);
+        }
+        
+        // Fetch completed challenges for this student in current stage
+        if (currentStage) {
+          const achievementsQuery = query(
+            collection(db, 'student_achievements'),
+            where('studentId', '==', studentId),
+            where('stageId', '==', currentStage.id),
+            where('challengePassed', '==', true)
+          );
+          const snapshot = await getDocs(achievementsQuery);
+          
+          const completed = new Set<ChallengeType>();
+          snapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            if (data.challengeType) {
+              completed.add(data.challengeType as ChallengeType);
+            }
+          });
+          setCompletedChallenges(completed);
+        }
+      } else {
+        setStudentLevel(null);
+        setStudentStage(null);
+      }
+    } catch (error) {
+      console.error('Error fetching student data:', error);
+      // Fallback to local data
+      const student = (isTeacher ? groupStudents : students).find((s) => s.id === studentId);
+      setSelectedStudent(student || null);
     }
   };
 
@@ -354,8 +410,16 @@ const StudentAchievements = () => {
     return basePoints;
   };
 
-  // Check if all 3 challenges are completed for current stage
-  const checkStageCompletion = async (studentId: string, stageId: string): Promise<boolean> => {
+  // Helper function to check if a challenge is empty/not applicable
+  const isChallengeEmpty = (value: string): boolean => {
+    if (!value) return true;
+    const emptyValues = ['-', 'لا يوجد', 'لايوجد', '', 'null', 'undefined'];
+    return emptyValues.includes(value.trim().toLowerCase()) || value.trim() === '';
+  };
+
+  // Check if all required challenges are completed for current stage
+  // Takes into account that some challenges may be empty (not applicable)
+  const checkStageCompletion = async (studentId: string, stageId: string, stage: CurriculumStage): Promise<boolean> => {
     try {
       const achievementsQuery = query(
         collection(db, 'student_achievements'),
@@ -373,9 +437,17 @@ const StudentAchievements = () => {
         }
       });
       
-      return completedTypes.has('memorization') && 
-             completedTypes.has('near_review') && 
-             completedTypes.has('far_review');
+      // Check which challenges are required (not empty)
+      const memorizationRequired = !isChallengeEmpty(stage.memorization);
+      const nearReviewRequired = !isChallengeEmpty(stage.nearReview);
+      const farReviewRequired = !isChallengeEmpty(stage.farReview);
+      
+      // Check if all required challenges are completed
+      const memorizationDone = !memorizationRequired || completedTypes.has('memorization');
+      const nearReviewDone = !nearReviewRequired || completedTypes.has('near_review');
+      const farReviewDone = !farReviewRequired || completedTypes.has('far_review');
+      
+      return memorizationDone && nearReviewDone && farReviewDone;
     } catch (error) {
       console.error('Error checking stage completion:', error);
       return false;
@@ -432,31 +504,106 @@ const StudentAchievements = () => {
           totalPoints: newPoints
         });
 
-        // Check if all 3 challenges are completed after adding this one
+        // If challenge passed, update student's current challenge and UI
         if (challengePassed) {
-          const allCompleted = await checkStageCompletion(selectedStudent.id, studentStage.id);
+          // Update completed challenges in UI immediately
+          setCompletedChallenges(prev => {
+            const newSet = new Set(prev);
+            newSet.add(selectedChallengeType);
+            return newSet;
+          });
+          
+          // Determine next challenge based on what's available in this stage
+          let nextChallenge: ChallengeType | null = null;
+          if (selectedChallengeType === 'memorization' && !isChallengeEmpty(studentStage.nearReview)) {
+            nextChallenge = 'near_review';
+          } else if (selectedChallengeType === 'near_review' && !isChallengeEmpty(studentStage.farReview)) {
+            nextChallenge = 'far_review';
+          }
+          
+          // Update student's current challenge in database
+          if (nextChallenge) {
+            await updateDoc(doc(db, 'users', selectedStudent.id), {
+              currentChallenge: nextChallenge
+            });
+          }
+          
+          // Check if all required challenges are completed for this stage
+          const allCompleted = await checkStageCompletion(selectedStudent.id, studentStage.id, studentStage);
           
           if (allCompleted) {
-            // All challenges completed - set pending supervisor approval
             const isLastStage = studentStage.order === studentLevel.stages.length;
             const nextStage = isLastStage ? null : studentLevel.stages.find(s => s.order === studentStage.order + 1);
             
             // Add stage completion bonus
             const bonusPoints = newPoints + POINTS_SYSTEM.STAGE_COMPLETION;
             
-            await updateDoc(doc(db, 'users', selectedStudent.id), {
-              stageStatus: 'pending_supervisor',
-              pendingStageId: isLastStage ? null : nextStage?.id,
-              pendingStageName: isLastStage ? null : nextStage?.name,
-              pendingLevelUp: isLastStage,
-              totalPoints: bonusPoints
-            });
-            
             if (isLastStage) {
+              // Last stage in level - need supervisor approval to move to next level
+              await updateDoc(doc(db, 'users', selectedStudent.id), {
+                stageStatus: 'pending_supervisor',
+                pendingLevelUp: true,
+                currentChallenge: 'memorization',
+                totalPoints: bonusPoints
+              });
+              
+              // Update local state
+              setGroupStudents(prev => prev.map(s => 
+                s.id === selectedStudent.id 
+                  ? { ...s, stageStatus: 'pending_supervisor', pendingLevelUp: true, currentChallenge: 'memorization', totalPoints: bonusPoints }
+                  : s
+              ));
+              
               alert('🎉 تم إتمام جميع تحديات المستوى! بانتظار اعتماد المشرف للانتقال للمستوى التالي.');
             } else {
-              alert(`✅ تم إتمام جميع تحديات المرحلة! بانتظار اعتماد المشرف للانتقال إلى ${nextStage?.name}`);
+              // Not last stage - automatically move to next stage (no supervisor needed)
+              await updateDoc(doc(db, 'users', selectedStudent.id), {
+                stageId: nextStage?.id,
+                stageName: nextStage?.name,
+                currentChallenge: 'memorization',
+                totalPoints: bonusPoints
+              });
+              
+              // Update local state to reflect the new stage
+              setGroupStudents(prev => prev.map(s => 
+                s.id === selectedStudent.id 
+                  ? { ...s, stageId: nextStage?.id, stageName: nextStage?.name, currentChallenge: 'memorization', totalPoints: bonusPoints }
+                  : s
+              ));
+              
+              // Update UI immediately to show the new stage
+              if (nextStage) {
+                setStudentStage(nextStage);
+                setCompletedChallenges(new Set()); // Reset completed challenges for new stage
+              }
+              
+              alert(`✅ تم إتمام المرحلة بنجاح! تم الانتقال تلقائياً إلى ${nextStage?.name}`);
             }
+            
+            // Only reset challenge selection, keep student selected to continue
+            setSelectedChallengeType('');
+            setChallengeRating(5);
+            setChallengeNotes('');
+            setChallengePassed(true);
+            return;
+          } else {
+            // Show progress message and clear selected challenge type only
+            const challengeLabels: Record<ChallengeType, string> = {
+              'memorization': 'الحفظ',
+              'near_review': 'المراجعة القريبة',
+              'far_review': 'المراجعة البعيدة'
+            };
+            
+            if (nextChallenge) {
+              alert(`✅ تم اجتياز ${challengeLabels[selectedChallengeType]}! التحدي التالي: ${challengeLabels[nextChallenge]}`);
+            }
+            
+            // Only reset challenge selection, keep student selected
+            setSelectedChallengeType('');
+            setChallengeRating(5);
+            setChallengeNotes('');
+            setChallengePassed(true);
+            return;
           }
         }
       }
@@ -478,6 +625,7 @@ const StudentAchievements = () => {
     setChallengePassed(true);
     setRecordDate(new Date().toISOString().split('T')[0]);
     setEditingId(null);
+    setCompletedChallenges(new Set());
   };
 
   const handleDeleteAchievement = (id: string) => {
@@ -605,35 +753,73 @@ const StudentAchievements = () => {
             
             {/* Three Challenges Display */}
             <div className="challenges-grid">
+              {/* Memorization Challenge */}
               <div 
-                className={`challenge-card memorization ${selectedChallengeType === 'memorization' ? 'selected' : ''}`}
-                onClick={() => setSelectedChallengeType('memorization')}
+                className={`challenge-card memorization ${selectedChallengeType === 'memorization' ? 'selected' : ''} ${completedChallenges.has('memorization') ? 'completed' : ''}`}
+                onClick={() => !completedChallenges.has('memorization') && setSelectedChallengeType('memorization')}
               >
+                {completedChallenges.has('memorization') && <div className="completed-badge">✓</div>}
                 <div className="challenge-icon">📖</div>
                 <div className="challenge-title">الحفظ</div>
                 <div className="challenge-content">{studentStage.memorization}</div>
-                <div className="challenge-points">{POINTS_SYSTEM.MEMORIZATION} نقطة</div>
+                <div className="challenge-points">
+                  {completedChallenges.has('memorization') ? '✅ مكتمل' : `${POINTS_SYSTEM.MEMORIZATION} نقطة`}
+                </div>
               </div>
               
-              <div 
-                className={`challenge-card near-review ${selectedChallengeType === 'near_review' ? 'selected' : ''} ${studentStage.nearReview === '-' ? 'disabled' : ''}`}
-                onClick={() => studentStage.nearReview !== '-' && setSelectedChallengeType('near_review')}
-              >
-                <div className="challenge-icon">🔄</div>
-                <div className="challenge-title">المراجعة القريبة</div>
-                <div className="challenge-content">{studentStage.nearReview}</div>
-                <div className="challenge-points">{studentStage.nearReview !== '-' ? `${POINTS_SYSTEM.NEAR_REVIEW} نقطة` : '-'}</div>
-              </div>
+              {/* Near Review Challenge */}
+              {(() => {
+                const isEmpty = isChallengeEmpty(studentStage.nearReview);
+                const isLocked = !completedChallenges.has('memorization') && !isEmpty;
+                const isCompleted = completedChallenges.has('near_review');
+                const isDisabled = isEmpty;
+                
+                return (
+                  <div 
+                    className={`challenge-card near-review ${selectedChallengeType === 'near_review' ? 'selected' : ''} ${isCompleted ? 'completed' : ''} ${isLocked ? 'locked' : ''} ${isDisabled ? 'disabled' : ''}`}
+                    onClick={() => !isLocked && !isDisabled && !isCompleted && setSelectedChallengeType('near_review')}
+                  >
+                    {isCompleted && <div className="completed-badge">✓</div>}
+                    {isLocked && <div className="lock-badge">🔒</div>}
+                    <div className="challenge-icon">🔄</div>
+                    <div className="challenge-title">المراجعة القريبة</div>
+                    <div className="challenge-content">{studentStage.nearReview}</div>
+                    <div className="challenge-points">
+                      {isCompleted ? '✅ مكتمل' : isLocked ? 'أكمل الحفظ أولاً' : isDisabled ? 'لا يوجد' : `${POINTS_SYSTEM.NEAR_REVIEW} نقطة`}
+                    </div>
+                  </div>
+                );
+              })()}
               
-              <div 
-                className={`challenge-card far-review ${selectedChallengeType === 'far_review' ? 'selected' : ''} ${studentStage.farReview === '-' ? 'disabled' : ''}`}
-                onClick={() => studentStage.farReview !== '-' && setSelectedChallengeType('far_review')}
-              >
-                <div className="challenge-icon">📚</div>
-                <div className="challenge-title">المراجعة البعيدة</div>
-                <div className="challenge-content">{studentStage.farReview}</div>
-                <div className="challenge-points">{studentStage.farReview !== '-' ? `${POINTS_SYSTEM.FAR_REVIEW} نقطة` : '-'}</div>
-              </div>
+              {/* Far Review Challenge */}
+              {(() => {
+                const nearReviewEmpty = isChallengeEmpty(studentStage.nearReview);
+                const farReviewEmpty = isChallengeEmpty(studentStage.farReview);
+                // If near review is empty, far review depends on memorization
+                // Otherwise, it depends on near review
+                const prerequisiteCompleted = nearReviewEmpty 
+                  ? completedChallenges.has('memorization')
+                  : completedChallenges.has('near_review');
+                const isLocked = !prerequisiteCompleted && !farReviewEmpty;
+                const isCompleted = completedChallenges.has('far_review');
+                const isDisabled = farReviewEmpty;
+                
+                return (
+                  <div 
+                    className={`challenge-card far-review ${selectedChallengeType === 'far_review' ? 'selected' : ''} ${isCompleted ? 'completed' : ''} ${isLocked ? 'locked' : ''} ${isDisabled ? 'disabled' : ''}`}
+                    onClick={() => !isLocked && !isDisabled && !isCompleted && setSelectedChallengeType('far_review')}
+                  >
+                    {isCompleted && <div className="completed-badge">✓</div>}
+                    {isLocked && <div className="lock-badge">🔒</div>}
+                    <div className="challenge-icon">📚</div>
+                    <div className="challenge-title">المراجعة البعيدة</div>
+                    <div className="challenge-content">{studentStage.farReview}</div>
+                    <div className="challenge-points">
+                      {isCompleted ? '✅ مكتمل' : isLocked ? (nearReviewEmpty ? 'أكمل الحفظ أولاً' : 'أكمل المراجعة القريبة أولاً') : isDisabled ? 'لا يوجد' : `${POINTS_SYSTEM.FAR_REVIEW} نقطة`}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}

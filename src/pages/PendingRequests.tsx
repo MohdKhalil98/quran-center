@@ -3,9 +3,22 @@ import { collection, getDocs, updateDoc, doc, query, where, getDoc } from 'fireb
 import { db } from '../firebase';
 import { useAuth, UserProfile } from '../context/AuthContext';
 import { Navigate } from 'react-router-dom';
+import MessageBox from '../components/MessageBox';
 import '../styles/PendingRequests.css';
 
-import curriculum from '../data/curriculumData';
+// New curriculum interfaces from Firebase
+interface CurriculumStage {
+  id: string;
+  name: string;
+  order: number;
+}
+
+interface CurriculumLevel {
+  id: string;
+  name: string;
+  order: number;
+  stages: CurriculumStage[];
+}
 
 interface PendingStudent extends UserProfile {
   centerName?: string;
@@ -20,13 +33,58 @@ interface Group {
 const PendingRequests = () => {
   const { isSupervisor, userProfile } = useAuth();
   const [pendingStudents, setPendingStudents] = useState<PendingStudent[]>([]);
-  const [pendingLevelApprovals, setPendingLevelApprovals] = useState<PendingStudent[]>([]); // New state
+  const [pendingLevelApprovals, setPendingLevelApprovals] = useState<PendingStudent[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
+  const [curriculumLevels, setCurriculumLevels] = useState<CurriculumLevel[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<PendingStudent | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState('');
+  
+  // Message Box state
+  const [messageBox, setMessageBox] = useState<{
+    open: boolean;
+    type: 'success' | 'error' | 'warning' | 'info';
+    title: string;
+    message: string;
+  }>({ open: false, type: 'info', title: '', message: '' });
+
+  const showMessage = (type: 'success' | 'error' | 'warning' | 'info', title: string, message: string) => {
+    setMessageBox({ open: true, type, title, message });
+  };
+
+  useEffect(() => {
+    if (userProfile?.centerId) {
+      fetchCurriculum();
+      fetchPendingStudents();
+      fetchGroups();
+    }
+  }, [userProfile]);
+
+  // Fetch curriculum from Firebase
+  const fetchCurriculum = async () => {
+    if (!userProfile?.centerId) return;
+
+    try {
+      const curriculumRef = collection(db, 'curriculum');
+      const q = query(curriculumRef, where('centerId', '==', userProfile.centerId));
+      const snapshot = await getDocs(q);
+      
+      const levels: CurriculumLevel[] = [];
+      snapshot.forEach(docSnap => {
+        levels.push({
+          id: docSnap.id,
+          ...docSnap.data()
+        } as CurriculumLevel);
+      });
+      
+      levels.sort((a, b) => a.order - b.order);
+      setCurriculumLevels(levels);
+    } catch (error) {
+      console.error('Error fetching curriculum:', error);
+    }
+  };
 
   useEffect(() => {
     if (userProfile?.centerId) {
@@ -122,57 +180,51 @@ const PendingRequests = () => {
     setProcessing(student.uid);
     try {
       if (isLevelUp) {
-        // Level advancement
-        const currentLevelId = student.levelId || 1;
-        const nextLevelId = currentLevelId + 1;
-        const nextLevel = curriculum.find(l => l.id === nextLevelId);
+        // Level advancement - Find next level from Firebase curriculum
+        const currentLevel = curriculumLevels.find(l => l.id === student.levelId);
+        const currentLevelOrder = currentLevel?.order || 1;
+        const nextLevel = curriculumLevels.find(l => l.order === currentLevelOrder + 1);
         
-        if (nextLevel) {
-          const firstPart = nextLevel.parts[0];
+        if (nextLevel && nextLevel.stages && nextLevel.stages.length > 0) {
+          const firstStage = nextLevel.stages.sort((a, b) => a.order - b.order)[0];
           await updateDoc(doc(db, 'users', student.uid), {
-            levelId: nextLevelId,
+            levelId: nextLevel.id,
             levelName: nextLevel.name,
-            partId: firstPart.id,
-            partName: firstPart.name,
+            stageId: firstStage.id,
+            stageName: firstStage.name,
             levelStatus: 'in-progress',
             stageStatus: null,
-            pendingPartId: null,
-            pendingPartName: null,
             pendingLevelUp: null,
+            currentChallenge: 'memorization',
             completedLevels: (student.completedLevels || 0) + 1,
-            totalPoints: (student.totalPoints || 0) + 500
+            totalPoints: (student.totalPoints || 0) + 200
           });
-          alert('تم اعتماد انتقال الطالب للمستوى التالي بنجاح');
+          showMessage('success', 'تم الاعتماد', `تم اعتماد انتقال الطالب ${student.name} للمستوى التالي بنجاح`);
         } else {
           // Finished all levels
           await updateDoc(doc(db, 'users', student.uid), {
             levelStatus: 'completed',
             stageStatus: null,
-            pendingPartId: null,
-            pendingPartName: null,
             pendingLevelUp: null,
-            completedLevels: 5,
-            totalPoints: (student.totalPoints || 0) + 1000
+            completedLevels: curriculumLevels.length,
+            totalPoints: (student.totalPoints || 0) + 500
           });
-          alert('مبارك! أتم الطالب جميع المستويات.');
+          showMessage('success', '🎉 مبارك!', `أتم الطالب ${student.name} جميع المستويات بنجاح!\nهذا إنجاز عظيم!`);
         }
       } else {
-        // Stage advancement (within same level)
+        // Stage advancement (within same level) - should not happen anymore
+        // Stages now transition automatically, only levels need approval
         await updateDoc(doc(db, 'users', student.uid), {
-          partId: student.pendingPartId,
-          partName: student.pendingPartName,
           stageStatus: null,
-          pendingPartId: null,
-          pendingPartName: null,
           pendingLevelUp: null
         });
-        alert(`تم اعتماد انتقال الطالب إلى ${student.pendingPartName} بنجاح`);
+        showMessage('success', 'تم الاعتماد', 'تم اعتماد الطلب بنجاح');
       }
       
       setPendingLevelApprovals(prev => prev.filter(s => s.uid !== student.uid));
     } catch (error) {
       console.error('Error approving:', error);
-      alert('حدث خطأ أثناء الاعتماد');
+      showMessage('error', 'خطأ', 'حدث خطأ أثناء الاعتماد. يرجى المحاولة مرة أخرى.');
     } finally {
       setProcessing(null);
     }
@@ -187,7 +239,7 @@ const PendingRequests = () => {
   const confirmApprove = async () => {
     if (!selectedStudent) return;
     if (!selectedGroupId) {
-      alert('يرجى اختيار الحلقة');
+      showMessage('warning', 'تنبيه', 'يرجى اختيار الحلقة أولاً');
       return;
     }
 
@@ -197,13 +249,13 @@ const PendingRequests = () => {
         status: 'approved',
         groupId: selectedGroupId
       });
-      alert(`تم قبول طلب الطالب ${selectedStudent.name} وإضافته للحلقة بنجاح`);
+      showMessage('success', 'تم قبول الطالب', `تم قبول طلب الطالب ${selectedStudent.name} وإضافته للحلقة بنجاح`);
       setShowGroupModal(false);
       setSelectedStudent(null);
       fetchPendingStudents();
     } catch (error) {
       console.error('Error approving student:', error);
-      alert('حدث خطأ أثناء الموافقة على الطلب');
+      showMessage('error', 'خطأ', 'حدث خطأ أثناء الموافقة على الطلب. يرجى المحاولة مرة أخرى.');
     } finally {
       setProcessing(null);
     }
@@ -218,11 +270,11 @@ const PendingRequests = () => {
         status: 'rejected',
         active: false
       });
-      alert(`تم رفض طلب الطالب ${student.name}`);
+      showMessage('info', 'تم الرفض', `تم رفض طلب الطالب ${student.name}`);
       fetchPendingStudents();
     } catch (error) {
       console.error('Error rejecting student:', error);
-      alert('حدث خطأ أثناء رفض الطلب');
+      showMessage('error', 'خطأ', 'حدث خطأ أثناء رفض الطلب. يرجى المحاولة مرة أخرى.');
     } finally {
       setProcessing(null);
     }
@@ -282,12 +334,12 @@ const PendingRequests = () => {
                   </div>
                   <div className="info-row">
                     <span className="info-label">📖 المرحلة الحالية:</span>
-                    <span className="info-value">{student.partName || 'الجزء الأول'}</span>
+                    <span className="info-value">{student.stageName || 'غير محددة'}</span>
                   </div>
                   <div className="info-row">
                     <span className="info-label">➡️ الانتقال إلى:</span>
                     <span className="info-value" style={{ color: '#4caf50', fontWeight: 'bold' }}>
-                      {student.pendingLevelUp ? 'المستوى التالي' : student.pendingPartName}
+                      {student.pendingLevelUp ? 'المستوى التالي' : 'المرحلة التالية'}
                     </span>
                   </div>
                   <div className="info-row">
@@ -429,6 +481,15 @@ const PendingRequests = () => {
           </div>
         </div>
       )}
+
+      {/* Message Box */}
+      <MessageBox
+        open={messageBox.open}
+        type={messageBox.type}
+        title={messageBox.title}
+        message={messageBox.message}
+        onClose={() => setMessageBox({ ...messageBox, open: false })}
+      />
     </section>
   );
 };

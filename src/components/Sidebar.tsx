@@ -12,7 +12,7 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { path: '/dashboard', label: 'لوحة التحكم' },
+  { path: '/dashboard', label: 'لوحة التحكم', roles: ['admin', 'supervisor', 'teacher'] },
   // صفحات المطور فقط
   { path: '/centers', label: 'مراكز القرآن', roles: ['admin'] },
   { path: '/teachers', label: 'المعلمون', roles: ['admin'] },

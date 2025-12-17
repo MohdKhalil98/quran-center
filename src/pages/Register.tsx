@@ -3,6 +3,7 @@ import { Navigate, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
+import MessageBox from '../components/MessageBox';
 
 interface Center {
   id: string;
@@ -25,17 +26,24 @@ const Register = () => {
   });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
     const fetchCenters = async () => {
       try {
+        console.log('Fetching centers...');
         const centersSnap = await getDocs(collection(db, 'centers'));
-        const centersList = centersSnap.docs.map(doc => ({
-          id: doc.id,
-          name: doc.data().name,
-          address: doc.data().address
-        } as Center));
+        console.log('Centers count:', centersSnap.docs.length);
+        const centersList = centersSnap.docs.map(doc => {
+          console.log('Center doc:', doc.id, doc.data());
+          return {
+            id: doc.id,
+            name: doc.data().name,
+            address: doc.data().address
+          } as Center;
+        });
+        console.log('Centers list:', centersList);
         setCenters(centersList);
       } catch (error) {
         console.error('Error fetching centers:', error);
@@ -83,9 +91,10 @@ const Register = () => {
     try {
       await register(formData.email, formData.password, formData.name, formData.phone, formData.role, formData.centerId || undefined);
       if (formData.role === 'student') {
-        alert('تم إنشاء حسابك بنجاح!\n\nطلبك قيد المراجعة من قبل المشرف.\nسيتم إشعارك عند الموافقة على طلبك.');
+        setShowSuccessMessage(true);
+      } else {
+        navigate('/dashboard', { replace: true });
       }
-      navigate('/dashboard', { replace: true });
     } catch (err: any) {
       if (err.code === 'auth/email-already-in-use') {
         setError('البريد الإلكتروني مستخدم بالفعل');
@@ -142,7 +151,7 @@ const Register = () => {
               value={formData.phone}
               onChange={handleChange}
               required
-              placeholder="05xxxxxxxx"
+              placeholder="973xxxxxxxx"
             />
           </label>
 
@@ -170,14 +179,20 @@ const Register = () => {
                 disabled={loadingCenters}
               >
                 <option value="">
-                  {loadingCenters ? 'جاري تحميل المراكز...' : 'اختر المركز'}
+                  {loadingCenters ? 'جاري تحميل المراكز...' : 
+                   centers.length === 0 ? 'لا توجد مراكز متاحة' : 'اختر المركز'}
                 </option>
                 {centers.map(center => (
                   <option key={center.id} value={center.id}>
-                    {center.name} - {center.address}
+                    {center.name} {center.address ? `- ${center.address}` : ''}
                   </option>
                 ))}
               </select>
+              {!loadingCenters && centers.length === 0 && (
+                <small style={{ color: '#d32f2f', display: 'block', marginTop: '5px' }}>
+                  ⚠️ لا توجد مراكز في النظام. تواصل مع المسؤول لإضافة مركز.
+                </small>
+              )}
             </label>
           )}
 
@@ -218,6 +233,19 @@ const Register = () => {
           لديك حساب بالفعل؟ <Link to="/login">تسجيل الدخول</Link>
         </p>
       </div>
+
+      {/* Success Message */}
+      <MessageBox
+        open={showSuccessMessage}
+        type="success"
+        title="تم إنشاء حسابك بنجاح! 🎉"
+        message="طلبك قيد المراجعة من قبل المشرف.
+سيتم إشعارك عند الموافقة على طلبك."
+        onClose={() => {
+          setShowSuccessMessage(false);
+          navigate('/dashboard', { replace: true });
+        }}
+      />
     </div>
   );
 };

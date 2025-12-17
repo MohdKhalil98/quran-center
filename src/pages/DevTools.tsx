@@ -6,7 +6,8 @@ import {
   query,
   where,
   deleteDoc,
-  doc
+  doc,
+  updateDoc
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import '../styles/DevTools.css';
@@ -19,7 +20,7 @@ const DevTools = () => {
     students: true,
     teachers: true,
     groups: true,
-    activities: true,
+    points: true,
     achievements: true
   });
 
@@ -117,17 +118,57 @@ const DevTools = () => {
   const confirmDeleteData = async () => {
     setRunning(true);
     try {
-      const collectionsToDelete = [];
-      if (deleteOptions.students) collectionsToDelete.push('students');
-      if (deleteOptions.teachers) collectionsToDelete.push('teachers');
-      if (deleteOptions.groups) collectionsToDelete.push('groups');
-      if (deleteOptions.activities) collectionsToDelete.push('activities');
-      if (deleteOptions.achievements) collectionsToDelete.push('student_achievements', 'attendance');
+      const collectionsToDelete: string[] = [];
+      
+      // Students are in 'users' collection with role='student'
+      if (deleteOptions.students) {
+        // Delete students from users collection
+        const studentsQuery = query(collection(db, 'users'), where('role', '==', 'student'));
+        const studentsSnap = await getDocs(studentsQuery);
+        for (const d of studentsSnap.docs) {
+          await deleteDoc(doc(db, 'users', d.id));
+        }
+      }
+      
+      // Teachers are in 'users' collection with role='teacher'
+      if (deleteOptions.teachers) {
+        const teachersQuery = query(collection(db, 'users'), where('role', '==', 'teacher'));
+        const teachersSnap = await getDocs(teachersQuery);
+        for (const d of teachersSnap.docs) {
+          await deleteDoc(doc(db, 'users', d.id));
+        }
+      }
+      
+      // Groups/Tracks
+      if (deleteOptions.groups) {
+        collectionsToDelete.push('groups', 'tracks');
+      }
+      
+      // Reset student points to 0
+      if (deleteOptions.points) {
+        const allUsersSnap = await getDocs(collection(db, 'users'));
+        for (const d of allUsersSnap.docs) {
+          const userData = d.data();
+          if (userData.points && userData.points > 0) {
+            await updateDoc(doc(db, 'users', d.id), { points: 0 });
+          }
+        }
+      }
+      
+      // Achievements and attendance
+      if (deleteOptions.achievements) {
+        collectionsToDelete.push('student_achievements', 'attendance', 'levelRequests');
+      }
 
+      // Delete from other collections
       for (const col of collectionsToDelete) {
-        const snap = await getDocs(collection(db, col));
-        for (const d of snap.docs) {
-          await deleteDoc(doc(db, col, d.id));
+        try {
+          const snap = await getDocs(collection(db, col));
+          for (const d of snap.docs) {
+            await deleteDoc(doc(db, col, d.id));
+          }
+        } catch (e) {
+          console.log(`Collection ${col} may not exist or is empty`);
         }
       }
 
@@ -135,10 +176,15 @@ const DevTools = () => {
       if (deleteOptions.students) deletedItems.push('الطلاب');
       if (deleteOptions.teachers) deletedItems.push('المعلمين');
       if (deleteOptions.groups) deletedItems.push('الحلقات والمساقات');
-      if (deleteOptions.activities) deletedItems.push('الأنشطة');
+      if (deleteOptions.points) deletedItems.push('نقاط الطلاب');
       if (deleteOptions.achievements) deletedItems.push('السجلات');
 
-      setDeleteMessage(`✅ تم حذف: ${deletedItems.join(' - ')}`);
+      let authNote = '';
+      if (deleteOptions.students || deleteOptions.teachers) {
+        authNote = '\n\n⚠️ ملاحظة: تم حذف البيانات من قاعدة البيانات فقط.\nلحذف حسابات المستخدمين من Firebase Auth، يجب الحذف يدوياً من Firebase Console.';
+      }
+
+      setDeleteMessage(`✅ تم حذف: ${deletedItems.join(' - ')}${authNote}`);
     } catch (error) {
       console.error('Error clearing data:', error);
       setDeleteMessage('❌ حدث خطأ أثناء حذف البيانات');
@@ -159,6 +205,34 @@ const DevTools = () => {
     } catch (error) {
       console.error('Error reloading data:', error);
       alert('❌ حدث خطأ أثناء إعادة التحميل');
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const createDefaultCenter = async () => {
+    setRunning(true);
+    try {
+      // Check if center already exists
+      const centersSnap = await getDocs(collection(db, 'centers'));
+      if (centersSnap.docs.length > 0) {
+        alert('يوجد مركز بالفعل في النظام');
+        return;
+      }
+
+      // Create default center
+      await addDoc(collection(db, 'centers'), {
+        name: 'حلقات مسجد موزة بنت أحمد الرميحي',
+        address: 'البحرين',
+        phone: '97333333333',
+        createdAt: new Date().toISOString(),
+        active: true
+      });
+
+      alert('✅ تم إنشاء المركز الافتراضي بنجاح');
+    } catch (error) {
+      console.error('Error creating default center:', error);
+      alert('❌ حدث خطأ أثناء إنشاء المركز');
     } finally {
       setRunning(false);
     }
@@ -196,6 +270,13 @@ const DevTools = () => {
           </div>
           <div className="dev-card-body">
             <button 
+              className="btn btn-primary" 
+              onClick={createDefaultCenter} 
+              disabled={running}
+            >
+              🏢 إنشاء مركز افتراضي
+            </button>
+            <button 
               className="btn btn-secondary" 
               onClick={reloadAllData} 
               disabled={running}
@@ -222,7 +303,7 @@ const DevTools = () => {
             </div>
             <div className="modal-body">
               {deleteMessage ? (
-                <p className={`delete-message ${deleteMessage.startsWith('✅') ? 'success' : 'error'}`}>
+                <p className={`delete-message ${deleteMessage.startsWith('✅') ? 'success' : 'error'}`} style={{ whiteSpace: 'pre-line' }}>
                   {deleteMessage}
                 </p>
               ) : (
@@ -256,10 +337,10 @@ const DevTools = () => {
                     <label className="checkbox-label">
                       <input
                         type="checkbox"
-                        checked={deleteOptions.activities}
-                        onChange={(e) => setDeleteOptions({ ...deleteOptions, activities: e.target.checked })}
+                        checked={deleteOptions.points}
+                        onChange={(e) => setDeleteOptions({ ...deleteOptions, points: e.target.checked })}
                       />
-                      <span>جميع الأنشطة والأحداث</span>
+                      <span>نقاط الطلاب (تصفير)</span>
                     </label>
                     <label className="checkbox-label">
                       <input
@@ -275,9 +356,21 @@ const DevTools = () => {
             </div>
             <div className="modal-footer">
               {deleteMessage ? (
-                <button className="btn btn-primary" onClick={cancelDelete}>
-                  إغلاق
-                </button>
+                <>
+                  {(deleteOptions.students || deleteOptions.teachers) && (
+                    <a 
+                      href="https://console.firebase.google.com/project/halqatmoza/authentication/users" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="btn btn-secondary"
+                    >
+                      🔗 فتح Firebase Auth
+                    </a>
+                  )}
+                  <button className="btn btn-primary" onClick={cancelDelete}>
+                    إغلاق
+                  </button>
+                </>
               ) : (
                 <>
                   <button className="btn btn-secondary" onClick={cancelDelete}>

@@ -34,6 +34,10 @@ button {
   font-family: inherit;
 }
 
+input, select, textarea {
+  font-family: 'Cairo', sans-serif;
+}
+
 table {
   width: 100%;
 }

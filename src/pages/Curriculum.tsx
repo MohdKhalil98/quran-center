@@ -1,28 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where } from 'firebase/firestore';
-import { useAuth } from '../context/AuthContext';
+import React, { useState } from 'react';
+import { quranCurriculum, QuranJuz, QuranSurah } from '../data/quranCurriculum';
 import '../styles/Curriculum.css';
-
-// Types for the new challenge-based curriculum
-interface Stage {
-  id: string;
-  name: string;
-  order: number;
-  memorization: string;      // الحفظ
-  nearReview: string;        // المراجعة القريبة
-  farReview: string;         // المراجعة البعيدة
-  stageBonus: number;
-}
-
-interface CurriculumLevel {
-  id: string;
-  name: string;
-  order: number;
-  stages: Stage[];
-  levelBonus: number;
-  centerId?: string;
-}
 
 // Points configuration
 const POINTS_SYSTEM = {
@@ -32,302 +10,58 @@ const POINTS_SYSTEM = {
   STAGE_COMPLETION: 30,
   LEVEL_COMPLETION: 200,
   PERFECT_RATING_BONUS: 10,
-  RETRY_PENALTY: -5,
 };
 
 const Curriculum: React.FC = () => {
-  const { userProfile, isSupervisor, isAdmin, isTeacher, isStudent } = useAuth();
-  const [levels, setLevels] = useState<CurriculumLevel[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedLevel, setSelectedLevel] = useState<CurriculumLevel | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [isAddingLevel, setIsAddingLevel] = useState(false);
-  const [isAddingStage, setIsAddingStage] = useState(false);
-  const [editingStage, setEditingStage] = useState<Stage | null>(null);
+  const [selectedLevel, setSelectedLevel] = useState<QuranJuz | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  // Form states
-  const [newLevelName, setNewLevelName] = useState('');
-  const [newLevelBonus, setNewLevelBonus] = useState(200);
-  const [newStageName, setNewStageName] = useState('');
-  const [newStageMemorization, setNewStageMemorization] = useState('');
-  const [newStageNearReview, setNewStageNearReview] = useState('');
-  const [newStageFarReview, setNewStageFarReview] = useState('');
-  const [newStageBonus, setNewStageBonus] = useState(30);
+  // Filter levels based on search
+  const filteredLevels = quranCurriculum.filter(level =>
+    level.name.includes(searchTerm) ||
+    level.surahs.some(surah => surah.name.includes(searchTerm))
+  );
 
-  const canEdit = isSupervisor || isAdmin;
-
-  useEffect(() => {
-    fetchCurriculum();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userProfile?.centerId]);
-
-  const fetchCurriculum = async () => {
-    if (!userProfile?.centerId) return;
-    
-    try {
-      setLoading(true);
-      const curriculumRef = collection(db, 'curriculum');
-      const q = query(curriculumRef, where('centerId', '==', userProfile.centerId));
-      const snapshot = await getDocs(q);
-      
-      const fetchedLevels: CurriculumLevel[] = [];
-      snapshot.forEach(docSnap => {
-        fetchedLevels.push({
-          id: docSnap.id,
-          ...docSnap.data()
-        } as CurriculumLevel);
-      });
-      
-      // Sort by order
-      fetchedLevels.sort((a, b) => a.order - b.order);
-      setLevels(fetchedLevels);
-      
-      // If no curriculum exists for this center, create default
-      if (fetchedLevels.length === 0 && canEdit) {
-        await createDefaultCurriculum();
-      }
-    } catch (error) {
-      console.error('Error fetching curriculum:', error);
-    } finally {
-      setLoading(false);
-    }
+  // Get memorization content for a stage (current surah)
+  const getMemorizationContent = (surah: QuranSurah): string => {
+    return `سورة ${surah.name} (${surah.ayahCount} آية)`;
   };
 
-  const createDefaultCurriculum = async () => {
-    if (!userProfile?.centerId) return;
-    
-    // Create a default curriculum structure based on "خطة منهج جزء عم"
-    const defaultLevels: Omit<CurriculumLevel, 'id'>[] = [
-      {
-        name: 'المستوى الأول',
-        order: 1,
-        levelBonus: POINTS_SYSTEM.LEVEL_COMPLETION,
-        centerId: userProfile.centerId,
-        stages: [
-          {
-            id: 'stage-1-1',
-            name: 'المرحلة الأولى',
-            order: 1,
-            memorization: 'سورة الناس - سورة الفلق',
-            nearReview: '-',
-            farReview: '-',
-            stageBonus: POINTS_SYSTEM.STAGE_COMPLETION,
-          },
-          {
-            id: 'stage-1-2',
-            name: 'المرحلة الثانية',
-            order: 2,
-            memorization: 'سورة الإخلاص - سورة المسد',
-            nearReview: 'سورة الناس - سورة الفلق',
-            farReview: '-',
-            stageBonus: POINTS_SYSTEM.STAGE_COMPLETION,
-          },
-          {
-            id: 'stage-1-3',
-            name: 'المرحلة الثالثة',
-            order: 3,
-            memorization: 'سورة النصر - سورة الكافرون',
-            nearReview: 'سورة الإخلاص - سورة المسد',
-            farReview: 'سورة الناس - سورة الفلق',
-            stageBonus: POINTS_SYSTEM.STAGE_COMPLETION,
-          },
-        ],
-      },
-      {
-        name: 'المستوى الثاني',
-        order: 2,
-        levelBonus: POINTS_SYSTEM.LEVEL_COMPLETION,
-        centerId: userProfile.centerId,
-        stages: [
-          {
-            id: 'stage-2-1',
-            name: 'المرحلة الأولى',
-            order: 1,
-            memorization: 'سورة الكوثر - سورة الماعون',
-            nearReview: 'سورة النصر - سورة الكافرون',
-            farReview: 'سورة الإخلاص - سورة المسد',
-            stageBonus: POINTS_SYSTEM.STAGE_COMPLETION,
-          },
-          {
-            id: 'stage-2-2',
-            name: 'المرحلة الثانية',
-            order: 2,
-            memorization: 'سورة قريش - سورة الفيل',
-            nearReview: 'سورة الكوثر - سورة الماعون',
-            farReview: 'سورة النصر - سورة الكافرون',
-            stageBonus: POINTS_SYSTEM.STAGE_COMPLETION,
-          },
-        ],
-      },
-    ];
-
-    try {
-      const curriculumRef = collection(db, 'curriculum');
-      for (const level of defaultLevels) {
-        await addDoc(curriculumRef, level);
-      }
-      await fetchCurriculum();
-    } catch (error) {
-      console.error('Error creating default curriculum:', error);
-    }
+  // Get near review content (previous surah in the same level)
+  const getNearReviewContent = (level: QuranJuz, currentIndex: number): string => {
+    if (currentIndex === 0) return 'لا يوجد';
+    const prevSurah = level.surahs[currentIndex - 1];
+    return `سورة ${prevSurah.name}`;
   };
 
-  const handleAddLevel = async () => {
-    if (!newLevelName.trim() || !userProfile?.centerId) return;
-    
-    try {
-      const newLevel: Omit<CurriculumLevel, 'id'> = {
-        name: newLevelName,
-        order: levels.length + 1,
-        levelBonus: newLevelBonus,
-        centerId: userProfile.centerId,
-        stages: [],
-      };
-      
-      const curriculumRef = collection(db, 'curriculum');
-      await addDoc(curriculumRef, newLevel);
-      
-      setNewLevelName('');
-      setNewLevelBonus(200);
-      setIsAddingLevel(false);
-      await fetchCurriculum();
-    } catch (error) {
-      console.error('Error adding level:', error);
-    }
+  // Get far review content (2 surahs back)
+  const getFarReviewContent = (level: QuranJuz, currentIndex: number): string => {
+    if (currentIndex < 2) return 'لا يوجد';
+    const farSurah = level.surahs[currentIndex - 2];
+    return `سورة ${farSurah.name}`;
   };
 
-  const handleDeleteLevel = async (levelId: string) => {
-    if (!window.confirm('هل أنت متأكد من حذف هذا المستوى؟')) return;
-    
-    try {
-      await deleteDoc(doc(db, 'curriculum', levelId));
-      await fetchCurriculum();
-      if (selectedLevel?.id === levelId) {
-        setSelectedLevel(null);
-      }
-    } catch (error) {
-      console.error('Error deleting level:', error);
-    }
+  // Calculate total ayahs in a juz
+  const getTotalAyahs = (level: QuranJuz): number => {
+    return level.surahs.reduce((sum, surah) => sum + surah.ayahCount, 0);
   };
-
-  const handleAddStage = async () => {
-    if (!selectedLevel || !newStageName.trim()) return;
-    
-    const newStage: Stage = {
-      id: `stage-${Date.now()}`,
-      name: newStageName,
-      order: selectedLevel.stages.length + 1,
-      memorization: newStageMemorization,
-      nearReview: newStageNearReview || '-',
-      farReview: newStageFarReview || '-',
-      stageBonus: newStageBonus,
-    };
-    
-    try {
-      const levelRef = doc(db, 'curriculum', selectedLevel.id);
-      await updateDoc(levelRef, {
-        stages: [...selectedLevel.stages, newStage],
-      });
-      
-      resetStageForm();
-      setIsAddingStage(false);
-      await fetchCurriculum();
-      
-      // Update selected level
-      const updatedLevel = { ...selectedLevel, stages: [...selectedLevel.stages, newStage] };
-      setSelectedLevel(updatedLevel);
-    } catch (error) {
-      console.error('Error adding stage:', error);
-    }
-  };
-
-  const handleUpdateStage = async () => {
-    if (!selectedLevel || !editingStage) return;
-    
-    const updatedStages = selectedLevel.stages.map(s =>
-      s.id === editingStage.id
-        ? {
-            ...editingStage,
-            name: newStageName,
-            memorization: newStageMemorization,
-            nearReview: newStageNearReview || '-',
-            farReview: newStageFarReview || '-',
-            stageBonus: newStageBonus,
-          }
-        : s
-    );
-    
-    try {
-      const levelRef = doc(db, 'curriculum', selectedLevel.id);
-      await updateDoc(levelRef, { stages: updatedStages });
-      
-      resetStageForm();
-      setEditingStage(null);
-      await fetchCurriculum();
-      
-      const updatedLevel = { ...selectedLevel, stages: updatedStages };
-      setSelectedLevel(updatedLevel);
-    } catch (error) {
-      console.error('Error updating stage:', error);
-    }
-  };
-
-  const handleDeleteStage = async (stageId: string) => {
-    if (!selectedLevel || !window.confirm('هل أنت متأكد من حذف هذه المرحلة؟')) return;
-    
-    const updatedStages = selectedLevel.stages.filter(s => s.id !== stageId);
-    
-    try {
-      const levelRef = doc(db, 'curriculum', selectedLevel.id);
-      await updateDoc(levelRef, { stages: updatedStages });
-      
-      await fetchCurriculum();
-      const updatedLevel = { ...selectedLevel, stages: updatedStages };
-      setSelectedLevel(updatedLevel);
-    } catch (error) {
-      console.error('Error deleting stage:', error);
-    }
-  };
-
-  const startEditStage = (stage: Stage) => {
-    setEditingStage(stage);
-    setNewStageName(stage.name);
-    setNewStageMemorization(stage.memorization);
-    setNewStageNearReview(stage.nearReview);
-    setNewStageFarReview(stage.farReview);
-    setNewStageBonus(stage.stageBonus);
-  };
-
-  const resetStageForm = () => {
-    setNewStageName('');
-    setNewStageMemorization('');
-    setNewStageNearReview('');
-    setNewStageFarReview('');
-    setNewStageBonus(30);
-  };
-
-  if (loading) {
-    return (
-      <div className="curriculum-container">
-        <div className="loading-spinner">جاري التحميل...</div>
-      </div>
-    );
-  }
 
   return (
     <div className="curriculum-container">
       <div className="curriculum-header">
-        <h1>📚 المنهج الدراسي</h1>
-        {canEdit && (
-          <div className="header-actions">
-            <button 
-              className={`edit-mode-btn ${isEditing ? 'active' : ''}`}
-              onClick={() => setIsEditing(!isEditing)}
-            >
-              {isEditing ? '✓ إنهاء التحرير' : '✏️ تحرير المنهج'}
-            </button>
-          </div>
-        )}
+        <h1>📚 منهج حفظ القرآن الكريم</h1>
+        <p className="curriculum-subtitle">30 جزءاً - من جزء عم إلى جزء ألم</p>
+      </div>
+
+      {/* Search */}
+      <div className="curriculum-search">
+        <input
+          type="text"
+          placeholder="🔍 ابحث عن جزء أو سورة..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="search-input"
+        />
       </div>
 
       {/* Points System Info */}
@@ -347,11 +81,11 @@ const Curriculum: React.FC = () => {
             <span className="point-value">{POINTS_SYSTEM.FAR_REVIEW} نقطة</span>
           </div>
           <div className="point-item">
-            <span className="point-label">إتمام المرحلة</span>
+            <span className="point-label">إتمام المرحلة (السورة)</span>
             <span className="point-value">{POINTS_SYSTEM.STAGE_COMPLETION} نقطة</span>
           </div>
           <div className="point-item">
-            <span className="point-label">إتمام المستوى</span>
+            <span className="point-label">إتمام المستوى (الجزء)</span>
             <span className="point-value">{POINTS_SYSTEM.LEVEL_COMPLETION} نقطة</span>
           </div>
           <div className="point-item bonus">
@@ -364,9 +98,9 @@ const Curriculum: React.FC = () => {
       <div className="curriculum-content">
         {/* Levels Sidebar */}
         <div className="levels-sidebar">
-          <h2>المستويات</h2>
+          <h2>الأجزاء ({filteredLevels.length})</h2>
           
-          {levels.map(level => (
+          {filteredLevels.map(level => (
             <div
               key={level.id}
               className={`level-card ${selectedLevel?.id === level.id ? 'selected' : ''}`}
@@ -374,48 +108,13 @@ const Curriculum: React.FC = () => {
             >
               <div className="level-info">
                 <span className="level-name">{level.name}</span>
-                <span className="level-stages-count">{level.stages.length} مراحل</span>
+                <span className="level-stages-count">{level.surahs.length} سورة</span>
               </div>
-              {isEditing && (
-                <button
-                  className="delete-btn small"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteLevel(level.id);
-                  }}
-                >
-                  🗑️
-                </button>
-              )}
+              <div className="level-badge">
+                <span className="juz-number">{level.juzNumber}</span>
+              </div>
             </div>
           ))}
-
-          {isEditing && !isAddingLevel && (
-            <button className="add-level-btn" onClick={() => setIsAddingLevel(true)}>
-              + إضافة مستوى جديد
-            </button>
-          )}
-
-          {isAddingLevel && (
-            <div className="add-level-form">
-              <input
-                type="text"
-                placeholder="اسم المستوى"
-                value={newLevelName}
-                onChange={(e) => setNewLevelName(e.target.value)}
-              />
-              <input
-                type="number"
-                placeholder="مكافأة المستوى"
-                value={newLevelBonus}
-                onChange={(e) => setNewLevelBonus(Number(e.target.value))}
-              />
-              <div className="form-actions">
-                <button className="save-btn" onClick={handleAddLevel}>حفظ</button>
-                <button className="cancel-btn" onClick={() => setIsAddingLevel(false)}>إلغاء</button>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Stages Table */}
@@ -424,172 +123,154 @@ const Curriculum: React.FC = () => {
             <>
               <div className="stages-header">
                 <h2>{selectedLevel.name}</h2>
-                <span className="level-bonus">مكافأة المستوى: {selectedLevel.levelBonus} نقطة</span>
+                <div className="level-stats">
+                  <span className="stat-item">
+                    <span className="stat-icon">📖</span>
+                    {selectedLevel.surahs.length} سورة
+                  </span>
+                  <span className="stat-item">
+                    <span className="stat-icon">📝</span>
+                    {getTotalAyahs(selectedLevel)} آية
+                  </span>
+                  <span className="stat-item bonus">
+                    <span className="stat-icon">🏆</span>
+                    {POINTS_SYSTEM.LEVEL_COMPLETION} نقطة
+                  </span>
+                </div>
               </div>
+
+              {selectedLevel.id === 'juz-30' && (
+                <div className="special-note">
+                  <span className="note-icon">⭐</span>
+                  <span>يبدأ الطالب الجديد من هذا الجزء - سورة الفاتحة أولاً ثم سور جزء عم</span>
+                </div>
+              )}
 
               <div className="stages-table-container">
                 <table className="stages-table">
                   <thead>
                     <tr>
-                      <th>المرحلة</th>
+                      <th>#</th>
+                      <th>السورة (المرحلة)</th>
                       <th>الحفظ 📖</th>
                       <th>المراجعة القريبة 🔄</th>
                       <th>المراجعة البعيدة 📚</th>
-                      <th>النقاط</th>
-                      {isEditing && <th>إجراءات</th>}
+                      <th>عدد الآيات</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedLevel.stages.map(stage => (
-                      <tr key={stage.id}>
-                        <td className="stage-name">{stage.name}</td>
-                        <td className="memorization-cell">{stage.memorization}</td>
-                        <td className="near-review-cell">{stage.nearReview}</td>
-                        <td className="far-review-cell">{stage.farReview}</td>
-                        <td className="points-cell">{stage.stageBonus}</td>
-                        {isEditing && (
-                          <td className="actions-cell">
-                            <button
-                              className="edit-btn small"
-                              onClick={() => startEditStage(stage)}
-                            >
-                              ✏️
-                            </button>
-                            <button
-                              className="delete-btn small"
-                              onClick={() => handleDeleteStage(stage.id)}
-                            >
-                              🗑️
-                            </button>
-                          </td>
-                        )}
+                    {selectedLevel.surahs.map((surah, index) => (
+                      <tr key={surah.id} className={surah.name === 'الفاتحة' ? 'fatiha-row' : ''}>
+                        <td className="order-cell">{index + 1}</td>
+                        <td className="stage-name">
+                          {surah.name === 'الفاتحة' && <span className="fatiha-badge">🌟</span>}
+                          سورة {surah.name}
+                        </td>
+                        <td className="memorization-cell">{getMemorizationContent(surah)}</td>
+                        <td className="near-review-cell">{getNearReviewContent(selectedLevel, index)}</td>
+                        <td className="far-review-cell">{getFarReviewContent(selectedLevel, index)}</td>
+                        <td className="ayah-count-cell">{surah.ayahCount}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-
-              {isEditing && !isAddingStage && !editingStage && (
-                <button className="add-stage-btn" onClick={() => setIsAddingStage(true)}>
-                  + إضافة مرحلة جديدة
-                </button>
-              )}
-
-              {(isAddingStage || editingStage) && (
-                <div className="stage-form">
-                  <h3>{editingStage ? 'تعديل المرحلة' : 'إضافة مرحلة جديدة'}</h3>
-                  <div className="form-grid">
-                    <div className="form-group">
-                      <label>اسم المرحلة</label>
-                      <input
-                        type="text"
-                        value={newStageName}
-                        onChange={(e) => setNewStageName(e.target.value)}
-                        placeholder="مثال: المرحلة الأولى"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label>الحفظ 📖</label>
-                      <input
-                        type="text"
-                        value={newStageMemorization}
-                        onChange={(e) => setNewStageMemorization(e.target.value)}
-                        placeholder="مثال: سورة الناس - سورة الفلق"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label>المراجعة القريبة 🔄</label>
-                      <input
-                        type="text"
-                        value={newStageNearReview}
-                        onChange={(e) => setNewStageNearReview(e.target.value)}
-                        placeholder="اتركه فارغاً إذا لم يكن متاحاً"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label>المراجعة البعيدة 📚</label>
-                      <input
-                        type="text"
-                        value={newStageFarReview}
-                        onChange={(e) => setNewStageFarReview(e.target.value)}
-                        placeholder="اتركه فارغاً إذا لم يكن متاحاً"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label>نقاط المرحلة</label>
-                      <input
-                        type="number"
-                        value={newStageBonus}
-                        onChange={(e) => setNewStageBonus(Number(e.target.value))}
-                      />
-                    </div>
-                  </div>
-                  <div className="form-actions">
-                    <button
-                      className="save-btn"
-                      onClick={editingStage ? handleUpdateStage : handleAddStage}
-                    >
-                      {editingStage ? 'تحديث' : 'إضافة'}
-                    </button>
-                    <button
-                      className="cancel-btn"
-                      onClick={() => {
-                        resetStageForm();
-                        setIsAddingStage(false);
-                        setEditingStage(null);
-                      }}
-                    >
-                      إلغاء
-                    </button>
-                  </div>
-                </div>
-              )}
             </>
           ) : (
             <div className="no-selection">
-              <div className="empty-icon">📋</div>
-              <p>اختر مستوى لعرض المراحل</p>
+              <div className="empty-icon">📖</div>
+              <h3>اختر جزءاً لعرض السور</h3>
+              <p>المنهج يتكون من 30 جزءاً من القرآن الكريم</p>
+              <div className="quick-stats">
+                <div className="quick-stat">
+                  <span className="stat-number">30</span>
+                  <span className="stat-label">جزء</span>
+                </div>
+                <div className="quick-stat">
+                  <span className="stat-number">114</span>
+                  <span className="stat-label">سورة</span>
+                </div>
+                <div className="quick-stat">
+                  <span className="stat-number">6236</span>
+                  <span className="stat-label">آية</span>
+                </div>
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Help Section for Students/Teachers */}
-      {(isStudent || isTeacher) && (
-        <div className="curriculum-help">
-          <h3>📌 كيف يعمل النظام</h3>
-          <div className="help-content">
-            <div className="help-item">
-              <span className="help-icon">📖</span>
-              <div>
-                <strong>الحفظ</strong>
-                <p>حفظ السور المطلوبة في المرحلة الحالية</p>
-              </div>
+      {/* Help Section */}
+      <div className="curriculum-help">
+        <h3>📌 كيف يعمل النظام</h3>
+        <div className="help-content">
+          <div className="help-item">
+            <span className="help-icon">📖</span>
+            <div>
+              <strong>الحفظ</strong>
+              <p>حفظ السورة المطلوبة في المرحلة الحالية</p>
             </div>
-            <div className="help-item">
-              <span className="help-icon">🔄</span>
-              <div>
-                <strong>المراجعة القريبة</strong>
-                <p>مراجعة ما تم حفظه في المرحلة السابقة</p>
-              </div>
+          </div>
+          <div className="help-item">
+            <span className="help-icon">🔄</span>
+            <div>
+              <strong>المراجعة القريبة</strong>
+              <p>مراجعة السورة التي تم حفظها في المرحلة السابقة</p>
             </div>
-            <div className="help-item">
-              <span className="help-icon">📚</span>
-              <div>
-                <strong>المراجعة البعيدة</strong>
-                <p>مراجعة ما تم حفظه قبل مرحلتين</p>
-              </div>
+          </div>
+          <div className="help-item">
+            <span className="help-icon">📚</span>
+            <div>
+              <strong>المراجعة البعيدة</strong>
+              <p>مراجعة السورة التي تم حفظها قبل مرحلتين</p>
             </div>
-            <div className="help-item">
-              <span className="help-icon">✅</span>
-              <div>
-                <strong>إتمام المرحلة</strong>
-                <p>يجب اجتياز التحديات الثلاثة للانتقال للمرحلة التالية</p>
-              </div>
+          </div>
+          <div className="help-item">
+            <span className="help-icon">✅</span>
+            <div>
+              <strong>إتمام المرحلة</strong>
+              <p>يجب اجتياز التحديات الثلاثة للانتقال للسورة التالية</p>
+            </div>
+          </div>
+          <div className="help-item">
+            <span className="help-icon">🎯</span>
+            <div>
+              <strong>إتمام الجزء</strong>
+              <p>عند إتمام جميع سور الجزء، يتم طلب موافقة المشرف للانتقال للجزء التالي</p>
             </div>
           </div>
         </div>
-      )}
+      </div>
+
+      {/* Journey Overview */}
+      <div className="journey-overview">
+        <h3>🚀 رحلة الحفظ</h3>
+        <div className="journey-path">
+          <div className="journey-step start">
+            <span className="step-icon">🌟</span>
+            <span className="step-label">البداية</span>
+            <span className="step-detail">جزء 30 - الفاتحة</span>
+          </div>
+          <div className="journey-arrow">→</div>
+          <div className="journey-step">
+            <span className="step-icon">📖</span>
+            <span className="step-label">جزء عم</span>
+            <span className="step-detail">37 سورة</span>
+          </div>
+          <div className="journey-arrow">→</div>
+          <div className="journey-step">
+            <span className="step-icon">📚</span>
+            <span className="step-label">الأجزاء 29-2</span>
+            <span className="step-detail">بالتدريج</span>
+          </div>
+          <div className="journey-arrow">→</div>
+          <div className="journey-step end">
+            <span className="step-icon">🏆</span>
+            <span className="step-label">الختم</span>
+            <span className="step-detail">جزء 1 - البقرة</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

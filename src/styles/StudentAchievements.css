@@ -316,12 +316,19 @@
 .form-group textarea {
   width: 100%;
   padding: 12px 15px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 0.95rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 1rem;
   font-family: inherit;
   direction: rtl;
   box-sizing: border-box;
+  max-width: 100%;
+  background-color: #fff;
+}
+
+.form-group input[type="date"] {
+  direction: ltr;
+  text-align: right;
 }
 
 .form-group input:focus,
@@ -329,7 +336,7 @@
 .form-group textarea:focus {
   outline: none;
   border-color: #4caf50;
-  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+  box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.15);
 }
 
 .form-row {

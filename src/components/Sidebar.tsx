@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -7,36 +7,56 @@ import { useAuth } from '../context/AuthContext';
 interface NavItem {
   path: string;
   label: string;
+  icon: string;
   roles?: string[]; // الأدوار المسموح لها بالوصول
   showBadge?: boolean; // لإظهار عداد
 }
 
 const navItems: NavItem[] = [
-  { path: '/dashboard', label: 'لوحة التحكم', roles: ['admin', 'supervisor', 'teacher'] },
+  { path: '/dashboard', label: 'لوحة التحكم', icon: '📊', roles: ['admin', 'supervisor', 'teacher'] },
   // صفحات المطور فقط
-  { path: '/centers', label: 'مراكز القرآن', roles: ['admin'] },
-  { path: '/teachers', label: 'المعلمون', roles: ['admin'] },
-  { path: '/students', label: 'الطلاب', roles: ['admin'] },
+  { path: '/centers', label: 'مراكز القرآن', icon: '🏫', roles: ['admin'] },
+  { path: '/teachers', label: 'المعلمون', icon: '👨‍🏫', roles: ['admin'] },
+  { path: '/students', label: 'الطلاب', icon: '👨‍🎓', roles: ['admin'] },
   // صفحات المشرف
-  { path: '/pending-requests', label: 'طلبات الانتظار', roles: ['supervisor'], showBadge: true },
-  { path: '/groups', label: 'المجموعات', roles: ['supervisor'] },
-  { path: '/teachers', label: 'المعلمون', roles: ['supervisor'] },
-  { path: '/students', label: 'الطلاب', roles: ['supervisor'] },
+  { path: '/pending-requests', label: 'طلبات الانتظار', icon: '⏳', roles: ['supervisor'], showBadge: true },
+  { path: '/groups', label: 'المجموعات', icon: '👥', roles: ['supervisor'] },
+  { path: '/teachers', label: 'المعلمون', icon: '👨‍🏫', roles: ['supervisor'] },
+  { path: '/students', label: 'الطلاب', icon: '👨‍🎓', roles: ['supervisor'] },
   // صفحات المعلم
-  { path: '/groups', label: 'حلقاتي', roles: ['teacher'] },
-  { path: '/students', label: 'طلابي', roles: ['teacher'] },
-  { path: '/attendance', label: 'تسجيل الحضور', roles: ['teacher'] },
-  { path: '/achievements', label: 'تحصيل الطالب', roles: ['teacher'] },
+  { path: '/groups', label: 'حلقاتي', icon: '👥', roles: ['teacher'] },
+  { path: '/students', label: 'طلابي', icon: '👨‍🎓', roles: ['teacher'] },
+  { path: '/attendance', label: 'تسجيل الحضور', icon: '✅', roles: ['teacher'] },
+  { path: '/achievements', label: 'تحصيل الطالب', icon: '🏆', roles: ['teacher'] },
   // صفحات الطالب
-  { path: '/my-progress', label: 'تحصيلي', roles: ['student'] },
+  { path: '/my-progress', label: 'تحصيلي', icon: '📈', roles: ['student'] },
   // صفحات عامة
-  { path: '/curriculum', label: 'المنهج', roles: ['supervisor', 'teacher', 'student'] },
-  { path: '/leaderboard', label: 'المتصدرين', roles: ['supervisor', 'teacher', 'student'] }
+  { path: '/curriculum', label: 'المنهج', icon: '📚', roles: ['supervisor', 'teacher', 'student'] },
+  { path: '/leaderboard', label: 'المتصدرين', icon: '🥇', roles: ['supervisor', 'teacher', 'student'] }
 ];
 
 const Sidebar = () => {
   const { logout, isAdmin, userProfile, isSupervisor } = useAuth();
   const [pendingCount, setPendingCount] = useState(0);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const location = useLocation();
+
+  // إغلاق القائمة عند تغيير الصفحة
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [location.pathname]);
+
+  // منع التمرير عند فتح القائمة
+  useEffect(() => {
+    if (isMobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isMobileMenuOpen]);
 
   useEffect(() => {
     const fetchPendingCount = async () => {
@@ -79,60 +99,93 @@ const Sidebar = () => {
     return item.roles.includes(userProfile.role);
   };
 
+  const toggleMobileMenu = () => {
+    setIsMobileMenuOpen(!isMobileMenuOpen);
+  };
+
   return (
-    <aside className="sidebar">
-      <div className="sidebar__brand">
-        <span role="img" aria-label="Quran">
-          📖
-        </span>{' '}
-        مركز التحفيظ
-      </div>
-      
-      {userProfile && (
-        <div style={{ padding: '0.5rem 0.75rem', marginBottom: '1rem', textAlign: 'right' }}>
-          <div style={{ fontSize: '0.9rem', fontWeight: '600', color: 'var(--color-primary)' }}>
-            {userProfile.name}
-          </div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-            {userProfile.role === 'admin' && 'مطور'}
-            {userProfile.role === 'supervisor' && 'مشرف'}
-            {userProfile.role === 'teacher' && 'معلم'}
-            {userProfile.role === 'student' && 'طالب'}
-            {userProfile.role === 'parent' && 'ولي أمر'}
-          </div>
+    <>
+      {/* Mobile Header */}
+      <div className="mobile-header">
+        <div className="mobile-header__brand">
+          <span role="img" aria-label="Quran">📖</span>
+          رحلة الماهر
         </div>
-      )}
-      
-      <nav className="sidebar__nav">
-        {navItems.filter(canViewItem).map((item) => (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            className={({ isActive }) =>
-              isActive ? 'sidebar__link sidebar__link--active' : 'sidebar__link'
-            }
-          >
-            {item.label}
-            {item.showBadge && pendingCount > 0 && (
-              <span className="sidebar__badge">{pendingCount}</span>
-            )}
-          </NavLink>
-        ))}
-        {process.env.NODE_ENV === 'development' && isAdmin && (
-          <NavLink
-            to="/dev-tools"
-            className={({ isActive }) =>
-              isActive ? 'sidebar__link sidebar__link--active' : 'sidebar__link'
-            }
-          >
-            أدوات المطور
-          </NavLink>
+        <button 
+          className={`hamburger-btn ${isMobileMenuOpen ? 'active' : ''}`}
+          onClick={toggleMobileMenu}
+          aria-label="القائمة"
+        >
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+      </div>
+
+      {/* Overlay */}
+      <div 
+        className={`sidebar-overlay ${isMobileMenuOpen ? 'active' : ''}`}
+        onClick={() => setIsMobileMenuOpen(false)}
+      />
+
+      {/* Sidebar */}
+      <aside className={`sidebar ${isMobileMenuOpen ? 'open' : ''}`}>
+        <div className="sidebar__brand">
+          <span role="img" aria-label="Quran">
+            📖
+          </span>{' '}
+          رحلة الماهر
+        </div>
+        
+        {userProfile && (
+          <div className="sidebar__user-info">
+            <div className="sidebar__user-name">
+              {userProfile.name}
+            </div>
+            <div className="sidebar__user-role">
+              {userProfile.role === 'admin' && 'مطور'}
+              {userProfile.role === 'supervisor' && 'مشرف'}
+              {userProfile.role === 'teacher' && 'معلم'}
+              {userProfile.role === 'student' && 'طالب'}
+              {userProfile.role === 'parent' && 'ولي أمر'}
+            </div>
+          </div>
         )}
-      </nav>
-      <button type="button" className="sidebar__logout" onClick={handleLogout}>
-        تسجيل الخروج
-      </button>
-    </aside>
+        
+        <nav className="sidebar__nav">
+          {navItems.filter(canViewItem).map((item) => (
+            <NavLink
+              key={item.path + item.label}
+              to={item.path}
+              className={({ isActive }) =>
+                isActive ? 'sidebar__link sidebar__link--active' : 'sidebar__link'
+              }
+            >
+              <span className="sidebar__link-icon">{item.icon}</span>
+              <span className="sidebar__link-text">{item.label}</span>
+              {item.showBadge && pendingCount > 0 && (
+                <span className="sidebar__badge">{pendingCount}</span>
+              )}
+            </NavLink>
+          ))}
+          {process.env.NODE_ENV === 'development' && isAdmin && (
+            <NavLink
+              to="/dev-tools"
+              className={({ isActive }) =>
+                isActive ? 'sidebar__link sidebar__link--active' : 'sidebar__link'
+              }
+            >
+              <span className="sidebar__link-icon">🛠️</span>
+              <span className="sidebar__link-text">أدوات المطور</span>
+            </NavLink>
+          )}
+        </nav>
+        <button type="button" className="sidebar__logout" onClick={handleLogout}>
+          <span className="sidebar__link-icon">🚪</span>
+          <span className="sidebar__link-text">تسجيل الخروج</span>
+        </button>
+      </aside>
+    </>
   );
 };
 

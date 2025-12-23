@@ -186,7 +186,8 @@ const Attendance = () => {
         // Calculate stats for each student
         const stats: StudentAttendanceStats[] = students.map((student) => {
           const studentRecords = monthRecords.filter((docSnap) => {
-            return docSnap.data().studentId === student.id;
+            const data = docSnap.data();
+            return data.studentId === student.id;
           });
 
           const presentDays = studentRecords.filter((docSnap) => {

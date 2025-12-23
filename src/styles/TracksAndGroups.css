@@ -323,6 +323,10 @@
 
 /* ==================== RESPONSIVE ==================== */
 @media (max-width: 768px) {
+  .tracks-groups-container {
+    padding: 15px;
+  }
+
   .tracks-grid,
   .groups-grid {
     grid-template-columns: 1fr;
@@ -334,7 +338,62 @@
     gap: 16px;
   }
 
+  .section-header h1 {
+    font-size: 24px;
+  }
+
   .add-button {
     width: 100%;
+  }
+
+  .form-container {
+    width: 95%;
+    padding: 20px;
+    max-height: 95vh;
+  }
+
+  .form-actions {
+    flex-direction: column;
+  }
+
+  .submit-button,
+  .cancel-button {
+    width: 100%;
+    padding: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .track-header h3 {
+    font-size: 16px;
+  }
+
+  .track-header,
+  .group-header {
+    padding: 15px;
+  }
+
+  .track-body,
+  .group-body {
+    padding: 15px;
+  }
+
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    padding: 10px;
+    font-size: 14px;
+  }
+
+  .no-data {
+    padding: 40px 15px;
+  }
+
+  .no-data p {
+    font-size: 14px;
+  }
+
+  .no-data p:first-child {
+    font-size: 16px;
   }
 }

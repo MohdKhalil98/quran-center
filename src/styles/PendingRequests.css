@@ -281,18 +281,90 @@
 }
 
 /* Responsive */
-@media (max-width: 600px) {
+@media (max-width: 768px) {
   .pending-list {
     grid-template-columns: 1fr;
+    gap: 16px;
   }
 
   .pending-card-header {
     flex-wrap: wrap;
+    padding: 14px 16px;
+  }
+
+  .student-avatar {
+    width: 42px;
+    height: 42px;
+    font-size: 1.1rem;
+  }
+
+  .student-info h3 {
+    font-size: 1rem;
   }
 
   .status-badge {
     width: 100%;
     text-align: center;
     margin-top: 12px;
+  }
+
+  .pending-card-body {
+    padding: 14px 16px;
+  }
+
+  .info-row {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .info-row .label {
+    min-width: auto;
+  }
+
+  .pending-card-actions {
+    flex-direction: column;
+    padding: 14px 16px;
+  }
+
+  .pending-card-actions .btn {
+    width: 100%;
+  }
+
+  /* Modal Responsive */
+  .modal-content {
+    width: 95%;
+    margin: 10px auto;
+  }
+
+  .modal-body {
+    padding: 16px;
+  }
+
+  .modal-footer {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .modal-footer .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .pending-container {
+    padding: 10px 0;
+  }
+
+  .pending-count {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .no-pending {
+    padding: 40px 15px;
+  }
+
+  .no-pending-icon {
+    font-size: 3rem;
   }
 }

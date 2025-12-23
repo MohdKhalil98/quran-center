@@ -253,9 +253,27 @@
 }
 
 /* Responsive */
+@media (max-width: 768px) {
+  .group-info-card {
+    padding: 16px;
+  }
+
+  .group-info-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .teacher-info {
+    padding-top: 10px;
+    font-size: 0.9rem;
+  }
+}
+
 @media (max-width: 600px) {
   .stats-grid {
     grid-template-columns: 1fr 1fr;
+    gap: 12px;
   }
 
   .stat-card {
@@ -270,5 +288,23 @@
     flex-direction: column;
     gap: 8px;
     align-items: flex-start;
+  }
+
+  .pending-approval-message {
+    padding: 40px 15px;
+  }
+
+  .pending-icon {
+    font-size: 3rem;
+  }
+
+  .portion-info,
+  .assignment-info {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .teacher-notes {
+    padding: 10px;
   }
 }

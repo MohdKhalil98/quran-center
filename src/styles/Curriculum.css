@@ -122,12 +122,17 @@
   border-bottom: 2px solid #4caf50;
 }
 
+.levels-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .level-card {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 15px;
-  margin-bottom: 10px;
   background: #f8f9fa;
   border: 2px solid transparent;
   border-radius: 8px;
@@ -815,12 +820,36 @@
 
 /* Responsive Adjustments for New Styles */
 @media (max-width: 768px) {
+  .curriculum-container {
+    padding: 10px;
+  }
+
+  .curriculum-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+
+  .curriculum-header h1 {
+    font-size: 1.4rem;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  .edit-mode-btn {
+    width: 100%;
+    padding: 12px;
+  }
+
   .curriculum-search .search-input {
     max-width: 100%;
   }
 
   .level-stats {
     justify-content: center;
+    flex-wrap: wrap;
   }
 
   .quick-stats {
@@ -840,5 +869,248 @@
   .journey-step {
     width: 100%;
     max-width: 200px;
+  }
+
+  /* Curriculum content layout */
+  .curriculum-content {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .levels-sidebar {
+    width: 100%;
+    max-height: none;
+    overflow-y: visible;
+    margin-bottom: 15px;
+    padding: 15px;
+  }
+
+  .levels-sidebar h2 {
+    font-size: 1rem;
+    margin-bottom: 12px;
+  }
+
+  /* Make level cards horizontal scrollable on mobile */
+  .levels-list {
+    display: flex;
+    overflow-x: auto;
+    gap: 10px;
+    padding-bottom: 10px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .level-card {
+    flex: 0 0 auto;
+    min-width: 140px;
+    padding: 12px;
+    margin-bottom: 0;
+  }
+
+  .level-name {
+    font-size: 0.9rem;
+  }
+
+  .level-stages-count {
+    font-size: 0.75rem;
+  }
+
+  .stages-panel {
+    width: 100%;
+    padding: 15px;
+  }
+
+  .stages-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .stages-header h2 {
+    font-size: 1.1rem;
+  }
+
+  /* Table scroll on mobile */
+  .stages-table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -15px;
+    padding: 0 15px;
+  }
+
+  .stages-table {
+    min-width: 600px;
+    font-size: 0.85rem;
+  }
+
+  .stages-table th {
+    padding: 10px 8px;
+    font-size: 0.8rem;
+  }
+
+  .stages-table td {
+    padding: 10px 8px;
+  }
+
+  /* Hide some columns on mobile */
+  .stages-table th:nth-child(4),
+  .stages-table td:nth-child(4),
+  .stages-table th:nth-child(5),
+  .stages-table td:nth-child(5) {
+    display: none;
+  }
+
+  /* Points info */
+  .points-info-card {
+    padding: 15px;
+    margin-bottom: 15px;
+  }
+
+  .points-info-card h3 {
+    font-size: 1rem;
+    margin-bottom: 12px;
+  }
+
+  .points-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .point-item {
+    padding: 8px 10px;
+    font-size: 0.8rem;
+    flex-direction: column;
+    text-align: center;
+    gap: 4px;
+  }
+
+  .point-value {
+    font-size: 0.9rem;
+  }
+
+  /* Help section */
+  .curriculum-help {
+    padding: 15px;
+  }
+
+  .help-item {
+    padding: 12px;
+  }
+
+  /* Special note */
+  .special-note {
+    padding: 12px;
+    font-size: 0.85rem;
+  }
+
+  /* Admin edit form */
+  .add-stage-form,
+  .stage-form {
+    padding: 15px;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .add-stage-form .form-row {
+    flex-direction: column;
+  }
+
+  .add-stage-form input[type="text"],
+  .add-stage-form input[type="number"] {
+    width: 100%;
+    min-width: auto;
+  }
+
+  /* Journey overview */
+  .journey-overview {
+    padding: 15px;
+    margin-top: 15px;
+  }
+
+  .journey-overview h3 {
+    font-size: 1rem;
+    margin-bottom: 15px;
+  }
+}
+
+@media (max-width: 480px) {
+  .curriculum-container {
+    padding: 8px;
+  }
+
+  .curriculum-header h1 {
+    font-size: 1.2rem;
+  }
+
+  .curriculum-subtitle {
+    font-size: 0.85rem;
+  }
+
+  .points-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .point-item {
+    padding: 6px 8px;
+    font-size: 0.75rem;
+  }
+
+  .level-card {
+    padding: 10px;
+    min-width: 120px;
+  }
+
+  .level-name {
+    font-size: 0.85rem;
+  }
+
+  .juz-number {
+    width: 28px;
+    height: 28px;
+    font-size: 0.8rem;
+  }
+
+  .stages-table {
+    font-size: 0.8rem;
+  }
+
+  .stages-table th,
+  .stages-table td {
+    padding: 8px 6px;
+  }
+
+  .journey-overview {
+    padding: 12px;
+  }
+
+  .journey-step {
+    padding: 10px;
+    min-width: 100px;
+  }
+
+  .step-icon {
+    font-size: 1.3rem;
+  }
+
+  .step-label {
+    font-size: 0.85rem;
+  }
+
+  .step-detail {
+    font-size: 0.7rem;
+  }
+
+  /* Action buttons */
+  .edit-btn,
+  .delete-btn {
+    padding: 6px 8px;
+    font-size: 0.75rem;
+  }
+
+  .add-stage-btn {
+    padding: 10px 15px;
+    font-size: 0.9rem;
   }
 }

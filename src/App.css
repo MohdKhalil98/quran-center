@@ -137,6 +137,9 @@
   padding: 2.5rem;
   display: flex;
   justify-content: center;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .app-content__inner {
@@ -144,12 +147,15 @@
   display: flex;
   flex-direction: column;
   gap: 2.5rem;
+  max-width: 100%;
 }
 
 .page {
   display: flex;
   flex-direction: column;
   gap: 2rem;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .page__header h1 {
@@ -168,6 +174,20 @@
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 }
 
+/* Mobile fix for stats-grid */
+@media (max-width: 480px) {
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+}
+
+@media (max-width: 360px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .stat-card {
   background-color: #ffffff;
   padding: 1.5rem;
@@ -176,17 +196,36 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  min-width: 0; /* Fix for flexbox/grid overflow */
+  overflow: hidden;
 }
 
 .stat-card h2 {
   font-size: 1rem;
   color: var(--color-text-muted);
+  word-wrap: break-word;
 }
 
 .stat-card__value {
   font-size: 2rem;
   font-weight: 700;
   color: var(--color-primary);
+}
+
+/* Mobile stat-card adjustments */
+@media (max-width: 480px) {
+  .stat-card {
+    padding: 1rem;
+    border-radius: 1rem;
+  }
+  
+  .stat-card h2 {
+    font-size: 0.85rem;
+  }
+  
+  .stat-card__value {
+    font-size: 1.5rem;
+  }
 }
 
 .stat-card__description {
@@ -331,6 +370,7 @@
   justify-content: center;
   background: linear-gradient(135deg, rgba(27, 140, 107, 0.1), #f7faf8);
   padding: 2rem;
+  box-sizing: border-box;
 }
 
 .login-card {
@@ -446,6 +486,30 @@
   padding: 0.75rem;
   border-radius: 0.75rem;
   text-align: center;
+}
+
+/* Login Page Mobile Responsive */
+@media (max-width: 480px) {
+  .login-screen {
+    padding: 1rem;
+  }
+
+  .login-card {
+    padding: 1.5rem;
+  }
+
+  .login-card h1 {
+    font-size: 1.5rem;
+  }
+
+  .login-form input,
+  .login-form select {
+    padding: 0.75rem;
+  }
+
+  .register-card {
+    width: 100%;
+  }
 }
 
 .loading-screen {
@@ -622,6 +686,19 @@
 
   .app-content {
     padding: 1rem;
+    width: 100%;
+  }
+
+  .app-content__inner {
+    gap: 1.5rem;
+  }
+
+  .page {
+    gap: 1.5rem;
+  }
+
+  .page__header h1 {
+    font-size: 1.5rem;
   }
 }
 

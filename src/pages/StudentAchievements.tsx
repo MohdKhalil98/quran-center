@@ -5,7 +5,7 @@ import '../styles/StudentAchievements.css';
 import ConfirmModal from '../components/ConfirmModal';
 import MessageBox from '../components/MessageBox';
 import { useAuth } from '../context/AuthContext';
-import quranCurriculum, { QuranJuz, QuranSurah, getDefaultLevel, getDefaultStage } from '../data/quranCurriculum';
+import quranCurriculum, { QuranJuz, QuranSurah } from '../data/quranCurriculum';
 
 // Challenge types for the 3-challenge system
 type ChallengeType = 'memorization' | 'near_review' | 'far_review';
@@ -684,34 +684,212 @@ const StudentAchievements = () => {
     setConfirmOpen(false);
     setConfirmTargetId(null);
     if (!id) return;
+    
     try {
+      // Find the achievement being deleted
+      const achievementToDelete = achievements.find(a => a.id === id);
+      
+      if (achievementToDelete) {
+        const studentId = achievementToDelete.studentId;
+        const deletedStageId = achievementToDelete.stageId;
+        const deletedLevelId = achievementToDelete.levelId;
+        const deletedChallengeType = achievementToDelete.challengeType;
+        const challengePassed = achievementToDelete.challengePassed ?? true; // Default true for old records
+        
+        // Find the student from local state or fetch fresh from Firebase
+        let student = groupStudents.find(s => s.id === studentId) || students.find(s => s.id === studentId);
+        
+        // Fetch fresh student data from Firebase to ensure we have latest stageId/levelId
+        if (student) {
+          const usersSnapshot = await getDocs(query(collection(db, 'users'), where('uid', '==', studentId)));
+          if (!usersSnapshot.empty) {
+            const freshData = usersSnapshot.docs[0].data();
+            student = { ...student, ...freshData };
+          }
+        }
+        
+        if (student && challengePassed) {
+          // Calculate points to deduct based on challenge type or rating
+          let pointsToDeduct = 0;
+          
+          if (deletedChallengeType) {
+            // New system with challenge types
+            if (deletedChallengeType === 'memorization') pointsToDeduct = POINTS_SYSTEM.MEMORIZATION;
+            else if (deletedChallengeType === 'near_review') pointsToDeduct = POINTS_SYSTEM.NEAR_REVIEW;
+            else if (deletedChallengeType === 'far_review') pointsToDeduct = POINTS_SYSTEM.FAR_REVIEW;
+          } else {
+            // Old system - estimate points based on rating
+            const rating = achievementToDelete.rating || 5;
+            pointsToDeduct = rating * 6; // Approximate old point calculation
+          }
+          
+          // Add perfect rating bonus if applicable
+          if (achievementToDelete.rating === 5) {
+            pointsToDeduct += POINTS_SYSTEM.PERFECT_RATING_BONUS;
+          }
+          
+          const newPoints = Math.max(0, (student.totalPoints || 0) - pointsToDeduct);
+          
+          // If achievement has stage/level info, handle progress reversion
+          if (deletedStageId && deletedLevelId && deletedChallengeType) {
+            // Get ALL remaining achievements for this student (excluding the one being deleted)
+            const allRemainingAchievements = achievements.filter(
+              a => a.id !== id && 
+                   a.studentId === studentId && 
+                   a.challengePassed
+            );
+            
+            // Get remaining achievements for the deleted stage only
+            const remainingStageAchievements = allRemainingAchievements.filter(
+              a => a.stageId === deletedStageId
+            );
+            
+            // Determine what challenges remain completed in deleted stage
+            const remainingChallenges = new Set(remainingStageAchievements.map(a => a.challengeType));
+            
+            // Check if student has moved to a different stage/level after this achievement
+            const studentCurrentStageId = student.stageId;
+            const studentCurrentLevelId = student.levelId;
+            
+            console.log('Delete Achievement Debug:', {
+              deletedStageId,
+              deletedLevelId,
+              studentCurrentStageId,
+              studentCurrentLevelId,
+              remainingChallenges: Array.from(remainingChallenges),
+              remainingAchievementsInStage: remainingStageAchievements.length,
+              allRemainingAchievements: allRemainingAchievements.length
+            });
+            
+            // If this is the LAST achievement for this student (no more achievements at all)
+            // Reset them to the first stage (Fatiha)
+            if (allRemainingAchievements.length === 0) {
+              const firstLevel = curriculumLevels[0]; // جزء عم
+              const firstStage = firstLevel.stages[0]; // سورة الفاتحة
+              
+              await updateDoc(doc(db, 'users', studentId), {
+                levelId: firstLevel.id,
+                levelName: firstLevel.name,
+                stageId: firstStage.id,
+                stageName: firstStage.name,
+                currentChallenge: 'memorization',
+                totalPoints: 0,
+                stageStatus: 'active',
+                pendingLevelUp: false
+              });
+              
+              // Update local state
+              setGroupStudents(prev => prev.map(s => 
+                s.id === studentId 
+                  ? { 
+                      ...s, 
+                      levelId: firstLevel.id,
+                      levelName: firstLevel.name,
+                      stageId: firstStage.id,
+                      stageName: firstStage.name,
+                      currentChallenge: 'memorization',
+                      totalPoints: 0,
+                      stageStatus: 'active',
+                      pendingLevelUp: false
+                    }
+                  : s
+              ));
+              
+              showMessage('info', 'تم إعادة التعيين', `تم إرجاع الطالب ${student.name} إلى البداية (${firstStage.name})`);
+              
+            } else {
+              // There are still other achievements - check if we need to revert stage
+              const studentMovedToNewStage = studentCurrentStageId !== deletedStageId;
+              const studentMovedToNewLevel = studentCurrentLevelId !== deletedLevelId;
+              
+              if (studentMovedToNewStage || studentMovedToNewLevel) {
+                // Student has moved forward - revert them back to the deleted stage
+                const deletedLevel = curriculumLevels.find(l => l.id === deletedLevelId);
+                const deletedStage = deletedLevel?.stages.find(s => s.id === deletedStageId);
+                
+                if (deletedLevel && deletedStage) {
+                  // Determine which challenge to set based on what's left
+                  let revertChallenge: ChallengeType = deletedChallengeType;
+                  
+                  // Deduct stage completion bonus since we're reverting
+                  let totalDeduct = pointsToDeduct + POINTS_SYSTEM.STAGE_COMPLETION;
+                  const finalPoints = Math.max(0, (student.totalPoints || 0) - totalDeduct);
+                  
+                  await updateDoc(doc(db, 'users', studentId), {
+                    levelId: deletedLevelId,
+                    levelName: deletedLevel.name,
+                    stageId: deletedStageId,
+                    stageName: deletedStage.name,
+                    currentChallenge: revertChallenge,
+                    totalPoints: finalPoints,
+                    stageStatus: 'active',
+                    pendingLevelUp: false
+                  });
+                  
+                  // Update local state
+                  setGroupStudents(prev => prev.map(s => 
+                    s.id === studentId 
+                      ? { 
+                          ...s, 
+                          levelId: deletedLevelId,
+                          levelName: deletedLevel.name,
+                          stageId: deletedStageId,
+                          stageName: deletedStage.name,
+                          currentChallenge: revertChallenge,
+                          totalPoints: finalPoints,
+                          stageStatus: 'active',
+                          pendingLevelUp: false
+                        }
+                      : s
+                  ));
+                  
+                  showMessage('info', 'تم إرجاع التقدم', `تم إرجاع الطالب ${student.name} إلى ${deletedStage.name} وخصم ${totalDeduct} نقطة`);
+                }
+              } else {
+                // Student is still on the same stage - just update currentChallenge
+                let newCurrentChallenge: ChallengeType = deletedChallengeType;
+              
+                await updateDoc(doc(db, 'users', studentId), {
+                  currentChallenge: newCurrentChallenge,
+                  totalPoints: newPoints
+                });
+                
+                // Update local state
+                setGroupStudents(prev => prev.map(s => 
+                  s.id === studentId 
+                    ? { ...s, currentChallenge: newCurrentChallenge, totalPoints: newPoints }
+                    : s
+                ));
+                
+                showMessage('success', 'تم الحذف', `تم حذف التحصيل وخصم ${pointsToDeduct} نقطة`);
+              }
+            }
+          } else {
+            // Old achievement without stage/level info - just deduct points
+            await updateDoc(doc(db, 'users', studentId), {
+              totalPoints: newPoints
+            });
+            
+            // Update local state
+            setGroupStudents(prev => prev.map(s => 
+              s.id === studentId 
+                ? { ...s, totalPoints: newPoints }
+                : s
+            ));
+            
+            showMessage('success', 'تم الحذف', `تم حذف التحصيل وخصم ${pointsToDeduct} نقطة`);
+          }
+        }
+      }
+      
+      // Delete the achievement
       await deleteDoc(doc(db, 'student_achievements', id));
       setAchievements((prev) => prev.filter((a) => a.id !== id));
+      
     } catch (error) {
       console.error('Error deleting achievement:', error);
       showMessage('error', 'خطأ', 'حدث خطأ أثناء حذف البيانات. يرجى المحاولة مرة أخرى.');
     }
-  };
-
-  const handleEditAchievement = (achievement: StudentAchievement) => {
-    const student = students.find((s) => s.id === achievement.studentId);
-    setSelectedStudent(student || null);
-    setEditingId(achievement.id || null);
-    
-    if (student && curriculumLevels.length > 0) {
-      const level = curriculumLevels.find(l => l.id === achievement.levelId);
-      setStudentLevel(level || null);
-      if (level) {
-        const stage = level.stages.find(s => s.id === achievement.stageId);
-        setStudentStage(stage || null);
-      }
-    }
-    
-    setSelectedChallengeType(achievement.challengeType || '');
-    setChallengeRating(achievement.rating || 5);
-    setChallengeNotes(achievement.notes || '');
-    setChallengePassed(achievement.challengePassed ?? true);
-    setRecordDate(achievement.date);
   };
 
   const filteredAchievements = achievements.filter((a) => {
@@ -722,6 +900,17 @@ const StudentAchievements = () => {
       (a.challengeContent || a.portion || '').toLowerCase().includes(searchText.toLowerCase());
     return matchesStudent && matchesSearch;
   });
+
+  // دالة للتحقق إذا كان التحصيل هو الأخير للطالب (يمكن حذفه فقط)
+  const isLastAchievementForStudent = (achievementId: string, studentId: string): boolean => {
+    // الحصول على جميع تحصيلات هذا الطالب مرتبة حسب التاريخ
+    const studentAchievements = achievements
+      .filter(a => a.studentId === studentId)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    
+    // التحصيل الأول هو الأحدث (الأخير المسجل)
+    return studentAchievements.length > 0 && studentAchievements[0].id === achievementId;
+  };
 
   if (loading) {
     return (
@@ -1014,7 +1203,7 @@ const StudentAchievements = () => {
           {filteredAchievements.map((achievement) => (
             <article key={achievement.id} className="achievement-card challenge-card-display">
               <div className="achievement-header">
-                <h3>{achievement.studentName}</h3>
+                <h3>{achievement.studentName || 'طالب غير محدد'}</h3>
                 <span className={`rating rating-badge rating-${achievement.rating}`}>
                   {achievement.rating}/10
                 </span>
@@ -1083,18 +1272,14 @@ const StudentAchievements = () => {
               </div>
 
               <div className="achievement-actions">
-                <button
-                  className="btn btn-sm btn-warning"
-                  onClick={() => handleEditAchievement(achievement)}
-                >
-                  ✏️ تعديل
-                </button>
-                <button
-                  className="btn btn-sm btn-danger"
-                  onClick={() => handleDeleteAchievement(achievement.id || '')}
-                >
-                  🗑️ حذف
-                </button>
+                {isLastAchievementForStudent(achievement.id || '', achievement.studentId) && (
+                  <button
+                    className="btn btn-sm btn-danger"
+                    onClick={() => handleDeleteAchievement(achievement.id || '')}
+                  >
+                    🗑️ حذف
+                  </button>
+                )}
               </div>
             </article>
           ))}
@@ -1140,18 +1325,14 @@ const StudentAchievements = () => {
                   </td>
                   <td>{new Date(achievement.date).toLocaleDateString('ar-SA')}</td>
                   <td>
-                    <button
-                      className="btn btn-sm btn-warning"
-                      onClick={() => handleEditAchievement(achievement)}
-                    >
-                      تعديل
-                    </button>
-                    <button
-                      className="btn btn-sm btn-danger"
-                      onClick={() => handleDeleteAchievement(achievement.id || '')}
-                    >
-                      حذف
-                    </button>
+                    {isLastAchievementForStudent(achievement.id || '', achievement.studentId) && (
+                      <button
+                        className="btn btn-sm btn-danger"
+                        onClick={() => handleDeleteAchievement(achievement.id || '')}
+                      >
+                        حذف
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

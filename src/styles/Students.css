@@ -70,3 +70,43 @@
   background: #f8d7da;
   color: #721c24;
 }
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .filters-section {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .filter-select {
+    width: 100%;
+    min-width: auto;
+  }
+
+  .page-actions-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .students-count-bar {
+    text-align: center;
+    display: block;
+  }
+
+  .info-note {
+    text-align: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .status-badge {
+    padding: 3px 8px;
+    font-size: 11px;
+  }
+
+  .count-badge {
+    font-size: 1rem;
+  }
+}

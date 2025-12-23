@@ -99,99 +99,148 @@
 .achievements-cards-container {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 20px;
+  gap: 24px;
   margin-bottom: 30px;
 }
 
 .achievement-card {
   background: #ffffff;
-  border: 1px solid #ddd;
-  border-radius: 8px;
+  border: none;
+  border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   transition: all 0.3s ease;
   display: flex;
   flex-direction: column;
 }
 
 .achievement-card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(102, 126, 234, 0.25);
+  transform: translateY(-4px);
 }
 
-.achievement-header {
-  background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
-  color: white;
-  padding: 20px;
+/* Card Header with Student Name */
+.achievement-card .achievement-header {
+  background: linear-gradient(135deg, #1b8c6b 0%, #15725a 100%) !important;
+  color: #ffffff !important;
+  padding: 20px 24px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 3px solid #3d8b40;
+  position: relative;
+  min-height: 65px;
+  border-bottom: none !important;
 }
 
-.achievement-header h3 {
+.achievement-card .achievement-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  pointer-events: none;
+}
+
+.achievement-card .achievement-header h3 {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: 1.3rem;
   font-weight: 700;
+  color: #ffffff !important;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  position: relative;
+  z-index: 1;
 }
 
-.rating-badge {
-  background: rgba(255, 255, 255, 0.3);
-  padding: 6px 14px;
-  border-radius: 20px;
+.achievement-card .rating-badge {
+  background: #ffffff !important;
+  color: #1b8c6b !important;
+  padding: 8px 16px;
+  border-radius: 25px;
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 1rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  position: relative;
+  z-index: 1;
 }
 
 .achievement-body {
-  padding: 20px;
+  padding: 24px;
   flex-grow: 1;
+  background: linear-gradient(180deg, #fafffe 0%, #ffffff 100%);
 }
 
 .achievement-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 15px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #eee;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: #f8faf9;
+  border-radius: 10px;
+  border-right: 3px solid #1b8c6b;
 }
 
 .achievement-row:last-child {
-  border-bottom: none;
   margin-bottom: 0;
 }
 
 .achievement-row .label {
-  font-weight: 700;
-  color: #555;
+  font-weight: 600;
+  color: #666;
   font-size: 0.9rem;
-  min-width: 100px;
 }
 
 .achievement-row .value {
   color: #1a1a1a;
-  font-weight: 500;
+  font-weight: 600;
   text-align: left;
+  font-size: 0.95rem;
 }
 
 .achievement-row .value.date {
   font-size: 0.85rem;
   color: #888;
+  direction: ltr;
 }
 
 .achievement-actions {
   display: flex;
-  gap: 10px;
-  padding: 15px 20px;
-  background: #f9f9f9;
-  border-top: 1px solid #eee;
-  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  background: linear-gradient(180deg, #f5f9f7 0%, #eef5f2 100%);
+  border-top: 1px solid #e8f0ec;
 }
 
 .achievement-actions .btn {
   flex: 1;
-  max-width: 120px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.achievement-actions .btn-warning {
+  background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+  border: none;
+  color: white;
+}
+
+.achievement-actions .btn-warning:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4);
+}
+
+.achievement-actions .btn-danger {
+  background: linear-gradient(135deg, #ef5350 0%, #d32f2f 100%);
+  border: none;
+  color: white;
+}
+
+.achievement-actions .btn-danger:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(239, 83, 80, 0.4);
 }
 
 /* Table View */
@@ -926,5 +975,81 @@
   .points-preview {
     flex-direction: column;
     text-align: center;
+  }
+
+  /* Challenge Card Mobile */
+  .challenge-card {
+    padding: 15px;
+  }
+
+  .challenge-title {
+    font-size: 1rem;
+  }
+
+  .challenge-content {
+    font-size: 0.85rem;
+  }
+
+  /* Progress badges mobile */
+  .progress-badges {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .level-badge,
+  .stage-badge {
+    width: 100%;
+    text-align: center;
+  }
+
+  /* Form sections mobile */
+  .challenge-recording-section {
+    padding: 15px;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  /* History list mobile */
+  .history-item {
+    padding: 12px;
+  }
+
+  .history-header {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* Group/Student selection */
+  .group-select,
+  .student-select {
+    padding: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .student-progress-info {
+    padding: 12px;
+    margin: 12px 0;
+  }
+
+  .progress-header h4 {
+    font-size: 1rem;
+  }
+
+  .challenge-icon {
+    font-size: 1.5rem;
+  }
+
+  .challenge-points {
+    font-size: 0.8rem;
+  }
+
+  /* Buttons full width */
+  .submit-btn,
+  .cancel-btn {
+    width: 100%;
   }
 }

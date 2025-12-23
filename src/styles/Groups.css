@@ -103,25 +103,33 @@
 }
 
 .btn-warning {
-  background-color: #ff9800;
+  background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
   color: white;
-  padding: 5px 10px;
-  font-size: 0.85rem;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(255, 152, 0, 0.3);
 }
 
 .btn-warning:hover {
-  background-color: #e68900;
+  background: linear-gradient(135deg, #f57c00 0%, #e65100 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(255, 152, 0, 0.4);
 }
 
 .btn-danger {
-  background-color: #f44336;
+  background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
   color: white;
-  padding: 5px 10px;
-  font-size: 0.85rem;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(244, 67, 54, 0.3);
 }
 
 .btn-danger:hover {
-  background-color: #d32f2f;
+  background: linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(244, 67, 54, 0.4);
 }
 
 .btn-sm {
@@ -178,4 +186,78 @@
   margin-top: 15px;
   padding-top: 15px;
   border-top: 1px solid #eee;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .form-card {
+    padding: 15px;
+    margin-bottom: 20px;
+  }
+
+  .form-actions {
+    flex-direction: column;
+  }
+
+  .form-actions .btn {
+    width: 100%;
+  }
+
+  .groups-list {
+    grid-template-columns: 1fr;
+  }
+
+  .groups-container {
+    grid-template-columns: 1fr;
+  }
+
+  .group-card {
+    padding: 15px;
+  }
+
+  .group-card h2 {
+    font-size: 1.1rem;
+  }
+
+  .card-actions {
+    flex-direction: row;
+    justify-content: center;
+    gap: 12px;
+  }
+
+  .card-actions .btn {
+    flex: 1;
+    text-align: center;
+    padding: 10px 16px;
+    font-size: 0.9rem;
+    border-radius: 8px;
+  }
+
+  .card-actions .btn-warning {
+    background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+  }
+
+  .card-actions .btn-danger {
+    background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
+  }
+}
+
+@media (max-width: 480px) {
+  .group-card p {
+    font-size: 0.9rem;
+  }
+
+  .btn {
+    padding: 10px 16px;
+    font-size: 0.9rem;
+  }
+
+  .card-actions {
+    gap: 10px;
+  }
+
+  .card-actions .btn {
+    padding: 12px 10px;
+    font-size: 0.85rem;
+  }
 }

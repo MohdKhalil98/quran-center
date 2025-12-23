@@ -168,3 +168,50 @@
 .delete-message.error {
   color: #dc3545;
 }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .devtools-container {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .dev-card-body {
+    flex-direction: column;
+  }
+
+  .dev-card-body .btn {
+    width: 100%;
+  }
+
+  .modal-content {
+    width: 95%;
+    margin: 10px;
+  }
+
+  .modal-footer {
+    flex-direction: column;
+  }
+
+  .modal-footer .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .dev-card-header {
+    padding: 12px 16px;
+  }
+
+  .dev-card-header h3 {
+    font-size: 16px;
+  }
+
+  .dev-card-header p {
+    font-size: 13px;
+  }
+
+  .dev-card-body {
+    padding: 16px;
+  }
+}

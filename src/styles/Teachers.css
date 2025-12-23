@@ -86,3 +86,41 @@
   font-size: 0.95rem;
   font-weight: 500;
 }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .filters-section {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .filter-select {
+    width: 100%;
+    min-width: auto;
+  }
+
+  .info-note {
+    padding: 12px;
+    font-size: 13px;
+  }
+
+  .groups-checkboxes {
+    max-height: 200px;
+  }
+}
+
+@media (max-width: 480px) {
+  .filter-select {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .checkbox-label {
+    padding: 10px;
+  }
+
+  .checkbox-label span {
+    font-size: 0.9rem;
+  }
+}

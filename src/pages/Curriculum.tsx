@@ -100,21 +100,23 @@ const Curriculum: React.FC = () => {
         <div className="levels-sidebar">
           <h2>الأجزاء ({filteredLevels.length})</h2>
           
-          {filteredLevels.map(level => (
-            <div
-              key={level.id}
-              className={`level-card ${selectedLevel?.id === level.id ? 'selected' : ''}`}
-              onClick={() => setSelectedLevel(level)}
-            >
-              <div className="level-info">
-                <span className="level-name">{level.name}</span>
-                <span className="level-stages-count">{level.surahs.length} سورة</span>
+          <div className="levels-list">
+            {filteredLevels.map(level => (
+              <div
+                key={level.id}
+                className={`level-card ${selectedLevel?.id === level.id ? 'selected' : ''}`}
+                onClick={() => setSelectedLevel(level)}
+              >
+                <div className="level-info">
+                  <span className="level-name">{level.name}</span>
+                  <span className="level-stages-count">{level.surahs.length} سورة</span>
+                </div>
+                <div className="level-badge">
+                  <span className="juz-number">{level.juzNumber}</span>
+                </div>
               </div>
-              <div className="level-badge">
-                <span className="juz-number">{level.juzNumber}</span>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
 
         {/* Stages Table */}

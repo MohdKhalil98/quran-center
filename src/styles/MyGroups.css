@@ -248,3 +248,56 @@
     order: 1;
   }
 }
+
+@media (max-width: 768px) {
+  .my-groups-container {
+    padding: 15px 0;
+    gap: 16px;
+  }
+
+  .groups-sidebar,
+  .group-details {
+    padding: 16px;
+  }
+
+  .group-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .students-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .student-card {
+    padding: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .group-item {
+    padding: 12px;
+  }
+
+  .group-icon {
+    font-size: 1.2rem;
+  }
+
+  .group-info h3 {
+    font-size: 0.95rem;
+  }
+
+  .select-group-prompt {
+    padding: 40px 20px;
+  }
+
+  .prompt-icon {
+    font-size: 2.5rem;
+  }
+
+  .btn {
+    padding: 10px 16px;
+    font-size: 0.9rem;
+  }
+}

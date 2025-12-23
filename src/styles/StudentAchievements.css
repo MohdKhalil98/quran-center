@@ -773,6 +773,150 @@
   border-radius: 8px;
 }
 
+/* Aya Range Selection */
+.aya-range-row {
+  background: linear-gradient(135deg, #e8f5e9 0%, #f1f8e9 100%);
+  padding: 15px;
+  border-radius: 10px;
+  margin-bottom: 15px;
+  border: 1px solid #c8e6c9;
+}
+
+.aya-range-row .form-group {
+  flex: 1;
+}
+
+.aya-range-row input {
+  text-align: center;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.aya-range {
+  background: #e8f5e9;
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: #2e7d32;
+  font-weight: 500;
+}
+
+/* Ayah Progress Indicator */
+.ayah-progress-indicator {
+  background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+  border: 2px solid #ffb74d;
+  border-radius: 12px;
+  padding: 15px;
+  margin-bottom: 20px;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.progress-title {
+  font-weight: 600;
+  color: #e65100;
+  font-size: 0.95rem;
+}
+
+.progress-percentage {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #f57c00;
+}
+
+.progress-percentage.complete {
+  color: #2e7d32;
+}
+
+.progress-bar-container {
+  width: 100%;
+  height: 12px;
+  background: #fff;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ff9800, #f57c00);
+  border-radius: 6px;
+  transition: width 0.5s ease;
+}
+
+.progress-bar-fill.complete {
+  background: linear-gradient(90deg, #4caf50, #2e7d32);
+}
+
+.progress-details {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  font-size: 0.9rem;
+}
+
+.completed-count {
+  color: #2e7d32;
+  font-weight: 500;
+}
+
+.remaining-count {
+  color: #e65100;
+  font-weight: 500;
+}
+
+.complete-message {
+  color: #2e7d32;
+  font-weight: 600;
+  text-align: center;
+  width: 100%;
+}
+
+.completed-ranges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed #ffb74d;
+  align-items: center;
+}
+
+.ranges-label {
+  font-size: 0.85rem;
+  color: #666;
+  margin-left: 5px;
+}
+
+.range-badge {
+  background: #fff;
+  border: 1px solid #4caf50;
+  color: #2e7d32;
+  padding: 3px 10px;
+  border-radius: 15px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.next-aya-hint {
+  margin-top: 12px;
+  padding: 10px;
+  background: #e3f2fd;
+  border-radius: 8px;
+  color: #1565c0;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.next-aya-hint strong {
+  color: #0d47a1;
+  font-size: 1.1rem;
+}
+
 /* Pass/Fail Section */
 .pass-fail-section {
   margin: 20px 0;
@@ -863,6 +1007,34 @@
   border-color: #4caf50 !important;
   cursor: default;
   opacity: 0.9;
+}
+
+.challenge-card.partial {
+  background: linear-gradient(135deg, #fff8e1, #ffecb3) !important;
+  border-color: #ff9800 !important;
+  cursor: pointer;
+}
+
+.challenge-card.partial:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 16px rgba(255, 152, 0, 0.3);
+}
+
+.partial-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: #ff9800;
+  color: white;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .challenge-card.locked {

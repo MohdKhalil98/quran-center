@@ -69,6 +69,16 @@ const MyProgress = () => {
   const [currentLevel, setCurrentLevel] = useState<CurriculumLevel | null>(null);
   const [currentStage, setCurrentStage] = useState<CurriculumStage | null>(null);
   const [completedChallenges, setCompletedChallenges] = useState<Set<string>>(new Set());
+  const [challengeProgress, setChallengeProgress] = useState<{
+    memorization: { completed: number; total: number; remaining: number };
+    near_review: { completed: number; total: number; remaining: number };
+    far_review: { completed: number; total: number; remaining: number };
+  }>({
+    memorization: { completed: 0, total: 0, remaining: 0 },
+    near_review: { completed: 0, total: 0, remaining: 0 },
+    far_review: { completed: 0, total: 0, remaining: 0 }
+  });
+  const [currentRequiredChallenge, setCurrentRequiredChallenge] = useState<string>('');
 
   useEffect(() => {
     if (userProfile?.uid) {
@@ -134,13 +144,84 @@ const MyProgress = () => {
             );
             const achievementsSnap = await getDocs(achievementsQuery);
             const completed = new Set<string>();
+            
+            // Track ayah progress for each challenge type
+            const ayahProgress: {
+              memorization: Set<number>;
+              near_review: Set<number>;
+              far_review: Set<number>;
+            } = {
+              memorization: new Set(),
+              near_review: new Set(),
+              far_review: new Set()
+            };
+            
             achievementsSnap.forEach(doc => {
               const data = doc.data();
-              if (data.challengeType) {
-                completed.add(data.challengeType);
+              if (data.challengeType && data.fromAya && data.toAya) {
+                const from = parseInt(data.fromAya);
+                const to = parseInt(data.toAya);
+                for (let i = from; i <= to; i++) {
+                  if (data.challengeType === 'memorization') {
+                    ayahProgress.memorization.add(i);
+                  } else if (data.challengeType === 'near_review') {
+                    ayahProgress.near_review.add(i);
+                  } else if (data.challengeType === 'far_review') {
+                    ayahProgress.far_review.add(i);
+                  }
+                }
               }
             });
+            
+            const totalAyahs = stage.ayahCount || 0;
+            
+            // Calculate progress for each challenge
+            const progress = {
+              memorization: {
+                completed: ayahProgress.memorization.size,
+                total: totalAyahs,
+                remaining: Math.max(0, totalAyahs - ayahProgress.memorization.size)
+              },
+              near_review: {
+                completed: ayahProgress.near_review.size,
+                total: totalAyahs,
+                remaining: Math.max(0, totalAyahs - ayahProgress.near_review.size)
+              },
+              far_review: {
+                completed: ayahProgress.far_review.size,
+                total: totalAyahs,
+                remaining: Math.max(0, totalAyahs - ayahProgress.far_review.size)
+              }
+            };
+            
+            setChallengeProgress(progress);
+            
+            // Mark challenges as completed if all ayahs are done
+            if (progress.memorization.remaining === 0 && progress.memorization.completed > 0) {
+              completed.add('memorization');
+            }
+            if (progress.near_review.remaining === 0 && progress.near_review.completed > 0) {
+              completed.add('near_review');
+            }
+            if (progress.far_review.remaining === 0 && progress.far_review.completed > 0) {
+              completed.add('far_review');
+            }
+            
             setCompletedChallenges(completed);
+            
+            // Determine current required challenge
+            const nearReviewEmpty = !stage.nearReview || stage.nearReview === '-' || stage.nearReview === 'لا يوجد';
+            const farReviewEmpty = !stage.farReview || stage.farReview === '-' || stage.farReview === 'لا يوجد';
+            
+            if (progress.memorization.remaining > 0) {
+              setCurrentRequiredChallenge('memorization');
+            } else if (!nearReviewEmpty && progress.near_review.remaining > 0) {
+              setCurrentRequiredChallenge('near_review');
+            } else if (!farReviewEmpty && progress.far_review.remaining > 0) {
+              setCurrentRequiredChallenge('far_review');
+            } else {
+              setCurrentRequiredChallenge('completed');
+            }
           }
         }
       }
@@ -310,6 +391,62 @@ const MyProgress = () => {
         </div>
       )}
 
+      {/* Current Required Challenge Banner */}
+      {currentStage && currentRequiredChallenge && currentRequiredChallenge !== 'completed' && (
+        <div style={{
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          color: 'white',
+          padding: '1.5rem',
+          borderRadius: '16px',
+          marginBottom: '1.5rem',
+          boxShadow: '0 10px 40px rgba(102, 126, 234, 0.4)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+            <span style={{ fontSize: '2.5rem' }}>
+              {currentRequiredChallenge === 'memorization' ? '📖' : currentRequiredChallenge === 'near_review' ? '🔄' : '📚'}
+            </span>
+            <div>
+              <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>التحدي المطلوب الآن</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>
+                {currentRequiredChallenge === 'memorization' ? 'الحفظ' : currentRequiredChallenge === 'near_review' ? 'المراجعة القريبة' : 'المراجعة البعيدة'}
+              </div>
+            </div>
+          </div>
+          <div style={{ background: 'rgba(255,255,255,0.2)', padding: '1rem', borderRadius: '10px' }}>
+            <div style={{ marginBottom: '0.5rem', fontWeight: '500' }}>
+              {currentRequiredChallenge === 'memorization' && currentStage.memorization}
+              {currentRequiredChallenge === 'near_review' && currentStage.nearReview}
+              {currentRequiredChallenge === 'far_review' && currentStage.farReview}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+              <span>
+                ✅ مكتمل: {challengeProgress[currentRequiredChallenge as keyof typeof challengeProgress]?.completed || 0} آية
+              </span>
+              <span style={{ background: 'rgba(255,255,255,0.3)', padding: '0.25rem 0.75rem', borderRadius: '20px', fontWeight: 'bold' }}>
+                ⏳ متبقي: {challengeProgress[currentRequiredChallenge as keyof typeof challengeProgress]?.remaining || 0} آية
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* All Challenges Completed */}
+      {currentRequiredChallenge === 'completed' && (
+        <div style={{
+          background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+          color: 'white',
+          padding: '1.5rem',
+          borderRadius: '16px',
+          marginBottom: '1.5rem',
+          textAlign: 'center',
+          boxShadow: '0 10px 40px rgba(34, 197, 94, 0.4)'
+        }}>
+          <span style={{ fontSize: '3rem', display: 'block', marginBottom: '0.5rem' }}>🎉</span>
+          <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>أحسنت! أكملت جميع تحديات هذه المرحلة</div>
+          <div style={{ marginTop: '0.5rem', opacity: 0.9 }}>انتظر انتقالك للمرحلة التالية</div>
+        </div>
+      )}
+
       {/* Journey Map Section - Using Firebase Curriculum */}
       <div className="journey-section" style={{ marginBottom: '2rem', background: 'white', padding: '1.5rem', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
         <h2 style={{ marginBottom: '1.5rem', color: '#2c3e50' }}>🗺️ رحلة الحفظ</h2>
@@ -351,15 +488,25 @@ const MyProgress = () => {
               <div style={{
                 padding: '1rem',
                 borderRadius: '8px',
-                background: completedChallenges.has('memorization') ? '#dcfce7' : '#f8fafc',
-                border: completedChallenges.has('memorization') ? '2px solid #22c55e' : '2px solid #e2e8f0'
+                background: completedChallenges.has('memorization') ? '#dcfce7' : 
+                            challengeProgress.memorization.completed > 0 ? '#fff7ed' : '#f8fafc',
+                border: completedChallenges.has('memorization') ? '2px solid #22c55e' : 
+                        challengeProgress.memorization.completed > 0 ? '2px solid #f97316' : '2px solid #e2e8f0'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
                   <span style={{ fontSize: '1.5rem' }}>📖</span>
                   <span style={{ fontWeight: 'bold' }}>الحفظ</span>
                   {completedChallenges.has('memorization') && <span style={{ color: '#22c55e' }}>✓</span>}
+                  {!completedChallenges.has('memorization') && challengeProgress.memorization.completed > 0 && <span style={{ color: '#f97316' }}>⏳</span>}
                 </div>
                 <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>{currentStage.memorization}</p>
+                {completedChallenges.has('memorization') ? (
+                  <p style={{ margin: '0.5rem 0 0', color: '#22c55e', fontSize: '0.85rem', fontWeight: '500' }}>✅ مكتمل</p>
+                ) : challengeProgress.memorization.completed > 0 ? (
+                  <p style={{ margin: '0.5rem 0 0', color: '#f97316', fontSize: '0.85rem', fontWeight: '500' }}>
+                    ⏳ متبقي {challengeProgress.memorization.remaining} آية من {challengeProgress.memorization.total}
+                  </p>
+                ) : null}
               </div>
               
               {/* Near Review Challenge */}
@@ -367,15 +514,25 @@ const MyProgress = () => {
                 <div style={{
                   padding: '1rem',
                   borderRadius: '8px',
-                  background: completedChallenges.has('near_review') ? '#dcfce7' : '#f8fafc',
-                  border: completedChallenges.has('near_review') ? '2px solid #22c55e' : '2px solid #e2e8f0'
+                  background: completedChallenges.has('near_review') ? '#dcfce7' : 
+                              challengeProgress.near_review.completed > 0 ? '#fff7ed' : '#f8fafc',
+                  border: completedChallenges.has('near_review') ? '2px solid #22c55e' : 
+                          challengeProgress.near_review.completed > 0 ? '2px solid #f97316' : '2px solid #e2e8f0'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
                     <span style={{ fontSize: '1.5rem' }}>🔄</span>
                     <span style={{ fontWeight: 'bold' }}>المراجعة القريبة</span>
                     {completedChallenges.has('near_review') && <span style={{ color: '#22c55e' }}>✓</span>}
+                    {!completedChallenges.has('near_review') && challengeProgress.near_review.completed > 0 && <span style={{ color: '#f97316' }}>⏳</span>}
                   </div>
                   <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>{currentStage.nearReview}</p>
+                  {completedChallenges.has('near_review') ? (
+                    <p style={{ margin: '0.5rem 0 0', color: '#22c55e', fontSize: '0.85rem', fontWeight: '500' }}>✅ مكتمل</p>
+                  ) : challengeProgress.near_review.completed > 0 ? (
+                    <p style={{ margin: '0.5rem 0 0', color: '#f97316', fontSize: '0.85rem', fontWeight: '500' }}>
+                      ⏳ متبقي {challengeProgress.near_review.remaining} آية من {challengeProgress.near_review.total}
+                    </p>
+                  ) : null}
                 </div>
               )}
               
@@ -384,15 +541,25 @@ const MyProgress = () => {
                 <div style={{
                   padding: '1rem',
                   borderRadius: '8px',
-                  background: completedChallenges.has('far_review') ? '#dcfce7' : '#f8fafc',
-                  border: completedChallenges.has('far_review') ? '2px solid #22c55e' : '2px solid #e2e8f0'
+                  background: completedChallenges.has('far_review') ? '#dcfce7' : 
+                              challengeProgress.far_review.completed > 0 ? '#fff7ed' : '#f8fafc',
+                  border: completedChallenges.has('far_review') ? '2px solid #22c55e' : 
+                          challengeProgress.far_review.completed > 0 ? '2px solid #f97316' : '2px solid #e2e8f0'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
                     <span style={{ fontSize: '1.5rem' }}>📚</span>
                     <span style={{ fontWeight: 'bold' }}>المراجعة البعيدة</span>
                     {completedChallenges.has('far_review') && <span style={{ color: '#22c55e' }}>✓</span>}
+                    {!completedChallenges.has('far_review') && challengeProgress.far_review.completed > 0 && <span style={{ color: '#f97316' }}>⏳</span>}
                   </div>
                   <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>{currentStage.farReview}</p>
+                  {completedChallenges.has('far_review') ? (
+                    <p style={{ margin: '0.5rem 0 0', color: '#22c55e', fontSize: '0.85rem', fontWeight: '500' }}>✅ مكتمل</p>
+                  ) : challengeProgress.far_review.completed > 0 ? (
+                    <p style={{ margin: '0.5rem 0 0', color: '#f97316', fontSize: '0.85rem', fontWeight: '500' }}>
+                      ⏳ متبقي {challengeProgress.far_review.remaining} آية من {challengeProgress.far_review.total}
+                    </p>
+                  ) : null}
                 </div>
               )}
             </div>

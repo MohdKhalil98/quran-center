@@ -55,6 +55,7 @@ interface CurriculumStage {
   nearReview: string;
   farReview: string;
   stageBonus: number;
+  ayahCount: number; // عدد آيات السورة
 }
 
 interface CurriculumLevel {
@@ -67,33 +68,33 @@ interface CurriculumLevel {
 
 // Convert QuranSurah to CurriculumStage format
 const convertSurahToStage = (surah: QuranSurah, juzIndex: number, surahIndex: number): CurriculumStage => {
-  // Calculate near review (previous 2 surahs)
-  const nearReviewParts: string[] = [];
+  // Near review: السورة السابقة فقط (كما في صفحة المنهج)
+  let nearReview = '-';
   const currentJuz = quranCurriculum[juzIndex];
   
-  // Get previous surahs from current juz
-  for (let i = surahIndex - 1; i >= Math.max(0, surahIndex - 2); i--) {
-    nearReviewParts.push(currentJuz.surahs[i].name);
-  }
-  
-  // If we need more surahs, get from previous juz
-  if (nearReviewParts.length < 2 && juzIndex > 0) {
+  if (surahIndex > 0) {
+    // السورة السابقة في نفس الجزء
+    nearReview = `سورة ${currentJuz.surahs[surahIndex - 1].name}`;
+  } else if (juzIndex > 0) {
+    // آخر سورة في الجزء السابق
     const prevJuz = quranCurriculum[juzIndex - 1];
-    const remaining = 2 - nearReviewParts.length;
-    for (let i = prevJuz.surahs.length - 1; i >= Math.max(0, prevJuz.surahs.length - remaining); i--) {
-      nearReviewParts.push(prevJuz.surahs[i].name);
-    }
+    nearReview = `سورة ${prevJuz.surahs[prevJuz.surahs.length - 1].name}`;
   }
   
-  // Calculate far review (from earlier completed juz)
+  // Far review: السورة قبل السابقة (كما في صفحة المنهج)
   let farReview = '-';
-  if (juzIndex > 0) {
-    // Review from 2 juz back if available
-    const farJuzIndex = Math.max(0, juzIndex - 2);
-    const farJuz = quranCurriculum[farJuzIndex];
-    if (farJuz.surahs.length > 0) {
-      const randomSurah = farJuz.surahs[Math.floor(surahIndex % farJuz.surahs.length)];
-      farReview = randomSurah.name;
+  if (surahIndex > 1) {
+    // سورتين للخلف في نفس الجزء
+    farReview = `سورة ${currentJuz.surahs[surahIndex - 2].name}`;
+  } else if (surahIndex === 1 && juzIndex > 0) {
+    // السورة الأولى في الجزء الحالي + نحتاج السورة الأخيرة من الجزء السابق
+    const prevJuz = quranCurriculum[juzIndex - 1];
+    farReview = `سورة ${prevJuz.surahs[prevJuz.surahs.length - 1].name}`;
+  } else if (surahIndex === 0 && juzIndex > 0) {
+    // أول سورة في الجزء - نحتاج ثاني آخر سورة من الجزء السابق
+    const prevJuz = quranCurriculum[juzIndex - 1];
+    if (prevJuz.surahs.length > 1) {
+      farReview = `سورة ${prevJuz.surahs[prevJuz.surahs.length - 2].name}`;
     }
   }
   
@@ -101,10 +102,11 @@ const convertSurahToStage = (surah: QuranSurah, juzIndex: number, surahIndex: nu
     id: surah.id,
     name: surah.name,
     order: surah.order,
-    memorization: `${surah.name} (${surah.ayahCount} آية)`,
-    nearReview: nearReviewParts.length > 0 ? nearReviewParts.join(' + ') : '-',
+    memorization: `سورة ${surah.name} (${surah.ayahCount} آية)`,
+    nearReview: nearReview,
     farReview: farReview,
-    stageBonus: 30
+    stageBonus: 30,
+    ayahCount: surah.ayahCount
   };
 };
 
@@ -156,6 +158,10 @@ const StudentAchievements = () => {
   const [challengeNotes, setChallengeNotes] = useState<string>('');
   const [challengePassed, setChallengePassed] = useState<boolean>(true);
   const [recordDate, setRecordDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [fromAya, setFromAya] = useState<string>('1');
+  const [toAya, setToAya] = useState<string>('');
+  const [completedAyahs, setCompletedAyahs] = useState<{from: number, to: number}[]>([]);
+  const [nextStartAya, setNextStartAya] = useState<number>(1);
 
   // Message Box state
   const [messageBox, setMessageBox] = useState<{
@@ -402,6 +408,111 @@ const StudentAchievements = () => {
     }
   };
 
+  // تحديث الآيات المكتملة عند اختيار تحدي جديد
+  useEffect(() => {
+    if (selectedStudent && studentStage && selectedChallengeType) {
+      calculateCompletedAyahs(selectedStudent.id, studentStage.id, selectedChallengeType);
+      // تعيين آية النهاية افتراضياً لآخر آية في السورة
+      setToAya(studentStage.ayahCount.toString());
+    } else {
+      setCompletedAyahs([]);
+      setNextStartAya(1);
+      setFromAya('1');
+      setToAya('');
+    }
+  }, [selectedStudent, studentStage, selectedChallengeType, achievements]);
+
+  // الانتقال تلقائياً للتحدي التالي عند اكتمال جميع الآيات
+  useEffect(() => {
+    if (!selectedStudent || !studentStage || !selectedChallengeType) return;
+    
+    // الحفظ ينتقل تلقائياً للمراجعة القريبة عند اكتمال جميع الآيات
+    if (selectedChallengeType === 'memorization' && isMemorizationFullyComplete()) {
+      const nearReviewEmpty = isChallengeEmpty(studentStage.nearReview);
+      const nearReviewComplete = isNearReviewFullyComplete();
+      
+      if (!nearReviewEmpty && !nearReviewComplete) {
+        setSelectedChallengeType('near_review');
+      } else {
+        // إذا لم تكن هناك مراجعة قريبة أو مكتملة، انتقل للمراجعة البعيدة
+        const farReviewEmpty = isChallengeEmpty(studentStage.farReview);
+        const farReviewComplete = isFarReviewFullyComplete();
+        if (!farReviewEmpty && !farReviewComplete) {
+          setSelectedChallengeType('far_review');
+        } else {
+          setSelectedChallengeType('');
+        }
+      }
+    }
+    // المراجعة القريبة تنتقل للبعيدة عند اكتمال جميع الآيات
+    else if (selectedChallengeType === 'near_review' && isNearReviewFullyComplete()) {
+      const farReviewEmpty = isChallengeEmpty(studentStage.farReview);
+      const farReviewComplete = isFarReviewFullyComplete();
+      if (!farReviewEmpty && !farReviewComplete) {
+        setSelectedChallengeType('far_review');
+      } else {
+        setSelectedChallengeType('');
+      }
+    }
+    // المراجعة البعيدة تنتهي عند اكتمال جميع الآيات
+    else if (selectedChallengeType === 'far_review' && isFarReviewFullyComplete()) {
+      setSelectedChallengeType('');
+    }
+  }, [achievements, selectedChallengeType, studentStage, selectedStudent]);
+
+  // حساب الآيات المكتملة والمتبقية للطالب في المرحلة الحالية
+  const calculateCompletedAyahs = (studentId: string, stageId: string, challengeType: ChallengeType) => {
+    // الحصول على جميع تحصيلات الطالب في هذه المرحلة ولنفس نوع التحدي
+    const stageAchievements = achievements.filter(
+      a => a.studentId === studentId && 
+           a.stageId === stageId && 
+           a.challengeType === challengeType &&
+           a.challengePassed &&
+           a.fromAya && a.toAya
+    );
+    
+    // جمع الآيات المكتملة
+    const completed: {from: number, to: number}[] = stageAchievements.map(a => ({
+      from: parseInt(a.fromAya || '0'),
+      to: parseInt(a.toAya || '0')
+    })).filter(r => r.from > 0 && r.to > 0);
+    
+    setCompletedAyahs(completed);
+    
+    // حساب آية البداية التالية
+    if (completed.length === 0) {
+      setNextStartAya(1);
+      setFromAya('1');
+    } else {
+      // ترتيب الآيات وإيجاد أعلى آية مكتملة
+      const maxCompletedAya = Math.max(...completed.map(r => r.to));
+      const nextAya = maxCompletedAya + 1;
+      setNextStartAya(nextAya);
+      setFromAya(nextAya.toString());
+    }
+  };
+
+  // حساب الآيات المتبقية
+  const getRemainingAyahs = (): { remaining: number; total: number; percentage: number } => {
+    if (!studentStage) return { remaining: 0, total: 0, percentage: 0 };
+    
+    const total = studentStage.ayahCount;
+    
+    // حساب عدد الآيات المكتملة بدون تكرار
+    const completedSet = new Set<number>();
+    completedAyahs.forEach(range => {
+      for (let i = range.from; i <= range.to; i++) {
+        completedSet.add(i);
+      }
+    });
+    
+    const completedCount = completedSet.size;
+    const remaining = Math.max(0, total - completedCount);
+    const percentage = total > 0 ? Math.round((completedCount / total) * 100) : 0;
+    
+    return { remaining, total, percentage };
+  };
+
   // Get challenge content based on type
   const getChallengeContent = (type: ChallengeType): string => {
     if (!studentStage) return '';
@@ -415,6 +526,118 @@ const StudentAchievements = () => {
       default:
         return '';
     }
+  };
+
+  // التحقق من اكتمال جميع آيات الحفظ
+  const isMemorizationFullyComplete = (): boolean => {
+    if (!studentStage || !selectedStudent) return false;
+    
+    // حساب آيات الحفظ المكتملة مباشرة من achievements
+    const memorizationAchievements = achievements.filter(
+      a => a.studentId === selectedStudent.id && 
+           a.stageId === studentStage.id && 
+           a.challengeType === 'memorization' &&
+           a.challengePassed &&
+           a.fromAya && a.toAya
+    );
+    
+    if (memorizationAchievements.length === 0) return false;
+    
+    // جمع الآيات المكتملة
+    const completedSet = new Set<number>();
+    memorizationAchievements.forEach(a => {
+      const from = parseInt(a.fromAya || '0');
+      const to = parseInt(a.toAya || '0');
+      for (let i = from; i <= to; i++) {
+        completedSet.add(i);
+      }
+    });
+    
+    return completedSet.size >= studentStage.ayahCount;
+  };
+
+  // التحقق من اكتمال جميع آيات المراجعة القريبة
+  const isNearReviewFullyComplete = (): boolean => {
+    if (!studentStage || !selectedStudent) return false;
+    if (isChallengeEmpty(studentStage.nearReview)) return true; // لا يوجد مراجعة قريبة
+    
+    const nearReviewAchievements = achievements.filter(
+      a => a.studentId === selectedStudent.id && 
+           a.stageId === studentStage.id && 
+           a.challengeType === 'near_review' &&
+           a.challengePassed &&
+           a.fromAya && a.toAya
+    );
+    
+    if (nearReviewAchievements.length === 0) return false;
+    
+    const completedSet = new Set<number>();
+    nearReviewAchievements.forEach(a => {
+      const from = parseInt(a.fromAya || '0');
+      const to = parseInt(a.toAya || '0');
+      for (let i = from; i <= to; i++) {
+        completedSet.add(i);
+      }
+    });
+    
+    return completedSet.size >= studentStage.ayahCount;
+  };
+
+  // التحقق من اكتمال جميع آيات المراجعة البعيدة
+  const isFarReviewFullyComplete = (): boolean => {
+    if (!studentStage || !selectedStudent) return false;
+    if (isChallengeEmpty(studentStage.farReview)) return true; // لا يوجد مراجعة بعيدة
+    
+    const farReviewAchievements = achievements.filter(
+      a => a.studentId === selectedStudent.id && 
+           a.stageId === studentStage.id && 
+           a.challengeType === 'far_review' &&
+           a.challengePassed &&
+           a.fromAya && a.toAya
+    );
+    
+    if (farReviewAchievements.length === 0) return false;
+    
+    const completedSet = new Set<number>();
+    farReviewAchievements.forEach(a => {
+      const from = parseInt(a.fromAya || '0');
+      const to = parseInt(a.toAya || '0');
+      for (let i = from; i <= to; i++) {
+        completedSet.add(i);
+      }
+    });
+    
+    return completedSet.size >= studentStage.ayahCount;
+  };
+
+  // حساب الآيات المتبقية لتحدي معين
+  const getRemainingAyahsForChallenge = (challengeType: ChallengeType): { remaining: number; total: number; percentage: number; hasProgress: boolean } => {
+    if (!studentStage || !selectedStudent) return { remaining: 0, total: 0, percentage: 0, hasProgress: false };
+    
+    const total = studentStage.ayahCount;
+    
+    const challengeAchievements = achievements.filter(
+      a => a.studentId === selectedStudent.id && 
+           a.stageId === studentStage.id && 
+           a.challengeType === challengeType &&
+           a.challengePassed &&
+           a.fromAya && a.toAya
+    );
+    
+    const completedSet = new Set<number>();
+    challengeAchievements.forEach(a => {
+      const from = parseInt(a.fromAya || '0');
+      const to = parseInt(a.toAya || '0');
+      for (let i = from; i <= to; i++) {
+        completedSet.add(i);
+      }
+    });
+    
+    const completedCount = completedSet.size;
+    const remaining = Math.max(0, total - completedCount);
+    const percentage = total > 0 ? Math.round((completedCount / total) * 100) : 0;
+    
+    return { remaining, total, percentage, hasProgress: completedCount > 0 };
   };
 
   // Get challenge label
@@ -465,6 +688,7 @@ const StudentAchievements = () => {
 
   // Check if all required challenges are completed for current stage
   // Takes into account that some challenges may be empty (not applicable)
+  // Also checks that ALL ayahs are completed for ALL challenges
   const checkStageCompletion = async (studentId: string, stageId: string, stage: CurriculumStage): Promise<boolean> => {
     try {
       const achievementsQuery = query(
@@ -475,23 +699,58 @@ const StudentAchievements = () => {
       );
       const snapshot = await getDocs(achievementsQuery);
       
-      const completedTypes = new Set<string>();
+      const memorizationAchievements: {fromAya: number, toAya: number}[] = [];
+      const nearReviewAchievements: {fromAya: number, toAya: number}[] = [];
+      const farReviewAchievements: {fromAya: number, toAya: number}[] = [];
+      
       snapshot.forEach(doc => {
         const data = doc.data();
-        if (data.challengeType) {
-          completedTypes.add(data.challengeType);
+        if (data.challengeType && data.fromAya && data.toAya) {
+          const range = {
+            fromAya: parseInt(data.fromAya),
+            toAya: parseInt(data.toAya)
+          };
+          
+          if (data.challengeType === 'memorization') {
+            memorizationAchievements.push(range);
+          } else if (data.challengeType === 'near_review') {
+            nearReviewAchievements.push(range);
+          } else if (data.challengeType === 'far_review') {
+            farReviewAchievements.push(range);
+          }
         }
       });
+      
+      // Helper function to count completed ayahs
+      const countCompletedAyahs = (achievements: {fromAya: number, toAya: number}[]): number => {
+        const completedSet = new Set<number>();
+        achievements.forEach(range => {
+          for (let i = range.fromAya; i <= range.toAya; i++) {
+            completedSet.add(i);
+          }
+        });
+        return completedSet.size;
+      };
       
       // Check which challenges are required (not empty)
       const memorizationRequired = !isChallengeEmpty(stage.memorization);
       const nearReviewRequired = !isChallengeEmpty(stage.nearReview);
       const farReviewRequired = !isChallengeEmpty(stage.farReview);
       
-      // Check if all required challenges are completed
-      const memorizationDone = !memorizationRequired || completedTypes.has('memorization');
-      const nearReviewDone = !nearReviewRequired || completedTypes.has('near_review');
-      const farReviewDone = !farReviewRequired || completedTypes.has('far_review');
+      const totalAyahs = stage.ayahCount;
+      
+      // Check if ALL ayahs are completed for each required challenge
+      const memorizationDone = !memorizationRequired || countCompletedAyahs(memorizationAchievements) >= totalAyahs;
+      const nearReviewDone = !nearReviewRequired || countCompletedAyahs(nearReviewAchievements) >= totalAyahs;
+      const farReviewDone = !farReviewRequired || countCompletedAyahs(farReviewAchievements) >= totalAyahs;
+      
+      console.log('Stage completion check:', {
+        stageName: stage.name,
+        totalAyahs,
+        memorization: { required: memorizationRequired, completed: countCompletedAyahs(memorizationAchievements), done: memorizationDone },
+        nearReview: { required: nearReviewRequired, completed: countCompletedAyahs(nearReviewAchievements), done: nearReviewDone },
+        farReview: { required: farReviewRequired, completed: countCompletedAyahs(farReviewAchievements), done: farReviewDone }
+      });
       
       return memorizationDone && nearReviewDone && farReviewDone;
     } catch (error) {
@@ -525,6 +784,8 @@ const StudentAchievements = () => {
         levelName: studentLevel.name,
         stageId: studentStage.id,
         stageName: studentStage.name,
+        fromAya: fromAya,
+        toAya: toAya,
       };
 
       if (editingId) {
@@ -672,6 +933,8 @@ const StudentAchievements = () => {
     setRecordDate(new Date().toISOString().split('T')[0]);
     setEditingId(null);
     setCompletedChallenges(new Set());
+    setFromAya('1');
+    setToAya('');
   };
 
   const handleDeleteAchievement = (id: string) => {
@@ -989,38 +1252,49 @@ const StudentAchievements = () => {
             {/* Three Challenges Display */}
             <div className="challenges-grid">
               {/* Memorization Challenge */}
-              <div 
-                className={`challenge-card memorization ${selectedChallengeType === 'memorization' ? 'selected' : ''} ${completedChallenges.has('memorization') ? 'completed' : ''}`}
-                onClick={() => !completedChallenges.has('memorization') && setSelectedChallengeType('memorization')}
-              >
-                {completedChallenges.has('memorization') && <div className="completed-badge">✓</div>}
-                <div className="challenge-icon">📖</div>
-                <div className="challenge-title">الحفظ</div>
-                <div className="challenge-content">{studentStage.memorization}</div>
-                <div className="challenge-points">
-                  {completedChallenges.has('memorization') ? '✅ مكتمل' : `${POINTS_SYSTEM.MEMORIZATION} نقطة`}
-                </div>
-              </div>
+              {(() => {
+                const memorizationComplete = isMemorizationFullyComplete();
+                const hasPartialProgress = completedAyahs.length > 0 && !memorizationComplete;
+                return (
+                  <div 
+                    className={`challenge-card memorization ${selectedChallengeType === 'memorization' ? 'selected' : ''} ${memorizationComplete ? 'completed' : ''} ${hasPartialProgress ? 'partial' : ''}`}
+                    onClick={() => !memorizationComplete && setSelectedChallengeType('memorization')}
+                  >
+                    {memorizationComplete && <div className="completed-badge">✓</div>}
+                    {hasPartialProgress && <div className="partial-badge">⏳</div>}
+                    <div className="challenge-icon">📖</div>
+                    <div className="challenge-title">الحفظ</div>
+                    <div className="challenge-content">{studentStage.memorization}</div>
+                    <div className="challenge-points">
+                      {memorizationComplete ? '✅ مكتمل' : hasPartialProgress ? `⏳ متبقي ${getRemainingAyahs().remaining} آية` : `${POINTS_SYSTEM.MEMORIZATION} نقطة`}
+                    </div>
+                  </div>
+                );
+              })()}
               
               {/* Near Review Challenge */}
               {(() => {
                 const isEmpty = isChallengeEmpty(studentStage.nearReview);
-                const isLocked = !completedChallenges.has('memorization') && !isEmpty;
-                const isCompleted = completedChallenges.has('near_review');
+                const memorizationComplete = isMemorizationFullyComplete();
+                const isLocked = !memorizationComplete && !isEmpty;
+                const nearReviewComplete = isNearReviewFullyComplete();
+                const nearReviewProgress = getRemainingAyahsForChallenge('near_review');
+                const hasPartialProgress = nearReviewProgress.hasProgress && !nearReviewComplete;
                 const isDisabled = isEmpty;
                 
                 return (
                   <div 
-                    className={`challenge-card near-review ${selectedChallengeType === 'near_review' ? 'selected' : ''} ${isCompleted ? 'completed' : ''} ${isLocked ? 'locked' : ''} ${isDisabled ? 'disabled' : ''}`}
-                    onClick={() => !isLocked && !isDisabled && !isCompleted && setSelectedChallengeType('near_review')}
+                    className={`challenge-card near-review ${selectedChallengeType === 'near_review' ? 'selected' : ''} ${nearReviewComplete ? 'completed' : ''} ${isLocked ? 'locked' : ''} ${isDisabled ? 'disabled' : ''} ${hasPartialProgress ? 'partial' : ''}`}
+                    onClick={() => !isLocked && !isDisabled && !nearReviewComplete && setSelectedChallengeType('near_review')}
                   >
-                    {isCompleted && <div className="completed-badge">✓</div>}
+                    {nearReviewComplete && <div className="completed-badge">✓</div>}
                     {isLocked && <div className="lock-badge">🔒</div>}
+                    {hasPartialProgress && !isLocked && <div className="partial-badge">⏳</div>}
                     <div className="challenge-icon">🔄</div>
                     <div className="challenge-title">المراجعة القريبة</div>
                     <div className="challenge-content">{studentStage.nearReview}</div>
                     <div className="challenge-points">
-                      {isCompleted ? '✅ مكتمل' : isLocked ? 'أكمل الحفظ أولاً' : isDisabled ? 'لا يوجد' : `${POINTS_SYSTEM.NEAR_REVIEW} نقطة`}
+                      {nearReviewComplete ? '✅ مكتمل' : isLocked ? 'أكمل الحفظ أولاً' : isDisabled ? 'لا يوجد' : hasPartialProgress ? `⏳ متبقي ${nearReviewProgress.remaining} آية` : `${POINTS_SYSTEM.NEAR_REVIEW} نقطة`}
                     </div>
                   </div>
                 );
@@ -1030,27 +1304,32 @@ const StudentAchievements = () => {
               {(() => {
                 const nearReviewEmpty = isChallengeEmpty(studentStage.nearReview);
                 const farReviewEmpty = isChallengeEmpty(studentStage.farReview);
+                const memorizationComplete = isMemorizationFullyComplete();
+                const nearReviewComplete = isNearReviewFullyComplete();
                 // If near review is empty, far review depends on memorization
-                // Otherwise, it depends on near review
+                // Otherwise, it depends on near review completion
                 const prerequisiteCompleted = nearReviewEmpty 
-                  ? completedChallenges.has('memorization')
-                  : completedChallenges.has('near_review');
+                  ? memorizationComplete
+                  : nearReviewComplete;
                 const isLocked = !prerequisiteCompleted && !farReviewEmpty;
-                const isCompleted = completedChallenges.has('far_review');
+                const farReviewComplete = isFarReviewFullyComplete();
+                const farReviewProgress = getRemainingAyahsForChallenge('far_review');
+                const hasPartialProgress = farReviewProgress.hasProgress && !farReviewComplete;
                 const isDisabled = farReviewEmpty;
                 
                 return (
                   <div 
-                    className={`challenge-card far-review ${selectedChallengeType === 'far_review' ? 'selected' : ''} ${isCompleted ? 'completed' : ''} ${isLocked ? 'locked' : ''} ${isDisabled ? 'disabled' : ''}`}
-                    onClick={() => !isLocked && !isDisabled && !isCompleted && setSelectedChallengeType('far_review')}
+                    className={`challenge-card far-review ${selectedChallengeType === 'far_review' ? 'selected' : ''} ${farReviewComplete ? 'completed' : ''} ${isLocked ? 'locked' : ''} ${isDisabled ? 'disabled' : ''} ${hasPartialProgress ? 'partial' : ''}`}
+                    onClick={() => !isLocked && !isDisabled && !farReviewComplete && setSelectedChallengeType('far_review')}
                   >
-                    {isCompleted && <div className="completed-badge">✓</div>}
+                    {farReviewComplete && <div className="completed-badge">✓</div>}
                     {isLocked && <div className="lock-badge">🔒</div>}
+                    {hasPartialProgress && !isLocked && <div className="partial-badge">⏳</div>}
                     <div className="challenge-icon">📚</div>
                     <div className="challenge-title">المراجعة البعيدة</div>
                     <div className="challenge-content">{studentStage.farReview}</div>
                     <div className="challenge-points">
-                      {isCompleted ? '✅ مكتمل' : isLocked ? (nearReviewEmpty ? 'أكمل الحفظ أولاً' : 'أكمل المراجعة القريبة أولاً') : isDisabled ? 'لا يوجد' : `${POINTS_SYSTEM.FAR_REVIEW} نقطة`}
+                      {farReviewComplete ? '✅ مكتمل' : isLocked ? (nearReviewEmpty ? 'أكمل الحفظ أولاً' : 'أكمل المراجعة القريبة أولاً') : isDisabled ? 'لا يوجد' : hasPartialProgress ? `⏳ متبقي ${farReviewProgress.remaining} آية` : `${POINTS_SYSTEM.FAR_REVIEW} نقطة`}
                     </div>
                   </div>
                 );
@@ -1064,6 +1343,90 @@ const StudentAchievements = () => {
           <div className="challenge-recording-section">
             <h4>📋 تسجيل نتيجة: {getChallengeLabel(selectedChallengeType)}</h4>
             <p className="challenge-description">المحتوى: {getChallengeContent(selectedChallengeType)}</p>
+            
+            {/* Progress Indicator - For All Challenge Types */}
+            {studentStage && selectedChallengeType && (
+              <div className="ayah-progress-indicator">
+                {(() => {
+                  const challengeProgress = getRemainingAyahsForChallenge(selectedChallengeType);
+                  const { remaining, total, percentage, hasProgress } = challengeProgress;
+                  const isComplete = remaining === 0 && hasProgress;
+                  const challengeLabel = selectedChallengeType === 'memorization' ? 'الحفظ' : 
+                                        selectedChallengeType === 'near_review' ? 'المراجعة القريبة' : 'المراجعة البعيدة';
+                  return (
+                    <>
+                      <div className="progress-header">
+                        <span className="progress-title">📊 تقدم {challengeLabel} في {studentStage.name}</span>
+                        <span className={`progress-percentage ${isComplete ? 'complete' : ''}`}>
+                          {percentage}%
+                        </span>
+                      </div>
+                      <div className="progress-bar-container">
+                        <div 
+                          className={`progress-bar-fill ${isComplete ? 'complete' : ''}`}
+                          style={{ width: `${percentage}%` }}
+                        ></div>
+                      </div>
+                      <div className="progress-details">
+                        {isComplete ? (
+                          <span className="complete-message">✅ تم إتمام {challengeLabel} لجميع الآيات!</span>
+                        ) : (
+                          <>
+                            <span className="completed-count">✅ مكتمل: {total - remaining} آية</span>
+                            <span className="remaining-count">⏳ متبقي: {remaining} آية من {total}</span>
+                          </>
+                        )}
+                      </div>
+                      {completedAyahs.length > 0 && (
+                        <div className="completed-ranges">
+                          <span className="ranges-label">الآيات المسجلة:</span>
+                          {completedAyahs.map((range, idx) => (
+                            <span key={idx} className="range-badge">
+                              {range.from === range.to ? `آية ${range.from}` : `${range.from}-${range.to}`}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {!isComplete && nextStartAya > 1 && (
+                        <div className="next-aya-hint">
+                          💡 الآية التالية للتسميع: <strong>{nextStartAya}</strong>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+            
+            {/* Aya Range Selection */}
+            <div className="form-row aya-range-row">
+              <div className="form-group">
+                <label htmlFor="fromAya">من الآية *</label>
+                <input
+                  type="number"
+                  id="fromAya"
+                  min="1"
+                  max={studentStage?.ayahCount || 999}
+                  placeholder="1"
+                  value={fromAya}
+                  onChange={(e) => setFromAya(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="toAya">إلى الآية *</label>
+                <input
+                  type="number"
+                  id="toAya"
+                  min="1"
+                  max={studentStage?.ayahCount || 999}
+                  placeholder={studentStage?.ayahCount?.toString() || 'آخر آية'}
+                  value={toAya}
+                  onChange={(e) => setToAya(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
             
             <div className="form-row">
               <div className="form-group">
@@ -1226,6 +1589,16 @@ const StudentAchievements = () => {
                   <span className="label">المحتوى:</span>
                   <span className="value">{achievement.challengeContent || achievement.portion}</span>
                 </div>
+
+                {/* Aya Range */}
+                {(achievement.fromAya || achievement.toAya) && (
+                  <div className="achievement-row">
+                    <span className="label">الآيات:</span>
+                    <span className="value aya-range">
+                      من آية {achievement.fromAya || '1'} إلى آية {achievement.toAya || '؟'}
+                    </span>
+                  </div>
+                )}
 
                 {/* Level & Stage */}
                 {achievement.levelName && (

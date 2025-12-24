@@ -18,6 +18,8 @@ import Centers from './pages/Centers';
 import PendingRequests from './pages/PendingRequests';
 import MyProgress from './pages/MyProgress';
 import Leaderboard from './pages/Leaderboard';
+import Messages from './pages/Messages';
+import Conversation from './pages/Conversation';
 import { useAuth } from './context/AuthContext';
 
 // Component to handle default redirect based on role
@@ -53,6 +55,8 @@ function App() {
           <Route path="/pending-requests" element={<PendingRequests />} />
           <Route path="/my-progress" element={<MyProgress />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/messages" element={<Messages />} />
+          <Route path="/messages/:conversationId" element={<Conversation />} />
         </Route>
       </Route>
       <Route path="*" element={<DefaultRedirect />} />

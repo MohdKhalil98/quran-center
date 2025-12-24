@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, where } from 'firebase/firestore';
+import { useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
+import { useMessaging } from '../hooks/useMessaging';
 import '../styles/Groups.css';
 import ConfirmModal from '../components/ConfirmModal';
 
@@ -24,6 +26,8 @@ interface Group {
 
 const Groups = () => {
   const { userProfile } = useAuth();
+  const { findOrCreateConversation } = useMessaging();
+  const navigate = useNavigate();
   const [groups, setGroups] = useState<Group[]>([]);
   const [tracks, setTracks] = useState<any[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -32,6 +36,7 @@ const Groups = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmTargetId, setConfirmTargetId] = useState<string | null>(null);
+  const [openingChat, setOpeningChat] = useState<string | null>(null);
   const [formData, setFormData] = useState<Group>({
     name: '',
     trackId: '',
@@ -185,6 +190,54 @@ const Groups = () => {
     });
   };
 
+  // فتح المحادثة الجماعية للحلقة
+  const openGroupChat = async (group: Group) => {
+    if (!group.id || !group.teacherId) {
+      alert('يجب تعيين معلم للحلقة أولاً');
+      return;
+    }
+
+    setOpeningChat(group.id);
+
+    try {
+      // جلب طلاب الحلقة
+      const studentsQuery = query(
+        collection(db, 'users'),
+        where('role', '==', 'student'),
+        where('groupId', '==', group.id),
+        where('status', '==', 'approved')
+      );
+      const studentsSnapshot = await getDocs(studentsQuery);
+      const studentIds = studentsSnapshot.docs.map(doc => doc.data().uid);
+
+      // إضافة المعلم للقائمة
+      const participantIds = [group.teacherId, ...studentIds];
+
+      if (participantIds.length < 2) {
+        alert('لا يوجد طلاب في هذه الحلقة بعد');
+        setOpeningChat(null);
+        return;
+      }
+
+      // إنشاء أو فتح المحادثة الجماعية
+      const conversationId = await findOrCreateConversation({
+        type: 'group',
+        groupId: group.id,
+        groupName: `حلقة ${group.name}`,
+        participantIds
+      });
+
+      if (conversationId) {
+        navigate(`/messages/${conversationId}`);
+      }
+    } catch (error) {
+      console.error('Error opening group chat:', error);
+      alert('حدث خطأ في فتح المحادثة');
+    }
+
+    setOpeningChat(null);
+  };
+
   if (loading) {
     return (
       <section className="page">
@@ -312,6 +365,13 @@ const Groups = () => {
                 </p>
               )}
               <div className="card-actions">
+                <button
+                  className="btn btn-sm btn-chat"
+                  onClick={() => openGroupChat(group)}
+                  disabled={openingChat === group.id}
+                >
+                  {openingChat === group.id ? '⏳' : '💬'} محادثة الحلقة
+                </button>
                 <button
                   className="btn btn-sm btn-warning"
                   onClick={() => handleEditGroup(group)}

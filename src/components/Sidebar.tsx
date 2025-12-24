@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 
@@ -31,6 +31,7 @@ const navItems: NavItem[] = [
   // صفحات الطالب
   { path: '/my-progress', label: 'تحصيلي', icon: '📈', roles: ['student'] },
   // صفحات عامة
+  { path: '/messages', label: 'الرسائل', icon: '💬', roles: ['admin', 'supervisor', 'teacher', 'student', 'parent'], showBadge: true },
   { path: '/curriculum', label: 'المنهج', icon: '📚', roles: ['supervisor', 'teacher', 'student'] },
   { path: '/leaderboard', label: 'المتصدرين', icon: '🥇', roles: ['supervisor', 'teacher', 'student'] }
 ];
@@ -38,6 +39,7 @@ const navItems: NavItem[] = [
 const Sidebar = () => {
   const { logout, isAdmin, userProfile, isSupervisor } = useAuth();
   const [pendingCount, setPendingCount] = useState(0);
+  const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
 
@@ -81,6 +83,30 @@ const Sidebar = () => {
     const interval = setInterval(fetchPendingCount, 30000);
     return () => clearInterval(interval);
   }, [isSupervisor, userProfile]);
+
+  // جلب عدد الرسائل غير المقروءة
+  useEffect(() => {
+    if (!userProfile?.uid) return;
+
+    const conversationsQuery = query(
+      collection(db, 'conversations'),
+      where('participants', 'array-contains', userProfile.uid),
+      orderBy('updatedAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(conversationsQuery, (snapshot) => {
+      let totalUnread = 0;
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.unreadCount && data.unreadCount[userProfile.uid]) {
+          totalUnread += data.unreadCount[userProfile.uid];
+        }
+      });
+      setUnreadMessagesCount(totalUnread);
+    });
+
+    return () => unsubscribe();
+  }, [userProfile?.uid]);
 
   const handleLogout = async () => {
     try {
@@ -163,8 +189,11 @@ const Sidebar = () => {
             >
               <span className="sidebar__link-icon">{item.icon}</span>
               <span className="sidebar__link-text">{item.label}</span>
-              {item.showBadge && pendingCount > 0 && (
+              {item.showBadge && item.path === '/pending-requests' && pendingCount > 0 && (
                 <span className="sidebar__badge">{pendingCount}</span>
+              )}
+              {item.showBadge && item.path === '/messages' && unreadMessagesCount > 0 && (
+                <span className="sidebar__badge">{unreadMessagesCount}</span>
               )}
             </NavLink>
           ))}

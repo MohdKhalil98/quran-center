@@ -10,9 +10,111 @@ import {
   updateDoc
 } from 'firebase/firestore';
 import { db } from '../firebase';
+import { useEffect } from 'react';
 import '../styles/DevTools.css';
+import { setDoc, serverTimestamp } from 'firebase/firestore';
+import { parseCSV } from '../utils/csvParse';
 
 const DevTools = () => {
+        // State for centers and groups
+        const [centers, setCenters] = useState<any[]>([]);
+        const [groups, setGroups] = useState<any[]>([]);
+
+        // Fetch centers and groups on mount
+        useEffect(() => {
+          const fetchCenters = async () => {
+            const snap = await getDocs(collection(db, 'centers'));
+            setCenters(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+          };
+          const fetchGroups = async () => {
+            const snap = await getDocs(collection(db, 'groups'));
+            setGroups(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+          };
+          fetchCenters();
+          fetchGroups();
+        }, []);
+    // --- Import Students State ---
+    const [csvFile, setCsvFile] = useState<File | null>(null);
+    const [students, setStudents] = useState<any[]>([]);
+    const [importing, setImporting] = useState(false);
+    const [importedCount, setImportedCount] = useState(0);
+    const [importError, setImportError] = useState<string | null>(null);
+    const [importSuccess, setImportSuccess] = useState<string | null>(null);
+
+    // تحميل نموذج CSV من public
+    const handleDownloadTemplate = async () => {
+      try {
+        const response = await fetch('/csvTemplate_students.csv');
+        const text = await response.text();
+        const blob = new Blob([text], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'students_template.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        alert('تعذر تحميل النموذج');
+      }
+    };
+
+    // قراءة ملف CSV
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      setImportError(null);
+      setImportSuccess(null);
+      if (e.target.files && e.target.files[0]) {
+        setCsvFile(e.target.files[0]);
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          try {
+            const text = evt.target?.result as string;
+            const parsed = parseCSV(text);
+            setStudents(parsed);
+          } catch (err) {
+            setImportError('خطأ في قراءة الملف');
+          }
+        };
+        reader.readAsText(e.target.files[0]);
+      }
+    };
+
+    // رفع الطلاب
+    const handleImport = async () => {
+      if (!students.length) {
+        setImportError('يرجى اختيار ملف صحيح');
+        return;
+      }
+      setImporting(true);
+      setImportedCount(0);
+      setImportError(null);
+      setImportSuccess(null);
+      let count = 0;
+      try {
+        for (const student of students) {
+          if (!student.email || !student.name || !student.phone) continue;
+          const uid = student.email.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() + Date.now();
+          await setDoc(doc(db, 'users', uid), {
+            uid,
+            name: student.name,
+            email: student.email,
+            phone: student.phone,
+            role: 'student',
+            centerId: student.centerId || '',
+            groupId: student.groupId || '',
+            status: 'approved',
+            createdAt: serverTimestamp(),
+            registrationDate: new Date().toISOString(),
+            active: true
+          });
+          count++;
+          setImportedCount(count);
+        }
+        setImportSuccess(`تم استيراد ${count} طالب بنجاح!`);
+      } catch (err: any) {
+        setImportError('حدث خطأ أثناء الاستيراد: ' + err.message);
+      }
+      setImporting(false);
+    };
   const [running, setRunning] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState('');
@@ -240,10 +342,90 @@ const DevTools = () => {
 
   return (
     <section className="page">
+      {/* جدول المراكز */}
+      <div className="dev-card" style={{marginBottom: 16, maxWidth: 700}}>
+        <div className="dev-card-header">
+          <h3>🟢 قائمة المراكز (CenterId)</h3>
+        </div>
+        <div className="dev-card-body" style={{overflowX:'auto'}}>
+          <table style={{width:'100%', borderCollapse:'collapse'}}>
+            <thead>
+              <tr style={{background:'#f5f5f5'}}>
+                <th style={{padding:'4px', border:'1px solid #ddd'}}>الاسم</th>
+                <th style={{padding:'4px', border:'1px solid #ddd'}}>centerId</th>
+              </tr>
+            </thead>
+            <tbody>
+              {centers.map(center => (
+                <tr key={center.id}>
+                  <td style={{padding:'4px', border:'1px solid #ddd'}}>{center.name || '-'}</td>
+                  <td style={{padding:'4px', border:'1px solid #ddd', fontFamily:'monospace'}}>{center.id}</td>
+                </tr>
+              ))}
+              {centers.length === 0 && (
+                <tr><td colSpan={2} style={{textAlign:'center', color:'#888'}}>لا يوجد مراكز</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* جدول الحلقات */}
+      <div className="dev-card" style={{marginBottom: 24, maxWidth: 700}}>
+        <div className="dev-card-header">
+          <h3>🔵 قائمة الحلقات (GroupId)</h3>
+        </div>
+        <div className="dev-card-body" style={{overflowX:'auto'}}>
+          <table style={{width:'100%', borderCollapse:'collapse'}}>
+            <thead>
+              <tr style={{background:'#f5f5f5'}}>
+                <th style={{padding:'4px', border:'1px solid #ddd'}}>الاسم</th>
+                <th style={{padding:'4px', border:'1px solid #ddd'}}>groupId</th>
+              </tr>
+            </thead>
+            <tbody>
+              {groups.map(group => (
+                <tr key={group.id}>
+                  <td style={{padding:'4px', border:'1px solid #ddd'}}>{group.name || '-'}</td>
+                  <td style={{padding:'4px', border:'1px solid #ddd', fontFamily:'monospace'}}>{group.id}</td>
+                </tr>
+              ))}
+              {groups.length === 0 && (
+                <tr><td colSpan={2} style={{textAlign:'center', color:'#888'}}>لا يوجد حلقات</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
       <header className="page__header">
         <h1>أدوات المطور</h1>
         <p>أدوات مساعدة لإدارة البيانات والتطوير (زرع، تنظيف، إعادة تحميل).</p>
       </header>
+
+      {/* Import Students Card */}
+      <div className="dev-card" style={{marginBottom: 24}}>
+        <div className="dev-card-header">
+          <h3>📥 استيراد الطلاب من ملف CSV</h3>
+          <p>يمكنك تحميل نموذج CSV وتعبئته ثم رفعه هنا.</p>
+        </div>
+        <div className="dev-card-body" style={{flexDirection:'column',alignItems:'flex-start'}}>
+          <button className="btn btn-primary" onClick={handleDownloadTemplate} style={{marginBottom:8}}>تحميل نموذج CSV</button>
+          <input type="file" accept=".csv" onChange={handleFileChange} disabled={importing} style={{marginBottom:8}} />
+          {students.length > 0 && (
+            <div style={{margin: '10px 0'}}>عدد الطلاب في الملف: {students.length}</div>
+          )}
+          <button className="btn btn-success" onClick={handleImport} disabled={importing || !students.length}>
+            {importing ? `جاري الاستيراد... (${importedCount}/${students.length})` : 'استيراد الطلاب'}
+          </button>
+          {importError && <div style={{color: 'red', marginTop: 10}}>{importError}</div>}
+          {importSuccess && <div style={{color: 'green', marginTop: 10}}>{importSuccess}</div>}
+          <div style={{marginTop: 20, fontSize: '0.95rem', color: '#555'}}>
+            <b>صيغة الملف المطلوبة:</b><br/>
+            name,email,phone,centerId,groupId<br/>
+            <span style={{color:'#888'}}>جميع الحقول مطلوبة ما عدا centerId و groupId</span>
+          </div>
+        </div>
+      </div>
 
       <div className="devtools-container">
         {/* Seeding Card */}

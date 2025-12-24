@@ -13,7 +13,8 @@ const POINTS_SYSTEM = {
 };
 
 const Curriculum: React.FC = () => {
-  const [selectedLevel, setSelectedLevel] = useState<QuranJuz | null>(null);
+  const [expandedLevel, setExpandedLevel] = useState<string | null>(null);
+  const [expandedStage, setExpandedStage] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
   // Filter levels based on search
@@ -22,12 +23,7 @@ const Curriculum: React.FC = () => {
     level.surahs.some(surah => surah.name.includes(searchTerm))
   );
 
-  // Get memorization content for a stage (current surah)
-  const getMemorizationContent = (surah: QuranSurah): string => {
-    return `سورة ${surah.name} (${surah.ayahCount} آية)`;
-  };
-
-  // Get near review content (previous surah in the same level)
+  // Get near review content (previous surah)
   const getNearReviewContent = (level: QuranJuz, currentIndex: number): string => {
     if (currentIndex === 0) return 'لا يوجد';
     const prevSurah = level.surahs[currentIndex - 1];
@@ -46,231 +42,292 @@ const Curriculum: React.FC = () => {
     return level.surahs.reduce((sum, surah) => sum + surah.ayahCount, 0);
   };
 
+  // Calculate total points for a level
+  const getLevelTotalPoints = (level: QuranJuz): number => {
+    const stagesPoints = level.surahs.length * (POINTS_SYSTEM.MEMORIZATION + POINTS_SYSTEM.NEAR_REVIEW + POINTS_SYSTEM.FAR_REVIEW + POINTS_SYSTEM.STAGE_COMPLETION);
+    return stagesPoints + POINTS_SYSTEM.LEVEL_COMPLETION;
+  };
+
+  // Toggle level expansion
+  const toggleLevel = (levelId: string) => {
+    setExpandedLevel(expandedLevel === levelId ? null : levelId);
+    setExpandedStage(null);
+  };
+
+  // Toggle stage expansion
+  const toggleStage = (stageId: string) => {
+    setExpandedStage(expandedStage === stageId ? null : stageId);
+  };
+
   return (
     <div className="curriculum-container">
+      {/* Header */}
       <div className="curriculum-header">
-        <h1>📚 منهج حفظ القرآن الكريم</h1>
-        <p className="curriculum-subtitle">30 جزءاً - من جزء عم إلى جزء ألم</p>
+        <h1>📚 المنهج الدراسي</h1>
+        <p className="curriculum-subtitle">منهج حفظ القرآن الكريم - رحلة الماهر</p>
       </div>
 
-      {/* Search */}
-      <div className="curriculum-search">
-        <input
-          type="text"
-          placeholder="🔍 ابحث عن جزء أو سورة..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="search-input"
-        />
+      {/* Section 1: How the System Works */}
+      <div className="info-section how-it-works">
+        <div className="section-header">
+          <span className="section-icon">💡</span>
+          <h2>كيف يعمل النظام</h2>
+        </div>
+        <div className="how-it-works-content">
+          <div className="step-card">
+            <div className="step-number">1</div>
+            <div className="step-content">
+              <h4>📖 الحفظ</h4>
+              <p>يحفظ الطالب السورة المطلوبة آية بآية حتى يكملها</p>
+            </div>
+          </div>
+          <div className="step-arrow">→</div>
+          <div className="step-card">
+            <div className="step-number">2</div>
+            <div className="step-content">
+              <h4>🔄 المراجعة القريبة</h4>
+              <p>مراجعة السورة السابقة التي تم حفظها</p>
+            </div>
+          </div>
+          <div className="step-arrow">→</div>
+          <div className="step-card">
+            <div className="step-number">3</div>
+            <div className="step-content">
+              <h4>📚 المراجعة البعيدة</h4>
+              <p>مراجعة السورة التي قبل السابقة</p>
+            </div>
+          </div>
+          <div className="step-arrow">→</div>
+          <div className="step-card success">
+            <div className="step-number">✓</div>
+            <div className="step-content">
+              <h4>🎯 الانتقال</h4>
+              <p>بعد إتمام التحديات الثلاثة ينتقل للسورة التالية</p>
+            </div>
+          </div>
+        </div>
+        <div className="system-notes">
+          <div className="note-item">
+            <span className="note-icon">⭐</span>
+            <span>يبدأ كل طالب جديد من سورة الفاتحة ثم سور جزء عم</span>
+          </div>
+          <div className="note-item">
+            <span className="note-icon">🏅</span>
+            <span>عند إتمام الجزء كاملاً، يحتاج موافقة المشرف للانتقال للجزء التالي</span>
+          </div>
+        </div>
       </div>
 
-      {/* Points System Info */}
-      <div className="points-info-card">
-        <h3>🏆 نظام النقاط</h3>
-        <div className="points-grid">
-          <div className="point-item">
+      {/* Section 2: Points System */}
+      <div className="info-section points-system">
+        <div className="section-header">
+          <span className="section-icon">🏆</span>
+          <h2>نظام النقاط</h2>
+        </div>
+        <div className="points-grid-new">
+          <div className="point-card memorization">
+            <span className="point-icon">📖</span>
             <span className="point-label">الحفظ</span>
             <span className="point-value">{POINTS_SYSTEM.MEMORIZATION} نقطة</span>
           </div>
-          <div className="point-item">
+          <div className="point-card near-review">
+            <span className="point-icon">🔄</span>
             <span className="point-label">المراجعة القريبة</span>
             <span className="point-value">{POINTS_SYSTEM.NEAR_REVIEW} نقطة</span>
           </div>
-          <div className="point-item">
+          <div className="point-card far-review">
+            <span className="point-icon">📚</span>
             <span className="point-label">المراجعة البعيدة</span>
             <span className="point-value">{POINTS_SYSTEM.FAR_REVIEW} نقطة</span>
           </div>
-          <div className="point-item">
-            <span className="point-label">إتمام المرحلة (السورة)</span>
+          <div className="point-card stage-completion">
+            <span className="point-icon">✅</span>
+            <span className="point-label">إتمام السورة</span>
             <span className="point-value">{POINTS_SYSTEM.STAGE_COMPLETION} نقطة</span>
           </div>
-          <div className="point-item">
-            <span className="point-label">إتمام المستوى (الجزء)</span>
+          <div className="point-card level-completion">
+            <span className="point-icon">🎖️</span>
+            <span className="point-label">إتمام الجزء</span>
             <span className="point-value">{POINTS_SYSTEM.LEVEL_COMPLETION} نقطة</span>
           </div>
-          <div className="point-item bonus">
-            <span className="point-label">مكافأة التقييم الممتاز</span>
+          <div className="point-card bonus">
+            <span className="point-icon">⭐</span>
+            <span className="point-label">تقييم ممتاز (9+)</span>
             <span className="point-value">+{POINTS_SYSTEM.PERFECT_RATING_BONUS} نقطة</span>
           </div>
         </div>
       </div>
 
-      <div className="curriculum-content">
-        {/* Levels Sidebar */}
-        <div className="levels-sidebar">
-          <h2>الأجزاء ({filteredLevels.length})</h2>
-          
-          <div className="levels-list">
-            {filteredLevels.map(level => (
-              <div
-                key={level.id}
-                className={`level-card ${selectedLevel?.id === level.id ? 'selected' : ''}`}
-                onClick={() => setSelectedLevel(level)}
-              >
-                <div className="level-info">
-                  <span className="level-name">{level.name}</span>
-                  <span className="level-stages-count">{level.surahs.length} سورة</span>
-                </div>
-                <div className="level-badge">
-                  <span className="juz-number">{level.juzNumber}</span>
-                </div>
-              </div>
-            ))}
+      {/* Section 3: Curriculum Structure */}
+      <div className="info-section curriculum-structure">
+        <div className="section-header">
+          <span className="section-icon">📚</span>
+          <h2>منهج حفظ القرآن الكريم</h2>
+        </div>
+        
+        {/* Search */}
+        <div className="curriculum-search">
+          <input
+            type="text"
+            placeholder="🔍 ابحث عن جزء أو سورة..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="search-input"
+          />
+        </div>
+
+        {/* Curriculum Stats */}
+        <div className="curriculum-stats">
+          <div className="stat-item">
+            <span className="stat-value">30</span>
+            <span className="stat-label">جزء</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-value">114</span>
+            <span className="stat-label">سورة</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-value">6236</span>
+            <span className="stat-label">آية</span>
           </div>
         </div>
 
-        {/* Stages Table */}
-        <div className="stages-panel">
-          {selectedLevel ? (
-            <>
-              <div className="stages-header">
-                <h2>{selectedLevel.name}</h2>
-                <div className="level-stats">
-                  <span className="stat-item">
-                    <span className="stat-icon">📖</span>
-                    {selectedLevel.surahs.length} سورة
+        {/* Hierarchical Curriculum View */}
+        <div className="curriculum-tree">
+          {filteredLevels.map((level) => (
+            <div key={level.id} className="level-accordion">
+              {/* Level Header */}
+              <div 
+                className={`level-header ${expandedLevel === level.id ? 'expanded' : ''}`}
+                onClick={() => toggleLevel(level.id)}
+              >
+                <div className="level-header-right">
+                  <span className={`expand-icon ${expandedLevel === level.id ? 'expanded' : ''}`}>
+                    {expandedLevel === level.id ? '▼' : '◀'}
                   </span>
-                  <span className="stat-item">
-                    <span className="stat-icon">📝</span>
-                    {getTotalAyahs(selectedLevel)} آية
+                  <span className="level-badge">{level.juzNumber}</span>
+                  <span className="level-name">{level.name}</span>
+                </div>
+                <div className="level-header-left">
+                  <span className="level-info-tag">
+                    <span className="tag-icon">📖</span>
+                    {level.surahs.length} سورة
                   </span>
-                  <span className="stat-item bonus">
-                    <span className="stat-icon">🏆</span>
-                    {POINTS_SYSTEM.LEVEL_COMPLETION} نقطة
+                  <span className="level-info-tag">
+                    <span className="tag-icon">📝</span>
+                    {getTotalAyahs(level)} آية
+                  </span>
+                  <span className="level-info-tag points">
+                    <span className="tag-icon">🏆</span>
+                    {getLevelTotalPoints(level)} نقطة
                   </span>
                 </div>
               </div>
 
-              {selectedLevel.id === 'juz-30' && (
-                <div className="special-note">
-                  <span className="note-icon">⭐</span>
-                  <span>يبدأ الطالب الجديد من هذا الجزء - سورة الفاتحة أولاً ثم سور جزء عم</span>
+              {/* Level Content - Stages */}
+              {expandedLevel === level.id && (
+                <div className="level-content">
+                  {level.surahs.map((surah, index) => (
+                    <div key={surah.id} className="stage-accordion">
+                      {/* Stage Header */}
+                      <div 
+                        className={`stage-header ${expandedStage === surah.id ? 'expanded' : ''} ${surah.name === 'الفاتحة' ? 'fatiha' : ''}`}
+                        onClick={() => toggleStage(surah.id)}
+                      >
+                        <div className="stage-header-right">
+                          <span className={`expand-icon ${expandedStage === surah.id ? 'expanded' : ''}`}>
+                            {expandedStage === surah.id ? '▼' : '◀'}
+                          </span>
+                          <span className="stage-order">{index + 1}</span>
+                          {surah.name === 'الفاتحة' && <span className="fatiha-star">🌟</span>}
+                          <span className="stage-name">سورة {surah.name}</span>
+                        </div>
+                        <div className="stage-header-left">
+                          <span className="stage-info-tag">
+                            {surah.ayahCount} آية
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Stage Content - Challenges */}
+                      {expandedStage === surah.id && (
+                        <div className="stage-content">
+                          <div className="challenges-list">
+                            {/* Memorization Challenge */}
+                            <div className="challenge-item memorization">
+                              <div className="challenge-icon-wrapper">
+                                <span className="challenge-icon">📖</span>
+                              </div>
+                              <div className="challenge-details">
+                                <span className="challenge-type">الحفظ</span>
+                                <span className="challenge-content">سورة {surah.name} ({surah.ayahCount} آية)</span>
+                              </div>
+                              <div className="challenge-points">
+                                <span>{POINTS_SYSTEM.MEMORIZATION} نقطة</span>
+                              </div>
+                            </div>
+
+                            {/* Near Review Challenge */}
+                            <div className={`challenge-item near-review ${getNearReviewContent(level, index) === 'لا يوجد' ? 'disabled' : ''}`}>
+                              <div className="challenge-icon-wrapper">
+                                <span className="challenge-icon">🔄</span>
+                              </div>
+                              <div className="challenge-details">
+                                <span className="challenge-type">المراجعة القريبة</span>
+                                <span className="challenge-content">{getNearReviewContent(level, index)}</span>
+                              </div>
+                              <div className="challenge-points">
+                                {getNearReviewContent(level, index) !== 'لا يوجد' && (
+                                  <span>{POINTS_SYSTEM.NEAR_REVIEW} نقطة</span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Far Review Challenge */}
+                            <div className={`challenge-item far-review ${getFarReviewContent(level, index) === 'لا يوجد' ? 'disabled' : ''}`}>
+                              <div className="challenge-icon-wrapper">
+                                <span className="challenge-icon">📚</span>
+                              </div>
+                              <div className="challenge-details">
+                                <span className="challenge-type">المراجعة البعيدة</span>
+                                <span className="challenge-content">{getFarReviewContent(level, index)}</span>
+                              </div>
+                              <div className="challenge-points">
+                                {getFarReviewContent(level, index) !== 'لا يوجد' && (
+                                  <span>{POINTS_SYSTEM.FAR_REVIEW} نقطة</span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Stage Completion Bonus */}
+                            <div className="challenge-item stage-bonus">
+                              <div className="challenge-icon-wrapper">
+                                <span className="challenge-icon">✅</span>
+                              </div>
+                              <div className="challenge-details">
+                                <span className="challenge-type">مكافأة إتمام السورة</span>
+                                <span className="challenge-content">عند إكمال جميع التحديات</span>
+                              </div>
+                              <div className="challenge-points">
+                                <span>{POINTS_SYSTEM.STAGE_COMPLETION} نقطة</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  
+                  {/* Level Completion Bonus */}
+                  <div className="level-bonus-card">
+                    <span className="bonus-icon">🎖️</span>
+                    <span className="bonus-text">مكافأة إتمام {level.name}</span>
+                    <span className="bonus-points">{POINTS_SYSTEM.LEVEL_COMPLETION} نقطة</span>
+                  </div>
                 </div>
               )}
-
-              <div className="stages-table-container">
-                <table className="stages-table">
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>السورة (المرحلة)</th>
-                      <th>الحفظ 📖</th>
-                      <th>المراجعة القريبة 🔄</th>
-                      <th>المراجعة البعيدة 📚</th>
-                      <th>عدد الآيات</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedLevel.surahs.map((surah, index) => (
-                      <tr key={surah.id} className={surah.name === 'الفاتحة' ? 'fatiha-row' : ''}>
-                        <td className="order-cell">{index + 1}</td>
-                        <td className="stage-name">
-                          {surah.name === 'الفاتحة' && <span className="fatiha-badge">🌟</span>}
-                          سورة {surah.name}
-                        </td>
-                        <td className="memorization-cell">{getMemorizationContent(surah)}</td>
-                        <td className="near-review-cell">{getNearReviewContent(selectedLevel, index)}</td>
-                        <td className="far-review-cell">{getFarReviewContent(selectedLevel, index)}</td>
-                        <td className="ayah-count-cell">{surah.ayahCount}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          ) : (
-            <div className="no-selection">
-              <div className="empty-icon">📖</div>
-              <h3>اختر جزءاً لعرض السور</h3>
-              <p>المنهج يتكون من 30 جزءاً من القرآن الكريم</p>
-              <div className="quick-stats">
-                <div className="quick-stat">
-                  <span className="stat-number">30</span>
-                  <span className="stat-label">جزء</span>
-                </div>
-                <div className="quick-stat">
-                  <span className="stat-number">114</span>
-                  <span className="stat-label">سورة</span>
-                </div>
-                <div className="quick-stat">
-                  <span className="stat-number">6236</span>
-                  <span className="stat-label">آية</span>
-                </div>
-              </div>
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Help Section */}
-      <div className="curriculum-help">
-        <h3>📌 كيف يعمل النظام</h3>
-        <div className="help-content">
-          <div className="help-item">
-            <span className="help-icon">📖</span>
-            <div>
-              <strong>الحفظ</strong>
-              <p>حفظ السورة المطلوبة في المرحلة الحالية</p>
-            </div>
-          </div>
-          <div className="help-item">
-            <span className="help-icon">🔄</span>
-            <div>
-              <strong>المراجعة القريبة</strong>
-              <p>مراجعة السورة التي تم حفظها في المرحلة السابقة</p>
-            </div>
-          </div>
-          <div className="help-item">
-            <span className="help-icon">📚</span>
-            <div>
-              <strong>المراجعة البعيدة</strong>
-              <p>مراجعة السورة التي تم حفظها قبل مرحلتين</p>
-            </div>
-          </div>
-          <div className="help-item">
-            <span className="help-icon">✅</span>
-            <div>
-              <strong>إتمام المرحلة</strong>
-              <p>يجب اجتياز التحديات الثلاثة للانتقال للسورة التالية</p>
-            </div>
-          </div>
-          <div className="help-item">
-            <span className="help-icon">🎯</span>
-            <div>
-              <strong>إتمام الجزء</strong>
-              <p>عند إتمام جميع سور الجزء، يتم طلب موافقة المشرف للانتقال للجزء التالي</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Journey Overview */}
-      <div className="journey-overview">
-        <h3>🚀 رحلة الحفظ</h3>
-        <div className="journey-path">
-          <div className="journey-step start">
-            <span className="step-icon">🌟</span>
-            <span className="step-label">البداية</span>
-            <span className="step-detail">جزء 30 - الفاتحة</span>
-          </div>
-          <div className="journey-arrow">→</div>
-          <div className="journey-step">
-            <span className="step-icon">📖</span>
-            <span className="step-label">جزء عم</span>
-            <span className="step-detail">37 سورة</span>
-          </div>
-          <div className="journey-arrow">→</div>
-          <div className="journey-step">
-            <span className="step-icon">📚</span>
-            <span className="step-label">الأجزاء 29-2</span>
-            <span className="step-detail">بالتدريج</span>
-          </div>
-          <div className="journey-arrow">→</div>
-          <div className="journey-step end">
-            <span className="step-icon">🏆</span>
-            <span className="step-label">الختم</span>
-            <span className="step-detail">جزء 1 - البقرة</span>
-          </div>
+          ))}
         </div>
       </div>
     </div>

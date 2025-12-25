@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, updateDoc, deleteDoc, doc, getDocs } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, deleteDoc, doc, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
+import { useAuth } from '../context/AuthContext';
 import ConfirmModal from '../components/ConfirmModal';
 import '../styles/Tracks.css';
 
@@ -9,10 +10,13 @@ interface Track {
   name: string;
   description: string;
   minAge: number;
+  centerId?: string;
 }
 
 const Tracks: React.FC = () => {
+  const { userProfile } = useAuth();
   const [tracks, setTracks] = useState<Track[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingTrack, setEditingTrack] = useState<Track | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -25,19 +29,42 @@ const Tracks: React.FC = () => {
 
   useEffect(() => {
     fetchTracks();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userProfile?.centerId]);
 
   const fetchTracks = async () => {
     try {
-      const tracksSnapshot = await getDocs(collection(db, 'tracks'));
-      const tracksData = tracksSnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Track[];
+      setLoading(true);
+      let tracksData: Track[] = [];
+      
+      // إذا كان المستخدم مشرف، جلب المساقات الخاصة بمركزه فقط
+      if (userProfile?.role === 'supervisor' && userProfile?.centerId) {
+        const tracksQuery = query(
+          collection(db, 'tracks'),
+          where('centerId', '==', userProfile.centerId)
+        );
+        const tracksSnapshot = await getDocs(tracksQuery);
+        tracksData = tracksSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as Track[];
+      } else {
+        // للمطور: جلب جميع المساقات
+        const tracksSnapshot = await getDocs(collection(db, 'tracks'));
+        tracksData = tracksSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as Track[];
+      }
+      
+      // ترتيب المساقات حسب الاسم
+      tracksData.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
       setTracks(tracksData);
     } catch (error) {
       console.error('Error fetching tracks:', error);
       alert('حدث خطأ في جلب المساقات');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -71,11 +98,20 @@ const Tracks: React.FC = () => {
         });
         alert('تم تحديث المساق بنجاح');
       } else {
-        await addDoc(collection(db, 'tracks'), {
+        // إضافة centerId للمساق الجديد
+        const trackData: any = {
           name: formData.name,
           description: formData.description,
           minAge: formData.minAge,
-        });
+          createdAt: new Date(),
+        };
+        
+        // إضافة centerId إذا كان المستخدم مشرف
+        if (userProfile?.centerId) {
+          trackData.centerId = userProfile.centerId;
+        }
+        
+        await addDoc(collection(db, 'tracks'), trackData);
         alert('تم إضافة المساق بنجاح');
       }
 
@@ -136,6 +172,12 @@ const Tracks: React.FC = () => {
           </button>
         </div>
 
+        {loading ? (
+          <div className="loading-container">
+            <p>جاري تحميل المساقات...</p>
+          </div>
+        ) : (
+        <>
         {showForm && (
           <div className="form-overlay">
             <div className="form-container">
@@ -234,6 +276,8 @@ const Tracks: React.FC = () => {
               setTrackToDelete(null);
             }}
           />
+        )}
+        </>
         )}
       </div>
   );

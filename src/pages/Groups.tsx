@@ -57,14 +57,29 @@ const Groups = () => {
           ...doc.data()
         } as Group));
 
-        // Fetch tracks
-        const tracksQuery = query(collection(db, 'tracks'), orderBy('name'));
-        const tracksSnapshot = await getDocs(tracksQuery);
-        const tracksList = tracksSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          name: doc.data().name,
-          ...doc.data()
-        } as any));
+        // Fetch tracks - جلب المساقات الخاصة بالمركز
+        let tracksList: any[] = [];
+        if (userProfile?.centerId) {
+          const tracksQuery = query(
+            collection(db, 'tracks'),
+            where('centerId', '==', userProfile.centerId)
+          );
+          const tracksSnapshot = await getDocs(tracksQuery);
+          tracksList = tracksSnapshot.docs.map((doc) => ({
+            id: doc.id,
+            name: doc.data().name,
+            ...doc.data()
+          } as any));
+        } else {
+          const tracksSnapshot = await getDocs(collection(db, 'tracks'));
+          tracksList = tracksSnapshot.docs.map((doc) => ({
+            id: doc.id,
+            name: doc.data().name,
+            ...doc.data()
+          } as any));
+        }
+        // ترتيب المساقات
+        tracksList.sort((a: any, b: any) => a.name.localeCompare(b.name, 'ar'));
 
         // Fetch teachers from same center
         let teachersList: Teacher[] = [];
@@ -134,9 +149,19 @@ const Groups = () => {
         );
         setEditingId(null);
       } else {
-        // Add new group
-        const docRef = await addDoc(collection(db, 'groups'), dataToSave);
-        setGroups((prev) => [...prev, { ...dataToSave, id: docRef.id, trackName: trackNameValue, teacherName: teacherNameValue }]);
+        // Add new group - إضافة centerId
+        const groupData: any = {
+          ...dataToSave,
+          createdAt: new Date(),
+        };
+        
+        // إضافة centerId إذا كان المستخدم مشرف
+        if (userProfile?.centerId) {
+          groupData.centerId = userProfile.centerId;
+        }
+        
+        const docRef = await addDoc(collection(db, 'groups'), groupData);
+        setGroups((prev) => [...prev, { ...groupData, id: docRef.id, trackName: trackNameValue, teacherName: teacherNameValue }]);
       }
 
       setFormData({

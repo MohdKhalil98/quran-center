@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { collection, getDocs, doc, updateDoc, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth, UserProfile } from '../context/AuthContext';
+import quranCurriculum from '../data/quranCurriculum';
 import '../styles/Shared.css';
 import '../styles/Students.css';
 
@@ -21,11 +22,24 @@ interface Group {
   teacherId?: string;
 }
 
+interface Level {
+  id: string;
+  name: string;
+}
+
+interface Stage {
+  id: string;
+  name: string;
+}
+
 const Students = () => {
   const { userProfile, isSupervisor, isAdmin, isTeacher } = useAuth();
   const [students, setStudents] = useState<StudentUser[]>([]);
+  const [newStudents, setNewStudents] = useState<StudentUser[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [centers, setCenters] = useState<Center[]>([]);
+  const [levels, setLevels] = useState<Level[]>([]);
+  const [stages, setStages] = useState<Stage[]>([]);
   const [teacherGroupIds, setTeacherGroupIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
@@ -33,6 +47,9 @@ const Students = () => {
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [filterCenterId, setFilterCenterId] = useState<string>('');
   const [filterGroupId, setFilterGroupId] = useState<string>('');
+  const [showLevelModal, setShowLevelModal] = useState(false);
+  const [selectedNewStudent, setSelectedNewStudent] = useState<StudentUser | null>(null);
+  const [selectedLevelId, setSelectedLevelId] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -68,35 +85,15 @@ const Students = () => {
       }
 
       // Fetch students from users collection (role = student, status = approved)
-      let studentsQuery;
-      if (isTeacher && myGroupIds.length > 0) {
-        // المعلم يرى فقط طلاب حلقاته
-        studentsQuery = query(
-          collection(db, 'users'),
-          where('role', '==', 'student'),
-          where('status', '==', 'approved'),
-          where('groupId', 'in', myGroupIds)
-        );
-      } else if (isSupervisor && userProfile?.centerId) {
-        // المشرف يرى طلاب مركزه
-        studentsQuery = query(
-          collection(db, 'users'),
-          where('role', '==', 'student'),
-          where('status', '==', 'approved'),
-          where('centerId', '==', userProfile.centerId)
-        );
-        setFilterCenterId(userProfile.centerId);
-      } else {
-        // المطور يرى جميع الطلاب
-        studentsQuery = query(
-          collection(db, 'users'),
-          where('role', '==', 'student'),
-          where('status', '==', 'approved')
-        );
-      }
+      // جلب جميع الطلاب المعتمدين ثم تصفيتهم في الكود (لتجنب الحاجة إلى indexes معقدة)
+      const studentsQuery = query(
+        collection(db, 'users'),
+        where('role', '==', 'student'),
+        where('status', '==', 'approved')
+      );
       
       const snapshot = await getDocs(studentsQuery);
-      const studentsList = snapshot.docs.map((doc) => {
+      let studentsList = snapshot.docs.map((doc) => {
         const data = doc.data() as StudentUser;
         return {
           ...data,
@@ -105,7 +102,51 @@ const Students = () => {
         } as StudentUser;
       });
       
+      // تصفية الطلاب حسب الدور
+      if (isTeacher && myGroupIds.length > 0) {
+        // المعلم يرى فقط طلاب حلقاته
+        studentsList = studentsList.filter(s => myGroupIds.includes(s.groupId || ''));
+      } else if (isSupervisor && userProfile?.centerId) {
+        // المشرف يرى طلاب مركزه
+        studentsList = studentsList.filter(s => s.centerId === userProfile.centerId);
+        setFilterCenterId(userProfile.centerId);
+      }
+      // المطور يرى جميع الطلاب (بدون تصفية)
+      
       setStudents(studentsList);
+
+      // Fetch new students (waiting for teacher approval) for teachers only
+      if (isTeacher && myGroupIds.length > 0) {
+        // جلب جميع الطلاب الجدد ثم تصفيتهم في الكود (لتجنب الحاجة إلى index معقد)
+        const newStudentsQuery = query(
+          collection(db, 'users'),
+          where('role', '==', 'student'),
+          where('status', '==', 'waiting_teacher_approval')
+        );
+        const newStudentsSnapshot = await getDocs(newStudentsQuery);
+        
+        const newStudentsList = newStudentsSnapshot.docs
+          .map((docSnap) => {
+            const data = docSnap.data() as StudentUser;
+            return {
+              ...data,
+              uid: docSnap.id, // استخدام Document ID من Firestore
+              groupName: groupsList.find(g => g.id === data.groupId)?.name || 'غير محدد',
+              centerName: centersList.find(c => c.id === data.centerId)?.name || ''
+            } as StudentUser;
+          })
+          // تصفية الطلاب الذين في حلقات المعلم فقط
+          .filter(student => myGroupIds.includes(student.groupId || ''));
+        setNewStudents(newStudentsList);
+
+        // جلب المستويات من منهج القرآن (الأجزاء من 1 إلى 30)
+        const levelsList = quranCurriculum.map((juz) => ({
+          id: juz.id,
+          name: juz.name
+        }));
+        setLevels(levelsList);
+      }
+
       setLoading(false);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -133,6 +174,102 @@ const Students = () => {
   const handleCloseDetailsModal = () => {
     setSelectedStudent(null);
     setIsDetailsModalOpen(false);
+  };
+
+  const handleOpenLevelModal = (student: StudentUser) => {
+    setSelectedNewStudent(student);
+    setShowLevelModal(true);
+  };
+
+  const handleCloseLevelModal = () => {
+    setSelectedNewStudent(null);
+    setShowLevelModal(false);
+    setSelectedLevelId('');
+  };
+
+  const handleDeleteNewStudent = async (student: StudentUser) => {
+    if (!window.confirm(`هل أنت متأكد من حذف الطالب ${student.name} من قائمة الانتظار؟`)) {
+      return;
+    }
+
+    try {
+      // حذف الطالب من Firebase
+      await updateDoc(doc(db, 'users', student.uid), {
+        status: 'rejected'
+      });
+
+      // إزالة فورية من الـ state
+      setNewStudents(prev => prev.filter(s => s.uid !== student.uid));
+      
+      alert('تم حذف الطالب من قائمة الانتظار');
+    } catch (error) {
+      console.error('Error deleting student:', error);
+      alert('حدث خطأ أثناء حذف الطالب');
+    }
+  };
+
+  const handleApproveNewStudent = async () => {
+    if (!selectedNewStudent || !selectedLevelId) {
+      alert('يرجى اختيار المستوى');
+      return;
+    }
+
+    if (!selectedNewStudent.uid) {
+      alert('خطأ: لا يوجد معرف للطالب');
+      return;
+    }
+
+    try {
+      // الحصول على المرحلة الأولى من المنهج المحلي
+      const selectedLevelData = quranCurriculum.find(juz => juz.id === selectedLevelId);
+      
+      if (!selectedLevelData || !selectedLevelData.surahs || selectedLevelData.surahs.length === 0) {
+        alert('لا توجد مراحل لهذا المستوى');
+        return;
+      }
+
+      const firstStage = selectedLevelData.surahs[0];
+      const selectedLevel = levels.find(l => l.id === selectedLevelId);
+
+      // تحديث حالة الطالب وتعيين المستوى الابتدائي
+      await updateDoc(doc(db, 'users', selectedNewStudent.uid), {
+        status: 'approved',
+        levelId: selectedLevelId,
+        levelName: selectedLevel?.name || '',
+        stageId: firstStage.id,
+        stageName: firstStage.name,
+        approvedByTeacherAt: new Date().toISOString()
+      });
+
+      // تحديث فوري للـ state - إزالة الطالب من قائمة الطلاب الجدد
+      setNewStudents(prev => prev.filter(s => s.uid !== selectedNewStudent.uid));
+      
+      // إضافة الطالب إلى قائمة الطلاب الرسميين مع جميع البيانات المطلوبة
+      const groupsList = groups; // جلب الحلقات المحفوظة
+      const centersList = centers; // جلب المراكز المحفوظة
+      
+      setStudents(prev => [...prev, {
+        ...selectedNewStudent,
+        status: 'approved',
+        levelId: selectedLevelId,
+        levelName: selectedLevel?.name || '',
+        stageId: firstStage.id,
+        stageName: firstStage.name,
+        groupName: groupsList.find(g => g.id === selectedNewStudent.groupId)?.name || 'غير محدد',
+        centerName: centersList.find(c => c.id === selectedNewStudent.centerId)?.name || ''
+      }]);
+
+      alert('تم قبول الطالب وتعيين المستوى بنجاح');
+      handleCloseLevelModal();
+      
+      // تحديث البيانات من Firebase للتأكد من التزامن
+      setTimeout(() => {
+        fetchData();
+      }, 500);
+    } catch (error) {
+      console.error('Error approving new student:', error);
+      alert('حدث خطأ أثناء قبول الطالب');
+    }
   };
 
   // فلترة الطلاب
@@ -218,6 +355,51 @@ const Students = () => {
       <div className="students-count-bar">
         <span className="count-badge">{filteredStudents.length}</span> طالب
       </div>
+
+      {/* قسم الطلاب الجدد - للمعلمين فقط */}
+      {isTeacher && newStudents.length > 0 && (
+        <>
+          <div className="section-header">
+            <h2>📥 الطلاب الجدد (بانتظار تحديد المستوى)</h2>
+          </div>
+          <div className="table-card">
+            <table>
+              <thead>
+                <tr>
+                  <th>الاسم</th>
+                  <th>رقم الهاتف</th>
+                  <th>الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {newStudents.map((student) => (
+                  <tr key={student.uid}>
+                    <td>{student.name}</td>
+                    <td>{student.phone || '-'}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          className="btn btn-sm btn-success"
+                          onClick={() => handleOpenLevelModal(student)}
+                        >
+                          ✅ قبول وتحديد المستوى
+                        </button>
+                        <button
+                          className="btn btn-sm btn-danger"
+                          onClick={() => handleDeleteNewStudent(student)}
+                        >
+                          🗑️ حذف
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <hr style={{ margin: '30px 0', borderColor: '#e0e0e0' }} />
+        </>
+      )}
 
       {viewMode === 'cards' ? (
         <div className="cards-container">
@@ -344,6 +526,54 @@ const Students = () => {
               )}
               <button className="btn btn-secondary" onClick={handleCloseDetailsModal}>
                 إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة تحديد المستوى للطلاب الجدد */}
+      {showLevelModal && selectedNewStudent && (
+        <div className="modal-overlay" onClick={handleCloseLevelModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>تحديد المستوى للطالب: {selectedNewStudent.name}</h2>
+              <button className="close-btn" onClick={handleCloseLevelModal}>&times;</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>الحلقة:</label>
+                <p className="info-text">{selectedNewStudent.groupName}</p>
+              </div>
+              <div className="form-group">
+                <label>اختر المستوى الحالي للطالب:</label>
+                <select
+                  className="form-control"
+                  value={selectedLevelId}
+                  onChange={(e) => setSelectedLevelId(e.target.value)}
+                >
+                  <option value="">-- اختر المستوى --</option>
+                  {levels.map((level) => (
+                    <option key={level.id} value={level.id}>
+                      {level.name}
+                    </option>
+                  ))}
+                </select>
+                <small className="help-text">
+                  💡 سيتم البدء من المرحلة الأولى في المستوى المحدد
+                </small>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn btn-success"
+                onClick={handleApproveNewStudent}
+                disabled={!selectedLevelId}
+              >
+                ✅ قبول الطالب
+              </button>
+              <button className="btn btn-secondary" onClick={handleCloseLevelModal}>
+                إلغاء
               </button>
             </div>
           </div>

@@ -13,7 +13,7 @@ import {
   signOut,
   createUserWithEmailAndPassword
 } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 
 export type UserRole = 'admin' | 'supervisor' | 'teacher' | 'student' | 'parent';
@@ -23,13 +23,14 @@ export interface UserProfile {
   email: string;
   name: string;
   role: UserRole;
+  personalId?: string; // الرقم الشخصي - 9 أرقام
   centerId?: string; // للمشرف والمعلم والطالب
   studentId?: string; // لولي الأمر
   groupId?: string; // للطالب - الحلقة المنضم إليها
   phone?: string;
   createdAt: string;
   active: boolean;
-  status?: 'pending' | 'approved' | 'rejected'; // للطلاب - حالة الموافقة
+  status?: 'pending_registration' | 'interview_scheduled' | 'waiting_teacher_approval' | 'approved' | 'rejected'; // للطلاب - حالة الموافقة
   
   // Progress Tracking - New Firebase-based curriculum
   levelId?: string; // Firebase document ID for level
@@ -49,6 +50,7 @@ type AuthContextValue = {
   userProfile: UserProfile | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithPersonalId: (personalId: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   register: (email: string, password: string, name: string, phone: string, role: UserRole, centerId?: string) => Promise<void>;
   hasPermission: (permission: string) => boolean;
@@ -98,6 +100,28 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
     await signInWithEmailAndPassword(auth, email, password);
   };
 
+  // تسجيل الدخول بالرقم الشخصي
+  const loginWithPersonalId = async (personalId: string, password: string) => {
+    // البحث عن المستخدم بالرقم الشخصي
+    const q = query(collection(db, 'users'), where('personalId', '==', personalId));
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) {
+      throw new Error('USER_NOT_FOUND');
+    }
+
+    const userData = snapshot.docs[0].data() as UserProfile;
+    
+    // التحقق من أن الحساب مُفعّل (اجتاز المقابلة)
+    if (userData.status === 'pending_registration' || userData.status === 'interview_scheduled') {
+      throw new Error('ACCOUNT_NOT_ACTIVATED');
+    }
+
+    // تسجيل الدخول باستخدام البريد الداخلي
+    const internalEmail = `${personalId}@quran-center.local`;
+    await signInWithEmailAndPassword(auth, internalEmail, password);
+  };
+
   const logout = async () => {
     await signOut(auth);
   };
@@ -118,7 +142,7 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
       active: true,
       ...(role === 'student' && centerId ? { 
         centerId: centerId,
-        status: 'pending' as const // الطلاب يحتاجون موافقة المشرف
+        status: 'pending_registration' as const // الطلاب يحتاجون موافقة المشرف
       } : {})
     };
 
@@ -159,7 +183,7 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
   const isTeacher = userProfile?.role === 'teacher';
   const isStudent = userProfile?.role === 'student';
   const isParent = userProfile?.role === 'parent';
-  const isPendingApproval = userProfile?.status === 'pending';
+  const isPendingApproval = userProfile?.status === 'pending_registration';
 
   const value = useMemo(
     () => ({
@@ -167,6 +191,7 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
       userProfile,
       loading,
       login,
+      loginWithPersonalId,
       logout,
       register,
       hasPermission,

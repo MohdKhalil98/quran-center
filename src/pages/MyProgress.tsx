@@ -62,6 +62,7 @@ const MyProgress = () => {
   const navigate = useNavigate();
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [groupInfo, setGroupInfo] = useState<GroupInfo | null>(null);
+  const [centerName, setCenterName] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [openingChat, setOpeningChat] = useState(false);
   const [stats, setStats] = useState({
@@ -90,6 +91,14 @@ const MyProgress = () => {
     if (userProfile?.uid) {
       fetchCurriculum();
       fetchMyProgress();
+      // جلب اسم المركز
+      if (userProfile?.centerId) {
+        getDoc(doc(db, 'centers', userProfile.centerId)).then(centerDoc => {
+          if (centerDoc.exists()) {
+            setCenterName(centerDoc.data().name);
+          }
+        });
+      }
     }
   }, [userProfile]);
 
@@ -345,7 +354,7 @@ const MyProgress = () => {
     return <Navigate to="/dashboard" replace />;
   }
 
-  // إذا كان الطالب في حالة انتظار الموافقة
+  // إذا كان الطالب في حالة انتظار الموافقة أو تحديد المستوى
   if (isPendingApproval) {
     return (
       <section className="page">
@@ -357,6 +366,28 @@ const MyProgress = () => {
           <h2>طلبك قيد المراجعة</h2>
           <p>يتم مراجعة طلب انضمامك من قبل المشرف.</p>
           <p>سيتم إشعارك فور الموافقة على طلبك.</p>
+        </div>
+      </section>
+    );
+  }
+
+  // إذا كان الطالب في انتظار تحديد المستوى من المعلم
+  if (userProfile?.status === 'waiting_teacher_approval') {
+    return (
+      <section className="page">
+        <header className="page__header">
+          <h1>تقدمي</h1>
+        </header>
+        <div className="pending-approval-message">
+          <div className="pending-icon">📚</div>
+          <h2>مبارك! لقد اجتزت المقابلة بنجاح 🎉</h2>
+          <p>أنت الآن طالب في <strong>{centerName || 'مركز تحفيظ القرآن الكريم'}</strong></p>
+          <p style={{ marginTop: '15px', color: '#1976d2' }}>
+            <strong>⏳ في انتظار تحديد مستواك من قبل المعلم</strong>
+          </p>
+          <p style={{ fontSize: '14px', color: '#666', marginTop: '10px' }}>
+            سيقوم المعلم بتحديد المستوى المناسب لك قريباً، وستتمكن من متابعة تقدمك.
+          </p>
         </div>
       </section>
     );

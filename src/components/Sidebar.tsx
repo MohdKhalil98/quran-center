@@ -66,14 +66,20 @@ const Sidebar = () => {
       if (!isSupervisor || !userProfile?.centerId) return;
       
       try {
-        const pendingQuery = query(
+        // جلب جميع الطلاب في المركز ثم تصفيتهم
+        const studentsQuery = query(
           collection(db, 'users'),
           where('role', '==', 'student'),
-          where('centerId', '==', userProfile.centerId),
-          where('status', '==', 'pending')
+          where('centerId', '==', userProfile.centerId)
         );
-        const snapshot = await getDocs(pendingQuery);
-        setPendingCount(snapshot.size);
+        const snapshot = await getDocs(studentsQuery);
+        
+        // عد الطلاب الذين حالتهم pending_registration فقط
+        const pendingRegistrations = snapshot.docs.filter(doc => 
+          doc.data().status === 'pending_registration'
+        );
+        
+        setPendingCount(pendingRegistrations.length);
       } catch (error) {
         console.error('Error fetching pending count:', error);
       }

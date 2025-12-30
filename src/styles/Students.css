@@ -71,6 +71,36 @@
   color: #721c24;
 }
 
+/* New Students Section */
+.section-header {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  color: #fff;
+  padding: 15px 20px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+}
+
+.section-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.help-text {
+  display: block;
+  margin-top: 8px;
+  color: #666;
+  font-size: 13px;
+}
+
+.info-text {
+  background: #f0f0f0;
+  padding: 10px;
+  border-radius: 6px;
+  margin: 5px 0;
+  font-weight: 600;
+}
+
 /* Mobile Responsive */
 @media (max-width: 768px) {
   .filters-section {

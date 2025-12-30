@@ -1,7 +1,7 @@
 import { FormEvent, useState, useEffect } from 'react';
-import { Navigate, useNavigate, Link } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, addDoc, serverTimestamp, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import MessageBox from '../components/MessageBox';
 
@@ -12,18 +12,17 @@ interface Center {
 }
 
 const Register = () => {
-  const { register, user } = useAuth();
+  const { user } = useAuth();
   const [centers, setCenters] = useState<Center[]>([]);
   const [loadingCenters, setLoadingCenters] = useState(true);
   const [formData, setFormData] = useState({
     name: '',
-    email: '',
     phone: '',
-    password: '',
-    confirmPassword: '',
-    role: 'student' as 'student' | 'parent',
+    personalId: '',
     centerId: ''
   });
+  const [checkingPersonalId, setCheckingPersonalId] = useState(false);
+  const [personalIdError, setPersonalIdError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
@@ -54,58 +53,148 @@ const Register = () => {
     fetchCenters();
   }, []);
 
+  // التحقق الفوري من الرقم الشخصي عند الإدخال
+  useEffect(() => {
+    const checkPersonalIdRealtime = async () => {
+      if (formData.personalId.length === 9) {
+        setCheckingPersonalId(true);
+        const exists = await checkPersonalIdExists(formData.personalId);
+        setCheckingPersonalId(false);
+        
+        if (exists) {
+          setPersonalIdError('⚠️ هذا الرقم مسجل مسبقاً! استخدم رقماً آخر');
+        } else {
+          setPersonalIdError(null);
+        }
+      }
+    };
+
+    const timeoutId = setTimeout(() => {
+      checkPersonalIdRealtime();
+    }, 500); // تأخير 500ms لتجنب الكثير من الاستعلامات
+
+    return () => clearTimeout(timeoutId);
+  }, [formData.personalId]);
+
   if (user) {
     return <Navigate to="/dashboard" replace />;
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    
+    // للرقم الشخصي: السماح فقط بالأرقام
+    if (name === 'personalId') {
+      const numericValue = value.replace(/\D/g, '').slice(0, 9);
+      setFormData({
+        ...formData,
+        [name]: numericValue
+      });
+      setPersonalIdError(null);
+      return;
+    }
+    
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [name]: value
     });
+  };
+
+  // التحقق من عدم تكرار الرقم الشخصي
+  const checkPersonalIdExists = async (personalId: string): Promise<boolean> => {
+    try {
+      console.log('Checking if personalId exists:', personalId);
+      const q = query(collection(db, 'users'), where('personalId', '==', personalId));
+      const snapshot = await getDocs(q);
+      console.log('Query result - Found documents:', snapshot.docs.length);
+      if (!snapshot.empty) {
+        console.log('PersonalId already exists! Found:', snapshot.docs.map(d => d.data().name));
+      }
+      return !snapshot.empty;
+    } catch (error) {
+      console.error('Error checking personal ID:', error);
+      // في حالة الخطأ، نفترض أن الرقم موجود لمنع التسجيل
+      return true;
+    }
   };
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
 
-    // التحقق من تطابق كلمات المرور
-    if (formData.password !== formData.confirmPassword) {
-      setError('كلمات المرور غير متطابقة');
+    // التحقق من الحقول المطلوبة
+    if (!formData.name.trim()) {
+      setError('الاسم الكامل مطلوب');
       return;
     }
 
-    // التحقق من طول كلمة المرور
-    if (formData.password.length < 6) {
-      setError('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+    if (!formData.phone.trim()) {
+      setError('رقم الهاتف مطلوب');
       return;
     }
 
-    // التحقق من اختيار المركز للطالب
-    if (formData.role === 'student' && !formData.centerId) {
+    if (!formData.personalId.trim()) {
+      setError('الرقم الشخصي مطلوب');
+      return;
+    }
+
+    if (formData.personalId.length !== 9) {
+      setError('الرقم الشخصي يجب أن يكون 9 أرقام بالضبط');
+      return;
+    }
+
+    if (!formData.centerId) {
       setError('يجب اختيار المركز');
+      return;
+    }
+
+    // التحقق النهائي من عدم تكرار الرقم الشخصي
+    setCheckingPersonalId(true);
+    const personalIdExists = await checkPersonalIdExists(formData.personalId);
+    setCheckingPersonalId(false);
+    
+    if (personalIdExists) {
+      setPersonalIdError('⚠️ هذا الرقم مسجل مسبقاً! استخدم رقماً آخر');
+      setError('❌ الرقم الشخصي ' + formData.personalId + ' موجود بالفعل في النظام. لا يمكن التسجيل بنفس الرقم مرتين.');
       return;
     }
 
     setSubmitting(true);
     try {
-      await register(formData.email, formData.password, formData.name, formData.phone, formData.role, formData.centerId || undefined);
-      if (formData.role === 'student') {
-        setShowSuccessMessage(true);
-      } else {
-        navigate('/dashboard', { replace: true });
-      }
+      // إضافة طلب تسجيل جديد - سجل واحد فقط يتم تحديثه خلال جميع المراحل
+      await addDoc(collection(db, 'users'), {
+        name: formData.name.trim(),
+        phone: formData.phone.trim(),
+        personalId: formData.personalId.trim(),
+        centerId: formData.centerId,
+        role: 'student',
+        status: 'pending_registration', // المرحلة 1: في انتظار جدولة المقابلة
+        active: true,
+        createdAt: serverTimestamp(),
+        // الحقول التي ستُملأ لاحقاً
+        email: 'Unknown',
+        password: 'Unknown',
+        groupId: 'Unknown',
+        trackId: 'Unknown',
+        levelId: 'Unknown',
+        levelName: 'Unknown',
+        stageId: 'Unknown',
+        stageName: 'Unknown',
+        interviewDate: 'Unknown',
+        interviewTime: 'Unknown'
+      });
+
+      setShowSuccessMessage(true);
+      setFormData({ name: '', phone: '', personalId: '', centerId: '' });
     } catch (err: any) {
-      if (err.code === 'auth/email-already-in-use') {
-        setError('البريد الإلكتروني مستخدم بالفعل');
-      } else if (err.code === 'auth/invalid-email') {
-        setError('البريد الإلكتروني غير صالح');
-      } else if (err.code === 'auth/weak-password') {
-        setError('كلمة المرور ضعيفة جداً');
-      } else {
-        setError('حدث خطأ أثناء التسجيل. يرجى المحاولة مرة أخرى.');
-      }
       console.error('Registration error:', err);
+      console.error('Error code:', err.code);
+      console.error('Error message:', err.message);
+      if (err.code === 'permission-denied') {
+        setError('لا توجد صلاحية للتسجيل. يرجى التواصل مع المسؤول.');
+      } else {
+        setError(`حدث خطأ أثناء التسجيل: ${err.message || 'يرجى المحاولة مرة أخرى.'}`);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -114,9 +203,9 @@ const Register = () => {
   return (
     <div className="login-page">
       <div className="login-card register-card">
-        <h1>إنشاء حساب جديد</h1>
+        <h1>التسجيل في قائمة الانتظار</h1>
         <p className="login-card__subtitle">
-          سجل الآن للانضمام إلى مركز تحفيظ القرآن الكريم
+          تسجيل في قائمة الانتظار للانضمام إلى مركز تحفيظ القرآن الكريم
         </p>
         <form className="login-form" onSubmit={handleSubmit}>
           <label>
@@ -128,18 +217,6 @@ const Register = () => {
               onChange={handleChange}
               required
               placeholder="أدخل اسمك الكامل"
-            />
-          </label>
-
-          <label>
-            البريد الإلكتروني *
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              required
-              placeholder="example@email.com"
             />
           </label>
 
@@ -156,94 +233,85 @@ const Register = () => {
           </label>
 
           <label>
-            نوع الحساب *
+            الرقم الشخصي * <small style={{ fontWeight: 'normal', color: '#666' }}>(9 أرقام)</small>
+            <input
+              type="text"
+              name="personalId"
+              value={formData.personalId}
+              onChange={handleChange}
+              required
+              placeholder="أدخل الرقم الشخصي (9 أرقام)"
+              maxLength={9}
+              pattern="[0-9]{9}"
+              inputMode="numeric"
+              style={personalIdError ? { borderColor: '#d32f2f' } : {}}
+            />
+            {formData.personalId && formData.personalId.length < 9 && !personalIdError && (
+              <small style={{ color: '#ff9800', display: 'block', marginTop: '5px' }}>
+                ⚠️ الرقم الشخصي يجب أن يكون 9 أرقام ({formData.personalId.length}/9)
+              </small>
+            )}
+            {checkingPersonalId && formData.personalId.length === 9 && (
+              <small style={{ color: '#2196f3', display: 'block', marginTop: '5px' }}>
+                🔍 جاري التحقق من الرقم...
+              </small>
+            )}
+            {formData.personalId && formData.personalId.length === 9 && !personalIdError && !checkingPersonalId && (
+              <small style={{ color: '#4caf50', display: 'block', marginTop: '5px', fontWeight: 'bold' }}>
+                ✓ الرقم متاح ويمكن استخدامه
+              </small>
+            )}
+            {personalIdError && (
+              <small style={{ color: '#d32f2f', display: 'block', marginTop: '5px', fontWeight: 'bold' }}>
+                {personalIdError}
+              </small>
+            )}
+          </label>
+
+          <label>
+            المركز المراد الانضمام إليه *
             <select
-              name="role"
-              value={formData.role}
+              name="centerId"
+              value={formData.centerId}
               onChange={handleChange}
               required
+              disabled={loadingCenters}
             >
-              <option value="student">طالب</option>
-              <option value="parent">ولي أمر</option>
-            </select>
-          </label>
-
-          {formData.role === 'student' && (
-            <label>
-              المركز المراد الانضمام إليه *
-              <select
-                name="centerId"
-                value={formData.centerId}
-                onChange={handleChange}
-                required
-                disabled={loadingCenters}
-              >
-                <option value="">
-                  {loadingCenters ? 'جاري تحميل المراكز...' : 
-                   centers.length === 0 ? 'لا توجد مراكز متاحة' : 'اختر المركز'}
+              <option value="">
+                {loadingCenters ? 'جاري تحميل المراكز...' : 
+                 centers.length === 0 ? 'لا توجد مراكز متاحة' : 'اختر المركز'}
+              </option>
+              {centers.map(center => (
+                <option key={center.id} value={center.id}>
+                  {center.name} {center.address ? `- ${center.address}` : ''}
                 </option>
-                {centers.map(center => (
-                  <option key={center.id} value={center.id}>
-                    {center.name} {center.address ? `- ${center.address}` : ''}
-                  </option>
-                ))}
-              </select>
-              {!loadingCenters && centers.length === 0 && (
-                <small style={{ color: '#d32f2f', display: 'block', marginTop: '5px' }}>
-                  ⚠️ لا توجد مراكز في النظام. تواصل مع المسؤول لإضافة مركز.
-                </small>
-              )}
-            </label>
-          )}
-
-          <label>
-            كلمة المرور *
-            <input
-              type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              required
-              placeholder="••••••••"
-              minLength={6}
-            />
-          </label>
-
-          <label>
-            تأكيد كلمة المرور *
-            <input
-              type="password"
-              name="confirmPassword"
-              value={formData.confirmPassword}
-              onChange={handleChange}
-              required
-              placeholder="••••••••"
-              minLength={6}
-            />
+              ))}
+            </select>
+            {!loadingCenters && centers.length === 0 && (
+              <small style={{ color: '#d32f2f', display: 'block', marginTop: '5px' }}>
+                ⚠️ لا توجد مراكز في النظام. تواصل مع المسؤول لإضافة مركز.
+              </small>
+            )}
           </label>
 
           {error && <div className="form-error">{error}</div>}
 
-          <button type="submit" disabled={submitting}>
-            {submitting ? 'جاري إنشاء الحساب...' : 'إنشاء حساب'}
+          <button type="submit" disabled={submitting || checkingPersonalId || !!personalIdError}>
+            {checkingPersonalId ? 'جاري التحقق من الرقم الشخصي...' : submitting ? 'جاري التسجيل...' : 'التسجيل في قائمة الانتظار'}
           </button>
         </form>
-
-        <p className="login-card__hint">
-          لديك حساب بالفعل؟ <Link to="/login">تسجيل الدخول</Link>
-        </p>
       </div>
 
       {/* Success Message */}
       <MessageBox
         open={showSuccessMessage}
         type="success"
-        title="تم إنشاء حسابك بنجاح! 🎉"
-        message="طلبك قيد المراجعة من قبل المشرف.
+        title="تم تسجيلك بنجاح! 🎉"
+        message="تم إضافتك إلى قائمة الانتظار.
 سيتم إشعارك عند الموافقة على طلبك."
         onClose={() => {
           setShowSuccessMessage(false);
-          navigate('/dashboard', { replace: true });
+          navigate('/', { replace: true });
         }}
       />
     </div>

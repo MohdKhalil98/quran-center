@@ -152,75 +152,77 @@ const Attendance = () => {
   fetchStudents();
 }, [selectedGroupId, groups, sessionDate]);
 
-  // Calculate monthly attendance statistics
-  useEffect(() => {
-    const calculateStats = async () => {
-      if (!selectedGroupId || students.length === 0) {
-        setAttendanceStats([]);
-        return;
-      }
+  // دالة لحساب الإحصائيات
+  const calculateStats = async () => {
+    if (!selectedGroupId || students.length === 0) {
+      setAttendanceStats([]);
+      return;
+    }
 
-      try {
-        // Get all attendance records for selected group
-        const allAttendanceSnap = await getDocs(collection(db, 'attendance'));
-        const selectedMonthDate = new Date(selectedMonth + '-01');
-        const monthStart = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth(), 1);
-        const monthEnd = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth() + 1, 0, 23, 59, 59);
+    try {
+      // Get all attendance records for selected group
+      const allAttendanceSnap = await getDocs(collection(db, 'attendance'));
+      const selectedMonthDate = new Date(selectedMonth + '-01');
+      const monthStart = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth(), 1);
+      const monthEnd = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth() + 1, 0, 23, 59, 59);
 
-        // Filter records for this group and month
-        const monthRecords = allAttendanceSnap.docs.filter((docSnap) => {
+      // Filter records for this group and month
+      const monthRecords = allAttendanceSnap.docs.filter((docSnap) => {
+        const data = docSnap.data();
+        if (data.groupId !== selectedGroupId) return false;
+
+        let date: Date | null = null;
+        if (data.date && typeof data.date.toDate === 'function') {
+          date = data.date.toDate();
+        } else if (data.date) {
+          date = new Date(data.date);
+        }
+
+        if (!date) return false;
+        return date >= monthStart && date <= monthEnd;
+      });
+
+      // Calculate stats for each student
+      const stats: StudentAttendanceStats[] = students.map((student) => {
+        const studentRecords = monthRecords.filter((docSnap) => {
           const data = docSnap.data();
-          if (data.groupId !== selectedGroupId) return false;
-
-          let date: Date | null = null;
-          if (data.date && typeof data.date.toDate === 'function') {
-            date = data.date.toDate();
-          } else if (data.date) {
-            date = new Date(data.date);
-          }
-
-          if (!date) return false;
-          return date >= monthStart && date <= monthEnd;
+          return data.studentId === student.id;
         });
 
-        // Calculate stats for each student
-        const stats: StudentAttendanceStats[] = students.map((student) => {
-          const studentRecords = monthRecords.filter((docSnap) => {
-            const data = docSnap.data();
-            return data.studentId === student.id;
-          });
+        const presentDays = studentRecords.filter((docSnap) => {
+          const status = docSnap.data().status;
+          return status === 'حاضر' || status === 'متأخر';
+        }).length;
 
-          const presentDays = studentRecords.filter((docSnap) => {
-            const status = docSnap.data().status;
-            return status === 'حاضر' || status === 'متأخر';
-          }).length;
+        const absentDays = studentRecords.filter((docSnap) => {
+          const status = docSnap.data().status;
+          return status === 'غائب' || status === 'غائب بعذر';
+        }).length;
 
-          const absentDays = studentRecords.filter((docSnap) => {
-            const status = docSnap.data().status;
-            return status === 'غائب' || status === 'غائب بعذر';
-          }).length;
+        const totalDays = studentRecords.length;
+        const attendanceRate = totalDays > 0 ? (presentDays / totalDays) * 100 : 0;
 
-          const totalDays = studentRecords.length;
-          const attendanceRate = totalDays > 0 ? (presentDays / totalDays) * 100 : 0;
+        return {
+          studentId: student.id,
+          studentName: student.name,
+          totalDays: totalDays,
+          presentDays: presentDays,
+          absentDays: absentDays,
+          attendanceRate: attendanceRate
+        };
+      });
 
-          return {
-            studentId: student.id,
-            studentName: student.name,
-            totalDays: totalDays,
-            presentDays: presentDays,
-            absentDays: absentDays,
-            attendanceRate: attendanceRate
-          };
-        });
+      setAttendanceStats(stats);
+    } catch (error) {
+      console.error('Error calculating attendance stats:', error);
+      setAttendanceStats([]);
+    }
+  };
 
-        setAttendanceStats(stats);
-      } catch (error) {
-        console.error('Error calculating attendance stats:', error);
-        setAttendanceStats([]);
-      }
-    };
-
+  // Calculate monthly attendance statistics - استدعاء الدالة عند تغيير المجموعة أو الشهر
+  useEffect(() => {
     calculateStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedGroupId, students, selectedMonth]);
 
   const handleStatusChange = (studentId: string) => {
@@ -299,7 +301,10 @@ const Attendance = () => {
       }
 
       alert('تم حفظ سجل الحضور بنجاح');
-    setSavedRecords(new Map(attendance));
+      setSavedRecords(new Map(attendance));
+      
+      // إعادة حساب الإحصائيات بعد الحفظ
+      await calculateStats();
     } catch (error) {
       console.error('Error saving attendance:', error);
       alert('حدث خطأ أثناء حفظ سجل الحضور');

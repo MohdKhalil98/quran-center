@@ -16,6 +16,7 @@ const navItems: NavItem[] = [
   { path: '/dashboard', label: 'لوحة التحكم', icon: '📊', roles: ['admin', 'supervisor', 'teacher'] },
   // صفحات المطور فقط
   { path: '/centers', label: 'مراكز القرآن', icon: '🏫', roles: ['admin'] },
+  { path: '/batch-import', label: 'استيراد جماعي', icon: '📦', roles: ['admin'] },
   { path: '/teachers', label: 'المعلمون', icon: '👨‍🏫', roles: ['admin'] },
   { path: '/students', label: 'الطلاب', icon: '👨‍🎓', roles: ['admin'] },
   // صفحات المشرف
@@ -38,10 +39,12 @@ const navItems: NavItem[] = [
 ];
 
 const Sidebar = () => {
-  const { logout, isAdmin, userProfile, isSupervisor } = useAuth();
+  const { logout, isAdmin, userProfile, isSupervisor, activeRole, availableRoles, switchRole, hasMultipleRoles } = useAuth();
   const [pendingCount, setPendingCount] = useState(0);
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
+  const [newStudentsCount, setNewStudentsCount] = useState(0);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
   const location = useLocation();
 
   // إغلاق القائمة عند تغيير الصفحة
@@ -91,14 +94,57 @@ const Sidebar = () => {
     return () => clearInterval(interval);
   }, [isSupervisor, userProfile]);
 
+  // جلب عدد الطلاب الجدد (للمعلمين فقط)
+  useEffect(() => {
+    if (!userProfile?.uid || userProfile.role !== 'teacher') return;
+
+    const fetchNewStudentsCount = async () => {
+      try {
+        // جلب الحلقات التي يدرسها المعلم
+        const groupsQuery = query(
+          collection(db, 'groups'),
+          where('teacherId', '==', userProfile.uid)
+        );
+        const groupsSnapshot = await getDocs(groupsQuery);
+        const groupIds = groupsSnapshot.docs.map(doc => doc.id);
+
+        if (groupIds.length === 0) {
+          setNewStudentsCount(0);
+          return;
+        }
+
+        // جلب الطلاب الجدد الذين في هذه الحلقات
+        let totalNewStudents = 0;
+        for (const groupId of groupIds) {
+          const newStudentsQuery = query(
+            collection(db, 'users'),
+            where('role', '==', 'student'),
+            where('status', '==', 'waiting_teacher_approval'),
+            where('groupId', '==', groupId)
+          );
+          const snapshot = await getDocs(newStudentsQuery);
+          totalNewStudents += snapshot.docs.length;
+        }
+
+        setNewStudentsCount(totalNewStudents);
+      } catch (error) {
+        console.error('Error fetching new students count:', error);
+      }
+    };
+
+    fetchNewStudentsCount();
+    // تحديث كل 30 ثانية
+    const interval = setInterval(fetchNewStudentsCount, 30000);
+    return () => clearInterval(interval);
+  }, [userProfile?.uid, userProfile?.role]);
+
   // جلب عدد الرسائل غير المقروءة
   useEffect(() => {
     if (!userProfile?.uid) return;
 
     const conversationsQuery = query(
       collection(db, 'conversations'),
-      where('participants', 'array-contains', userProfile.uid),
-      orderBy('updatedAt', 'desc')
+      where('participants', 'array-contains', userProfile.uid)
     );
 
     const unsubscribe = onSnapshot(conversationsQuery, (snapshot) => {
@@ -127,9 +173,36 @@ const Sidebar = () => {
     // صفحات بدون تحديد أدوار = للجميع
     if (!item.roles) return true;
 
-    // التحقق من دور المستخدم
-    if (!userProfile) return false;
-    return item.roles.includes(userProfile.role);
+    // التحقق من الصلاحية النشطة
+    if (!activeRole) return false;
+    return item.roles.includes(activeRole);
+  };
+
+  const getRoleLabel = (role: string): string => {
+    switch (role) {
+      case 'admin': return 'مطور';
+      case 'supervisor': return 'مشرف';
+      case 'teacher': return 'معلم';
+      case 'student': return 'طالب';
+      case 'parent': return 'ولي أمر';
+      default: return role;
+    }
+  };
+
+  const getRoleIcon = (role: string): string => {
+    switch (role) {
+      case 'admin': return '👨‍💻';
+      case 'supervisor': return '👨‍💼';
+      case 'teacher': return '👨‍🏫';
+      case 'student': return '👨‍🎓';
+      case 'parent': return '👨‍👧';
+      default: return '👤';
+    }
+  };
+
+  const handleRoleSwitch = (role: string) => {
+    switchRole(role as any);
+    setShowRoleSwitcher(false);
   };
 
   const toggleMobileMenu = () => {
@@ -175,13 +248,33 @@ const Sidebar = () => {
             <div className="sidebar__user-name">
               {userProfile.name}
             </div>
-            <div className="sidebar__user-role">
-              {userProfile.role === 'admin' && 'مطور'}
-              {userProfile.role === 'supervisor' && 'مشرف'}
-              {userProfile.role === 'teacher' && 'معلم'}
-              {userProfile.role === 'student' && 'طالب'}
-              {userProfile.role === 'parent' && 'ولي أمر'}
+            <div className="sidebar__user-role-container">
+              <span className="sidebar__user-role">
+                {getRoleIcon(activeRole || userProfile.role)} {getRoleLabel(activeRole || userProfile.role)}
+              </span>
+              {hasMultipleRoles && (
+                <button 
+                  className="sidebar__role-switch-btn"
+                  onClick={() => setShowRoleSwitcher(!showRoleSwitcher)}
+                  title="تبديل الصلاحية"
+                >
+                  🔄
+                </button>
+              )}
             </div>
+            {showRoleSwitcher && hasMultipleRoles && (
+              <div className="sidebar__role-switcher">
+                {availableRoles.map((role) => (
+                  <button
+                    key={role}
+                    className={`sidebar__role-option ${activeRole === role ? 'active' : ''}`}
+                    onClick={() => handleRoleSwitch(role)}
+                  >
+                    {getRoleIcon(role)} {getRoleLabel(role)}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
         
@@ -202,6 +295,9 @@ const Sidebar = () => {
               {item.showBadge && item.path === '/messages' && unreadMessagesCount > 0 && (
                 <span className="sidebar__badge">{unreadMessagesCount}</span>
               )}
+              {item.path === '/students' && item.label === 'طلابي' && newStudentsCount > 0 && (
+                <span className="sidebar__badge">{newStudentsCount}</span>
+              )}
             </NavLink>
           ))}
           {process.env.NODE_ENV === 'development' && isAdmin && (
@@ -216,10 +312,21 @@ const Sidebar = () => {
             </NavLink>
           )}
         </nav>
-        <button type="button" className="sidebar__logout" onClick={handleLogout}>
-          <span className="sidebar__link-icon">🚪</span>
-          <span className="sidebar__link-text">تسجيل الخروج</span>
-        </button>
+        <div className="sidebar__bottom-actions">
+          <NavLink
+            to="/change-password"
+            className={({ isActive }) =>
+              isActive ? 'sidebar__link sidebar__link--active' : 'sidebar__link'
+            }
+          >
+            <span className="sidebar__link-icon">🔐</span>
+            <span className="sidebar__link-text">تغيير كلمة المرور</span>
+          </NavLink>
+          <button type="button" className="sidebar__logout" onClick={handleLogout}>
+            <span className="sidebar__link-icon">🚪</span>
+            <span className="sidebar__link-text">تسجيل الخروج</span>
+          </button>
+        </div>
       </aside>
     </>
   );

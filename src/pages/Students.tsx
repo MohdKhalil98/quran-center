@@ -102,6 +102,27 @@ const Students = () => {
         } as StudentUser;
       });
       
+      // جلب الطلاب الجدد (pending_registration) - الذين تم استيرادهم للتو
+      if (isAdmin || isSupervisor || isTeacher) {
+        const newPendingQuery = query(
+          collection(db, 'users'),
+          where('role', '==', 'student'),
+          where('status', '==', 'pending_registration')
+        );
+        const newPendingSnapshot = await getDocs(newPendingQuery);
+        const newPendingList = newPendingSnapshot.docs.map((doc) => {
+          const data = doc.data() as StudentUser;
+          return {
+            ...data,
+            groupName: groupsList.find(g => g.id === data.groupId)?.name || 'غير محدد',
+            centerName: centersList.find(c => c.id === data.centerId)?.name || ''
+          } as StudentUser;
+        });
+        
+        // إضافة الطلاب الجدد إلى القائمة
+        studentsList = [...studentsList, ...newPendingList];
+      }
+      
       // تصفية الطلاب حسب الدور
       if (isTeacher && myGroupIds.length > 0) {
         // المعلم يرى فقط طلاب حلقاته
@@ -118,6 +139,7 @@ const Students = () => {
       // Fetch new students (waiting for teacher approval) for teachers only
       if (isTeacher && myGroupIds.length > 0) {
         // جلب جميع الطلاب الجدد ثم تصفيتهم في الكود (لتجنب الحاجة إلى index معقد)
+        // البحث عن الطلاب المنتظرين موافقة المعلم
         const newStudentsQuery = query(
           collection(db, 'users'),
           where('role', '==', 'student'),
@@ -298,7 +320,26 @@ const Students = () => {
   return (
     <section className="page">
       <header className="page__header">
-        <h1>{isTeacher ? 'طلابي' : 'الطلاب'}</h1>
+        <h1>
+          {isTeacher ? 'طلابي' : 'الطلاب'}
+          {isTeacher && newStudents.length > 0 && (
+            <span style={{
+              backgroundColor: '#4caf50',
+              color: 'white',
+              borderRadius: '50%',
+              width: '28px',
+              height: '28px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '0.75rem',
+              marginRight: '10px',
+              fontWeight: '700'
+            }}>
+              {newStudents.length}
+            </span>
+          )}
+        </h1>
         <p>{isTeacher ? 'عرض طلاب حلقاتي.' : 'عرض بيانات الطلاب المسجلين.'}</p>
       </header>
 

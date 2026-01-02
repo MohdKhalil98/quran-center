@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { useConversations, Conversation } from '../hooks/useConversations';
 import { useMessaging } from '../hooks/useMessaging';
 import { UserProfile } from '../context/AuthContext';
+import { deleteDoc, doc, collection, getDocs } from 'firebase/firestore';
+import { db } from '../firebase';
 import '../styles/Messages.css';
 
 const Messages = () => {
@@ -17,6 +19,7 @@ const Messages = () => {
   const [showNewChat, setShowNewChat] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [creatingChat, setCreatingChat] = useState(false);
+  const [deletingConv, setDeletingConv] = useState<string | null>(null);
 
   // جلب جهات الاتصال المتاحة
   useEffect(() => {
@@ -58,6 +61,39 @@ const Messages = () => {
   // فتح محادثة موجودة
   const openConversation = (conversation: Conversation) => {
     navigate(`/messages/${conversation.id}`);
+  };
+
+  // حذف محادثة
+  const deleteConversation = async (conversationId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // منع فتح المحادثة عند الضغط على زر الحذف
+    
+    if (!window.confirm('هل أنت متأكد من حذف هذه المحادثة؟ سيتم حذف جميع الرسائل بشكل نهائي.')) {
+      return;
+    }
+
+    setDeletingConv(conversationId);
+
+    try {
+      // حذف جميع الرسائل في المحادثة
+      const messagesRef = collection(db, 'conversations', conversationId, 'messages');
+      const messagesSnapshot = await getDocs(messagesRef);
+      
+      // حذف كل رسالة
+      const deletePromises = messagesSnapshot.docs.map(messageDoc => 
+        deleteDoc(doc(db, 'conversations', conversationId, 'messages', messageDoc.id))
+      );
+      await Promise.all(deletePromises);
+
+      // حذف المحادثة نفسها
+      await deleteDoc(doc(db, 'conversations', conversationId));
+
+      // تحديث القائمة محلياً (سيتم تحديثها تلقائياً من خلال useConversations)
+    } catch (error) {
+      console.error('Error deleting conversation:', error);
+      alert('حدث خطأ أثناء حذف المحادثة');
+    } finally {
+      setDeletingConv(null);
+    }
   };
 
   // الحصول على اسم المحادثة
@@ -234,9 +270,19 @@ const Messages = () => {
                     </div>
                   </div>
                   
-                  {unreadCount > 0 && (
-                    <div className="unread-badge">{unreadCount}</div>
-                  )}
+                  <div className="conversation-actions">
+                    {unreadCount > 0 && (
+                      <div className="unread-badge">{unreadCount}</div>
+                    )}
+                    <button
+                      className={`btn-delete-conversation ${deletingConv === conv.id ? 'deleting' : ''}`}
+                      onClick={(e) => deleteConversation(conv.id, e)}
+                      disabled={deletingConv === conv.id}
+                      title="حذف المحادثة"
+                    >
+                      {deletingConv === conv.id ? '⏳' : '🗑️'}
+                    </button>
+                  </div>
                 </div>
               );
             })

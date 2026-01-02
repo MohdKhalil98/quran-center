@@ -475,29 +475,29 @@ const PendingRequests = () => {
       // إرسال رسالة واتساب مع بيانات الدخول
       const phone = selectedStudent.phone || selectedStudent.phoneNumber;
       if (phone) {
-        const whatsappMessage = `🎉 *مبارك ${selectedStudent.name}!*
+        const whatsappMessage = `*مبارك ${selectedStudent.name}!*
 
-تهانينا! لقد اجتزت المقابلة بنجاح ✅
+تهانينا! لقد اجتزت المقابلة بنجاح
 
-📍 *معلومات التسجيل:*
+*معلومات التسجيل:*
 ━━━━━━━━━━━━━━━
-🏫 المركز: *${centerName}*
-📚 المساق: *${trackName}*
-👥 الحلقة: *${groupName}*
-👨‍🏫 المعلم: *${teacherName}*
-━━━━━━━━━━━━━━━
-
-📱 *بيانات تسجيل الدخول:*
-━━━━━━━━━━━━━━━
-🔢 الرقم الشخصي: *${selectedStudent.personalId}*
-🔑 كلمة المرور: *${passwordToSend}*
+المركز: *${centerName}*
+المساق: *${trackName}*
+الحلقة: *${groupName}*
+المعلم: *${teacherName}*
 ━━━━━━━━━━━━━━━
 
-🌐 رابط الموقع: ${window.location.origin}
+*بيانات تسجيل الدخول:*
+━━━━━━━━━━━━━━━
+الرقم الشخصي: *${selectedStudent.personalId}*
+كلمة المرور: *${passwordToSend}*
+━━━━━━━━━━━━━━━
 
-⚠️ يرجى تغيير كلمة المرور بعد أول تسجيل دخول.
+رابط الموقع: ${window.location.origin}
 
-نتمنى لك التوفيق في رحلتك مع القرآن الكريم! 📖✨`;
+يرجى تغيير كلمة المرور بعد أول تسجيل دخول.
+
+نتمنى لك التوفيق في رحلتك مع القرآن الكريم!`;
 
         const whatsappUrl = `https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(whatsappMessage)}`;
         window.open(whatsappUrl, '_blank');

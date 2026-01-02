@@ -20,6 +20,8 @@ import MyProgress from './pages/MyProgress';
 import Leaderboard from './pages/Leaderboard';
 import Messages from './pages/Messages';
 import Conversation from './pages/Conversation';
+import ChangePassword from './pages/ChangePassword';
+import BatchImport from './pages/BatchImport';
 import { useAuth } from './context/AuthContext';
 
 // Component to handle default redirect based on role
@@ -57,6 +59,8 @@ function App() {
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route path="/messages" element={<Messages />} />
           <Route path="/messages/:conversationId" element={<Conversation />} />
+          <Route path="/change-password" element={<ChangePassword />} />
+          <Route path="/batch-import" element={<BatchImport />} />
         </Route>
       </Route>
       <Route path="*" element={<DefaultRedirect />} />

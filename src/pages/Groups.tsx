@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, where } from 'firebase/firestore';
+import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, where, setDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -81,20 +81,36 @@ const Groups = () => {
         // ترتيب المساقات
         tracksList.sort((a: any, b: any) => a.name.localeCompare(b.name, 'ar'));
 
-        // Fetch teachers from same center
+        // Fetch teachers from same center (including supervisors who can teach)
         let teachersList: Teacher[] = [];
         if (userProfile?.centerId) {
+          // جلب المعلمين
           const teachersQuery = query(
             collection(db, 'users'),
             where('role', '==', 'teacher'),
             where('centerId', '==', userProfile.centerId)
           );
           const teachersSnapshot = await getDocs(teachersQuery);
-          teachersList = teachersSnapshot.docs.map((doc) => ({
+          const teachers = teachersSnapshot.docs.map((doc) => ({
             uid: doc.data().uid,
             name: doc.data().name,
             email: doc.data().email
           }));
+          
+          // جلب المشرفين أيضاً (قد يقومون بالتدريس)
+          const supervisorsQuery = query(
+            collection(db, 'users'),
+            where('role', '==', 'supervisor'),
+            where('centerId', '==', userProfile.centerId)
+          );
+          const supervisorsSnapshot = await getDocs(supervisorsQuery);
+          const supervisors = supervisorsSnapshot.docs.map((doc) => ({
+            uid: doc.data().uid,
+            name: doc.data().name,
+            email: doc.data().email
+          }));
+          
+          teachersList = [...teachers, ...supervisors];
         }
         setTeachers(teachersList);
 
@@ -149,7 +165,7 @@ const Groups = () => {
         );
         setEditingId(null);
       } else {
-        // Add new group - إضافة centerId
+        // Add new group - إضافة centerId وإنشاء groupId يدوي
         const groupData: any = {
           ...dataToSave,
           createdAt: new Date(),
@@ -158,10 +174,39 @@ const Groups = () => {
         // إضافة centerId إذا كان المستخدم مشرف
         if (userProfile?.centerId) {
           groupData.centerId = userProfile.centerId;
+          
+          // حساب الرقم التسلسلي للحلقة في هذا المركز
+          const centerGroupsQuery = query(
+            collection(db, 'groups'),
+            where('centerId', '==', userProfile.centerId)
+          );
+          const centerGroupsSnapshot = await getDocs(centerGroupsQuery);
+          
+          // البحث عن أكبر رقم تسلسلي
+          let maxNumber = 0;
+          centerGroupsSnapshot.docs.forEach(doc => {
+            const groupId = doc.id;
+            // استخراج الرقم من groupId (مثال: center1-5 -> 5)
+            const match = groupId.match(/-(\d+)$/);
+            if (match) {
+              const num = parseInt(match[1]);
+              if (num > maxNumber) {
+                maxNumber = num;
+              }
+            }
+          });
+          
+          // إنشاء groupId بصيغة centerId-رقم
+          const newGroupId = `${userProfile.centerId}-${maxNumber + 1}`;
+          
+          // استخدام setDoc بدلاً من addDoc لتحديد ID يدوي
+          await setDoc(doc(db, 'groups', newGroupId), groupData);
+          setGroups((prev) => [...prev, { ...groupData, id: newGroupId, trackName: trackNameValue, teacherName: teacherNameValue }]);
+        } else {
+          // إذا لم يكن هناك centerId، استخدم الطريقة القديمة
+          const docRef = await addDoc(collection(db, 'groups'), groupData);
+          setGroups((prev) => [...prev, { ...groupData, id: docRef.id, trackName: trackNameValue, teacherName: teacherNameValue }]);
         }
-        
-        const docRef = await addDoc(collection(db, 'groups'), groupData);
-        setGroups((prev) => [...prev, { ...groupData, id: docRef.id, trackName: trackNameValue, teacherName: teacherNameValue }]);
       }
 
       setFormData({

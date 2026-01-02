@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, setDoc } from 'firebase/firestore';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signOut, signInWithEmailAndPassword } from 'firebase/auth';
 import { db, auth } from '../firebase';
 import { useAuth, UserProfile, UserRole } from '../context/AuthContext';
 import { Navigate } from 'react-router-dom';
+import { generateTemporaryPassword } from '../utils/passwordGenerator';
 import '../styles/Centers.css';
 
 interface Center {
@@ -30,6 +31,7 @@ const Centers = () => {
   const [submitting, setSubmitting] = useState(false);
   
   const [newCenter, setNewCenter] = useState({
+    id: '', // حقل ID يدوي
     name: '',
     address: '',
     phone: ''
@@ -38,14 +40,25 @@ const Centers = () => {
   const [newUser, setNewUser] = useState({
     name: '',
     email: '',
-    password: '',
+    password: generateTemporaryPassword(),
     phone: '',
-    role: 'supervisor' as UserRole
+    role: 'supervisor' as UserRole,
+    roles: [] as UserRole[] // صلاحيات متعددة
   });
 
   useEffect(() => {
     fetchCenters();
   }, []);
+
+  // توليد كلمة مرور جديدة عند فتح نموذج إضافة مستخدم
+  useEffect(() => {
+    if (showAddUserModal) {
+      setNewUser(prev => ({
+        ...prev,
+        password: generateTemporaryPassword()
+      }));
+    }
+  }, [showAddUserModal]);
 
   const fetchCenters = async () => {
     try {
@@ -81,16 +94,29 @@ const Centers = () => {
     setSubmitting(true);
 
     try {
+      // التحقق من عدم وجود مركز بنفس الـ ID
+      const existingCenterQuery = query(collection(db, 'centers'), where('__name__', '==', newCenter.id));
+      const existingSnapshot = await getDocs(existingCenterQuery);
+      
+      if (!existingSnapshot.empty) {
+        alert('يوجد مركز بنفس المعرف (ID) بالفعل. يرجى استخدام معرف مختلف.');
+        setSubmitting(false);
+        return;
+      }
+
       const centerData = {
-        ...newCenter,
+        name: newCenter.name,
+        address: newCenter.address,
+        phone: newCenter.phone,
         createdAt: new Date().toISOString(),
         active: true
       };
 
-      await addDoc(collection(db, 'centers'), centerData);
+      // استخدام setDoc بدلاً من addDoc لتحديد ID يدوي
+      await setDoc(doc(db, 'centers', newCenter.id), centerData);
       alert('تم إضافة المركز بنجاح');
       setShowAddCenterModal(false);
-      setNewCenter({ name: '', address: '', phone: '' });
+      setNewCenter({ id: '', name: '', address: '', phone: '' });
       fetchCenters();
     } catch (error) {
       console.error('Error adding center:', error);
@@ -103,9 +129,26 @@ const Centers = () => {
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCenter) return;
+    
+    // التحقق من اختيار صلاحية واحدة على الأقل
+    if (newUser.roles.length === 0) {
+      alert('يرجى اختيار صلاحية واحدة على الأقل');
+      return;
+    }
+    
+    // التحقق من وجود رقم هاتف
+    if (!newUser.phone || newUser.phone.trim() === '') {
+      alert('يرجى إدخال رقم الهاتف لإرسال بيانات الدخول عبر واتساب');
+      return;
+    }
+    
     setSubmitting(true);
 
     try {
+      // حفظ بيانات المستخدم الحالي لإعادة تسجيل الدخول
+      const currentUser = auth.currentUser;
+      const currentEmail = currentUser?.email;
+      
       // إنشاء حساب في Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(
         auth,
@@ -119,6 +162,7 @@ const Centers = () => {
         email: newUser.email,
         name: newUser.name,
         role: newUser.role,
+        roles: newUser.roles.length > 0 ? newUser.roles : undefined, // إضافة الصلاحيات المتعددة
         phone: newUser.phone,
         centerId: selectedCenter.id,
         createdAt: new Date().toISOString(),
@@ -129,15 +173,66 @@ const Centers = () => {
       await setDoc(doc(db, 'users', userCredential.user.uid), userProfile);
 
       const roleText = newUser.role === 'supervisor' ? 'مشرف' : 'معلم';
-      alert(`تم إنشاء حساب ${roleText} بنجاح!\n\nبيانات الدخول:\nالبريد: ${newUser.email}\nكلمة المرور: ${newUser.password}\n\nيرجى حفظ هذه البيانات وإرسالها للمستخدم.`);
+      
+      // تنسيق رقم الهاتف (إزالة + أو 00 والمسافات)
+      let phoneNumber = newUser.phone.replace(/[\s+-]/g, '');
+      // إذا كان الرقم يبدأ بـ 0، استبدله بكود الدولة (مملكة البحرين 973)
+      if (phoneNumber.startsWith('0')) {
+        phoneNumber = '973' + phoneNumber.substring(1);
+      }
+      // إذا لم يبدأ بكود الدولة، أضف 973
+      if (!phoneNumber.startsWith('973')) {
+        phoneNumber = '973' + phoneNumber;
+      }
+      
+      // إنشاء رسالة واتساب
+      const message = `مرحباً ${newUser.name}،
+
+تم إنشاء حسابك في نظام ${selectedCenter.name} بنجاح!
+
+البريد الإلكتروني: ${newUser.email}
+كلمة المرور المؤقتة: ${newUser.password}
+
+ملاحظة مهمة:
+• يرجى تغيير كلمة المرور بعد تسجيل الدخول الأول
+• يمكنك تغيير كلمة المرور من قائمة الإعدادات
+
+رابط النظام: ${window.location.origin}
+
+نتمنى لك تجربة موفقة!`;
+      
+      // فتح واتساب
+      const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+      
+      console.log('رقم الهاتف:', phoneNumber);
+      console.log('رابط واتساب:', whatsappUrl);
+      
+      window.open(whatsappUrl, '_blank');
+
+      // تسجيل خروج المستخدم الجديد
+      await signOut(auth);
+      
+      // إعادة تسجيل دخول المستخدم الحالي (المطور)
+      if (currentEmail) {
+        // ملاحظة: يجب على المطور أن يكون مسجل الدخول مسبقاً
+        // في حالة Production، يفضل استخدام Firebase Admin SDK
+        const adminPassword = prompt('من فضلك أدخل كلمة مرورك لإعادة تسجيل الدخول:');
+        if (adminPassword) {
+          await signInWithEmailAndPassword(auth, currentEmail, adminPassword);
+        }
+      }
+
+      alert(`تم إنشاء حساب ${roleText} بنجاح!\n\nتم فتح واتساب لإرسال بيانات الدخول إلى ${newUser.name}`);
 
       setShowAddUserModal(false);
-      setNewUser({ name: '', email: '', password: '', phone: '', role: 'supervisor' });
+      setNewUser({ name: '', email: '', password: generateTemporaryPassword(), phone: '', role: 'supervisor', roles: [] });
       fetchCenterUsers(selectedCenter.id);
     } catch (error: any) {
       console.error('Error adding user:', error);
       if (error.code === 'auth/email-already-in-use') {
         alert('البريد الإلكتروني مستخدم بالفعل');
+      } else if (error.code === 'auth/wrong-password') {
+        alert('كلمة المرور غير صحيحة. لم يتم إعادة تسجيل دخولك.');
       } else {
         alert('حدث خطأ أثناء إنشاء المستخدم');
       }
@@ -179,6 +274,23 @@ const Centers = () => {
       console.error('Error updating user:', error);
       alert('حدث خطأ أثناء تحديث حالة المستخدم');
     }
+  };
+
+  const handleRoleChange = (role: UserRole) => {
+    setNewUser(prev => {
+      const newRoles = prev.roles.includes(role)
+        ? prev.roles.filter(r => r !== role)
+        : [...prev.roles, role];
+      
+      // تعيين الصلاحية الرئيسية (أول صلاحية محددة أو الافتراضي)
+      const mainRole = newRoles.length > 0 ? newRoles[0] : 'supervisor';
+      
+      return {
+        ...prev,
+        role: mainRole,
+        roles: newRoles
+      };
+    });
   };
 
   if (!isAdmin) {
@@ -326,6 +438,21 @@ const Centers = () => {
             <form onSubmit={handleAddCenter}>
               <div className="modal-body">
                 <div className="form-group">
+                  <label>معرف المركز (Center ID) *</label>
+                  <input
+                    type="text"
+                    value={newCenter.id}
+                    onChange={e => setNewCenter({ ...newCenter, id: e.target.value })}
+                    required
+                    placeholder="مثال: center1 أو مركز-الأول"
+                    pattern="[a-zA-Z0-9\u0600-\u06FF_-]+"
+                    title="يجب أن يحتوي على أحرف أو أرقام فقط (بدون مسافات)"
+                  />
+                  <small style={{ color: '#666', fontSize: '0.85rem' }}>
+                    ⚠️ سيتم استخدام هذا المعرف في إنشاء الحلقات بصيغة: {newCenter.id || 'centerID'}-1، {newCenter.id || 'centerID'}-2، إلخ
+                  </small>
+                </div>
+                <div className="form-group">
                   <label>اسم المركز *</label>
                   <input
                     type="text"
@@ -380,15 +507,34 @@ const Centers = () => {
             <form onSubmit={handleAddUser}>
               <div className="modal-body">
                 <div className="form-group">
-                  <label>نوع الحساب *</label>
-                  <select
-                    value={newUser.role}
-                    onChange={e => setNewUser({ ...newUser, role: e.target.value as UserRole })}
-                    required
-                  >
-                    <option value="supervisor">مشرف</option>
-                    <option value="teacher">معلم</option>
-                  </select>
+                  <label>نوع الحساب (يمكنك اختيار أكثر من صلاحية) *</label>
+                  <div className="roles-checkboxes">
+                    <label className="checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={newUser.roles.includes('supervisor')}
+                        onChange={() => handleRoleChange('supervisor')}
+                      />
+                      <span>👨‍💼 مشرف - يمكنه إدارة المعلمين والطلاب والحلقات</span>
+                    </label>
+                    <label className="checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={newUser.roles.includes('teacher')}
+                        onChange={() => handleRoleChange('teacher')}
+                      />
+                      <span>👨‍🏫 معلم - يمكنه تسجيل الحضور وتحديث التحصيل</span>
+                    </label>
+                  </div>
+                  {newUser.roles.length === 0 && (
+                    <small className="form-hint error">⚠️ يرجى اختيار صلاحية واحدة على الأقل</small>
+                  )}
+                  {newUser.roles.length > 0 && (
+                    <small className="form-hint success">
+                      الصلاحية الرئيسية: {newUser.role === 'supervisor' ? '👨‍💼 مشرف' : '👨‍🏫 معلم'}
+                      {newUser.roles.length > 1 && ' | يمكن التبديل بين الصلاحيات من الـ Sidebar'}
+                    </small>
+                  )}
                 </div>
                 <div className="form-group">
                   <label>الاسم الكامل *</label>
@@ -409,22 +555,50 @@ const Centers = () => {
                   />
                 </div>
                 <div className="form-group">
-                  <label>كلمة المرور *</label>
-                  <input
-                    type="password"
-                    value={newUser.password}
-                    onChange={e => setNewUser({ ...newUser, password: e.target.value })}
-                    required
-                    minLength={6}
-                  />
+                  <label>كلمة المرور المؤقتة *</label>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      value={newUser.password}
+                      onChange={e => setNewUser({ ...newUser, password: e.target.value })}
+                      required
+                      minLength={6}
+                      readOnly
+                      style={{ flex: 1 }}
+                    />
+                    <button 
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => setNewUser({ ...newUser, password: generateTemporaryPassword() })}
+                      title="توليد كلمة مرور جديدة"
+                    >
+                      🔄
+                    </button>
+                    <button 
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => navigator.clipboard.writeText(newUser.password)}
+                      title="نسخ كلمة المرور"
+                    >
+                      📋
+                    </button>
+                  </div>
+                  <small className="form-hint success">
+                    💡 كلمة المرور المؤقتة يمكن للمستخدم تغييرها من صفحة الإعدادات
+                  </small>
                 </div>
                 <div className="form-group">
-                  <label>رقم الهاتف</label>
+                  <label>رقم الهاتف (واتساب) *</label>
                   <input
                     type="tel"
                     value={newUser.phone}
                     onChange={e => setNewUser({ ...newUser, phone: e.target.value })}
+                    required
+                    placeholder="05xxxxxxxx"
                   />
+                  <small className="form-hint success">
+                    📱 سيتم إرسال بيانات الدخول عبر واتساب إلى هذا الرقم
+                  </small>
                 </div>
               </div>
               <div className="modal-footer">

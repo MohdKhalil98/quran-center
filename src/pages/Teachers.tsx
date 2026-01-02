@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { collection, getDocs, doc, updateDoc, query, orderBy, where } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, query, orderBy, where, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth, UserProfile } from '../context/AuthContext';
+import { useMessaging } from '../hooks/useMessaging';
 import '../styles/Shared.css';
 import '../styles/Teachers.css';
 
@@ -25,6 +26,7 @@ interface Group {
 
 const Teachers = () => {
   const { userProfile, isSupervisor, isAdmin } = useAuth();
+  const { findOrCreateConversation, sendMessage } = useMessaging();
   const [teachers, setTeachers] = useState<TeacherUser[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [centers, setCenters] = useState<Center[]>([]);
@@ -33,6 +35,8 @@ const Teachers = () => {
   const [selectedTeacher, setSelectedTeacher] = useState<TeacherUser | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [filterCenterId, setFilterCenterId] = useState<string>('');
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState<TeacherUser | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -49,14 +53,12 @@ const Teachers = () => {
       setCenters(centersList);
 
       // Fetch groups
-      const groupsQuery = query(collection(db, 'groups'), orderBy('name'));
-      const groupsSnapshot = await getDocs(groupsQuery);
+      const groupsSnapshot = await getDocs(collection(db, 'groups'));
       const groupsList = groupsSnapshot.docs.map((doc) => ({
         id: doc.id,
         name: doc.data().name,
         teacherId: doc.data().teacherId
       }));
-      setGroups(groupsList);
 
       // Fetch teachers from users collection (role = teacher)
       let teachersQuery;
@@ -78,8 +80,8 @@ const Teachers = () => {
       const teachersList = snapshot.docs.map((doc) => {
         const data = doc.data() as TeacherUser;
         // حساب عدد الحلقات لكل معلم
-        const teacherGroups = groupsList.filter(g => g.teacherId === data.uid);
-        const groupNames = teacherGroups.map(g => g.name).join(', ');
+        const teacherGroups = groupsList.filter((g: Group) => g.teacherId === data.uid);
+        const groupNames = teacherGroups.map((g: Group) => g.name).join(', ');
         
         return {
           ...data,
@@ -117,6 +119,96 @@ const Teachers = () => {
   const handleCloseDetailsModal = () => {
     setSelectedTeacher(null);
     setIsDetailsModalOpen(false);
+  };
+
+  const handleOpenEditModal = (teacher: TeacherUser) => {
+    setEditFormData({ ...teacher });
+    setIsEditModalOpen(true);
+  };
+
+  const handleCloseEditModal = () => {
+    setEditFormData(null);
+    setIsEditModalOpen(false);
+  };
+
+  const handleEditFormChange = (field: string, value: string) => {
+    if (editFormData) {
+      setEditFormData({
+        ...editFormData,
+        [field]: value
+      });
+    }
+  };
+
+  const handleSaveTeacher = async () => {
+    if (!editFormData || !editFormData.uid) {
+      alert('خطأ: لا يوجد معرف للمعلم');
+      return;
+    }
+
+    // التحقق من البيانات المطلوبة
+    if (!editFormData.name || !editFormData.email || !editFormData.phone) {
+      alert('يرجى ملء جميع الحقول المطلوبة');
+      return;
+    }
+
+    try {
+      await updateDoc(doc(db, 'users', editFormData.uid), {
+        name: editFormData.name,
+        email: editFormData.email,
+        phone: editFormData.phone
+      });
+
+      alert('تم تحديث بيانات المعلم بنجاح');
+      handleCloseEditModal();
+      fetchData();
+    } catch (error) {
+      console.error('Error updating teacher:', error);
+      alert('حدث خطأ أثناء تحديث بيانات المعلم');
+    }
+  };
+
+  const handleDeleteTeacher = async (teacher: TeacherUser) => {
+    if (!window.confirm(`هل أنت متأكد من حذف المعلم ${teacher.name}؟\n\nسيتم حذف البيانات من قاعدة البيانات وإرسال رسالة للمطور لحذف الحساب من Firebase.`)) {
+      return;
+    }
+
+    try {
+      // حذف بيانات المعلم من Firestore
+      await deleteDoc(doc(db, 'users', teacher.uid));
+
+      // البحث عن جميع المطورين (admin)
+      const adminsQuery = query(
+        collection(db, 'users'),
+        where('role', '==', 'admin')
+      );
+      const adminsSnapshot = await getDocs(adminsQuery);
+      
+      // إرسال رسالة لكل مطور
+      for (const adminDoc of adminsSnapshot.docs) {
+        const adminId = adminDoc.data().uid;
+        
+        // إنشاء أو البحث عن محادثة مع المطور
+        const conversationId = await findOrCreateConversation({
+          type: 'direct',
+          participantId: adminId
+        });
+
+        if (conversationId) {
+          // إرسال الرسالة
+          const message = `طلب حذف حساب معلم\n\nالمعلم: ${teacher.name}\nالبريد الإلكتروني: ${teacher.email}\nرقم التعريف: ${teacher.uid}\n\nطلب من: ${userProfile?.name || 'مشرف'}\nالتاريخ: ${new Date().toLocaleString('ar-SA')}\n\nيرجى حذف الحساب من Firebase Authentication`;
+          
+          await sendMessage(conversationId, message);
+        }
+      }
+
+      alert(`تم حذف المعلم ${teacher.name} بنجاح\nتم إرسال رسالة للمطور لحذف حساب المعلم من Firebase`);
+      handleCloseDetailsModal();
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting teacher:', error);
+      alert('حدث خطأ أثناء حذف المعلم');
+    }
   };
 
   // فلترة المعلمين
@@ -295,16 +387,85 @@ const Teachers = () => {
             </div>
             <div className="modal-footer">
               <button
-                className={`btn ${selectedTeacher.active ? 'btn-warning' : 'btn-success'}`}
+                className="btn btn-info"
                 onClick={() => {
-                  handleToggleStatus(selectedTeacher);
-                  handleCloseDetailsModal();
+                  setIsDetailsModalOpen(false);
+                  handleOpenEditModal(selectedTeacher);
                 }}
               >
-                {selectedTeacher.active ? '⏸️ إيقاف' : '▶️ تفعيل'}
+                ✏️ تعديل
               </button>
-              <button className="btn btn-secondary" onClick={handleCloseDetailsModal}>
-                إغلاق
+              <button
+                className="btn btn-danger"
+                onClick={() => handleDeleteTeacher(selectedTeacher)}
+              >
+                🗑️ حذف
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isEditModalOpen && editFormData && (
+        <div className="modal-overlay" onClick={handleCloseEditModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>تعديل بيانات المعلم: {editFormData.name}</h2>
+              <button className="close-btn" onClick={handleCloseEditModal}>&times;</button>
+            </div>
+            <div className="modal-body">
+              <form className="form-group">
+                <div className="form-row">
+                  <label htmlFor="edit-name">الاسم الكامل *</label>
+                  <input
+                    id="edit-name"
+                    type="text"
+                    value={editFormData.name || ''}
+                    onChange={(e) => handleEditFormChange('name', e.target.value)}
+                    placeholder="أدخل اسم المعلم"
+                  />
+                </div>
+                <div className="form-row">
+                  <label htmlFor="edit-email">البريد الإلكتروني *</label>
+                  <input
+                    id="edit-email"
+                    type="email"
+                    value={editFormData.email || ''}
+                    onChange={(e) => handleEditFormChange('email', e.target.value)}
+                    placeholder="أدخل البريد الإلكتروني"
+                  />
+                </div>
+                <div className="form-row">
+                  <label htmlFor="edit-phone">رقم الهاتف *</label>
+                  <input
+                    id="edit-phone"
+                    type="tel"
+                    value={editFormData.phone || ''}
+                    onChange={(e) => handleEditFormChange('phone', e.target.value)}
+                    placeholder="أدخل رقم الهاتف"
+                  />
+                </div>
+                <div className="form-row">
+                  <label htmlFor="edit-center">المركز</label>
+                  <input
+                    id="edit-center"
+                    type="text"
+                    value={editFormData.centerName || ''}
+                    disabled
+                    placeholder="المركز (غير قابل للتعديل)"
+                  />
+                </div>
+              </form>
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn btn-success"
+                onClick={handleSaveTeacher}
+              >
+                💾 حفظ التعديلات
+              </button>
+              <button className="btn btn-secondary" onClick={handleCloseEditModal}>
+                إلغاء
               </button>
             </div>
           </div>

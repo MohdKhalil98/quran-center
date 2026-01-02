@@ -22,7 +22,8 @@ export interface UserProfile {
   uid: string;
   email: string;
   name: string;
-  role: UserRole;
+  role: UserRole; // الصلاحية الرئيسية
+  roles?: UserRole[]; // صلاحيات متعددة (اختياري)
   personalId?: string; // الرقم الشخصي - 9 أرقام
   centerId?: string; // للمشرف والمعلم والطالب
   studentId?: string; // لولي الأمر
@@ -60,6 +61,11 @@ type AuthContextValue = {
   isStudent: boolean;
   isParent: boolean;
   isPendingApproval: boolean;
+  // دعم تعدد الصلاحيات
+  activeRole: UserRole | null;
+  availableRoles: UserRole[];
+  switchRole: (role: UserRole) => void;
+  hasMultipleRoles: boolean;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -68,6 +74,7 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeRole, setActiveRole] = useState<UserRole | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -78,9 +85,18 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
         try {
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           if (userDoc.exists()) {
-            setUserProfile(userDoc.data() as UserProfile);
+            const profile = userDoc.data() as UserProfile;
+            setUserProfile(profile);
+            // تعيين الصلاحية النشطة من localStorage أو الصلاحية الرئيسية
+            const savedRole = localStorage.getItem(`activeRole_${firebaseUser.uid}`);
+            if (savedRole && (profile.roles?.includes(savedRole as UserRole) || profile.role === savedRole)) {
+              setActiveRole(savedRole as UserRole);
+            } else {
+              setActiveRole(profile.role);
+            }
           } else {
             setUserProfile(null);
+            setActiveRole(null);
           }
         } catch (error) {
           console.error('Error fetching user profile:', error);
@@ -88,6 +104,7 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
         }
       } else {
         setUserProfile(null);
+        setActiveRole(null);
       }
       
       setLoading(false);
@@ -178,12 +195,35 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
     return userPermissions.includes('*') || userPermissions.includes(permission);
   };
 
-  const isAdmin = userProfile?.role === 'admin';
-  const isSupervisor = userProfile?.role === 'supervisor';
-  const isTeacher = userProfile?.role === 'teacher';
-  const isStudent = userProfile?.role === 'student';
-  const isParent = userProfile?.role === 'parent';
+  // استخدام الصلاحية النشطة بدلاً من الصلاحية الرئيسية
+  const currentRole = activeRole || userProfile?.role;
+  const isAdmin = currentRole === 'admin';
+  const isSupervisor = currentRole === 'supervisor';
+  const isTeacher = currentRole === 'teacher';
+  const isStudent = currentRole === 'student';
+  const isParent = currentRole === 'parent';
   const isPendingApproval = userProfile?.status === 'pending_registration';
+
+  // حساب الصلاحيات المتاحة
+  const availableRoles: UserRole[] = useMemo(() => {
+    if (!userProfile) return [];
+    const roles = new Set<UserRole>();
+    roles.add(userProfile.role);
+    if (userProfile.roles) {
+      userProfile.roles.forEach(r => roles.add(r));
+    }
+    return Array.from(roles);
+  }, [userProfile]);
+
+  const hasMultipleRoles = availableRoles.length > 1;
+
+  // التبديل بين الصلاحيات
+  const switchRole = (role: UserRole) => {
+    if (availableRoles.includes(role) && userProfile) {
+      setActiveRole(role);
+      localStorage.setItem(`activeRole_${userProfile.uid}`, role);
+    }
+  };
 
   const value = useMemo(
     () => ({
@@ -200,9 +240,15 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
       isTeacher,
       isStudent,
       isParent,
-      isPendingApproval
+      isPendingApproval,
+      // دعم تعدد الصلاحيات
+      activeRole,
+      availableRoles,
+      switchRole,
+      hasMultipleRoles
     }),
-    [user, userProfile, loading]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [user, userProfile, loading, activeRole, availableRoles]
   );
 
   return (

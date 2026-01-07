@@ -3,7 +3,7 @@ import { Navigate, useLocation, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const Login = () => {
-  const { login, loginWithPersonalId, user } = useAuth();
+  const { login, loginWithPersonalId, user, userProfile, getDefaultRoute } = useAuth();
   const [identifier, setIdentifier] = useState(''); // بريد إلكتروني أو رقم شخصي
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -11,9 +11,11 @@ const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // استخدام المسار الافتراضي حسب دور المستخدم
+  const defaultRoute = getDefaultRoute();
   const from =
     (location.state as { from?: { pathname: string } })?.from?.pathname ||
-    '/dashboard';
+    defaultRoute;
 
   if (user) {
     return <Navigate to={from} replace />;
@@ -39,14 +41,22 @@ const Login = () => {
     try {
       // 1) جرّب دائماً الدخول كبريد إلكتروني أولاً
       await login(identifier, password);
-      navigate(from, { replace: true });
+      // انتظر قليلاً لتحميل userProfile ثم انتقل للمسار الصحيح
+      setTimeout(() => {
+        const route = getDefaultRoute();
+        navigate(route, { replace: true });
+      }, 500);
       return;
     } catch (err: any) {
       // 2) إذا فشل وكان المُعرّف رقمياً فجرّب الدخول بالرقم الشخصي
       if (looksLikePersonalId) {
         try {
           await loginWithPersonalId(identifier, password);
-          navigate(from, { replace: true });
+          // انتظر قليلاً لتحميل userProfile ثم انتقل للمسار الصحيح
+          setTimeout(() => {
+            const route = getDefaultRoute();
+            navigate(route, { replace: true });
+          }, 500);
           return;
         } catch (err2: any) {
           if (err2.message === 'USER_NOT_FOUND') {

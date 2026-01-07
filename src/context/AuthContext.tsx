@@ -66,6 +66,7 @@ type AuthContextValue = {
   availableRoles: UserRole[];
   switchRole: (role: UserRole) => void;
   hasMultipleRoles: boolean;
+  getDefaultRoute: () => string;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -225,6 +226,28 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
     }
   };
 
+  // تحديد المسار الافتراضي حسب دور المستخدم
+  const getDefaultRoute = (): string => {
+    if (!userProfile) return '/dashboard';
+    
+    const currentRole = activeRole || userProfile.role;
+    
+    switch (currentRole) {
+      case 'student':
+        return '/my-progress'; // صفحة تحصيلي للطالب
+      case 'parent':
+        return '/my-progress'; // صفحة تحصيل الطالب لولي الأمر
+      case 'teacher':
+        return '/dashboard'; // لوحة التحكم للمعلم
+      case 'supervisor':
+        return '/dashboard'; // لوحة التحكم للمشرف
+      case 'admin':
+        return '/dashboard'; // لوحة التحكم للمطور
+      default:
+        return '/dashboard';
+    }
+  };
+
   const value = useMemo(
     () => ({
       user,
@@ -245,7 +268,8 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
       activeRole,
       availableRoles,
       switchRole,
-      hasMultipleRoles
+      hasMultipleRoles,
+      getDefaultRoute
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [user, userProfile, loading, activeRole, availableRoles]

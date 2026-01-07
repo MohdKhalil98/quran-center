@@ -1,0 +1,215 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ==================== HELPER FUNCTIONS ====================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function userCenterId() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.centerId;
+    }
+
+    function isAdmin() {
+      return userRole() == 'admin';
+    }
+
+    function isSupervisor() {
+      return userRole() == 'supervisor';
+    }
+
+    function isTeacher() {
+      return userRole() == 'teacher';
+    }
+
+    function isStudent() {
+      return userRole() == 'student';
+    }
+
+    function isParent() {
+      return userRole() == 'parent';
+    }
+
+    // ==================== USERS COLLECTION ====================
+    match /users/{userId} {
+      // قراءة ملف المستخدم نفسه
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      
+      // قراءة ملفات الموظفين (للمشرفين والمعلمين)
+      allow read: if isSignedIn() && 
+        (isAdmin() || isSupervisor() || isTeacher()) &&
+        get(/databases/$(database)/documents/users/$(userId)).data.centerId == userCenterId();
+      
+      // قراءة بيانات المعلم للطلاب في نفس المركز
+      allow read: if isSignedIn() && 
+        isStudent() && 
+        get(/databases/$(database)/documents/users/$(userId)).data.role == 'teacher' &&
+        get(/databases/$(database)/documents/users/$(userId)).data.centerId == userCenterId();
+      
+      // إنشاء حساب جديد (للتسجيل)
+      allow create: if isSignedIn() && isAdmin();
+      
+      // تعديل ملف المستخدم نفسه (معلومات شخصية فقط)
+      allow update: if isSignedIn() && request.auth.uid == userId &&
+        request.resource.data.keys().hasAll(['uid', 'email', 'role', 'centerId']) &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['uid', 'email', 'role', 'centerId', 'personalId']);
+      
+      // تعديل من قبل المشرفين والمديرين
+      allow update: if isSignedIn() && isAdmin();
+      allow update: if isSignedIn() && isSupervisor() &&
+        get(/databases/$(database)/documents/users/$(userId)).data.centerId == userCenterId();
+      
+      // حذف فقط من قبل المديرين
+      allow delete: if isSignedIn() && isAdmin();
+    }
+
+    // ==================== TRACKS COLLECTION ====================
+    match /tracks/{trackId} {
+      // قراءة المسارات من قبل الموظفين والمشرفين في نفس المركز
+      allow read: if isSignedIn() && 
+        (isAdmin() || isSupervisor() || isTeacher()) &&
+        resource.data.centerId == userCenterId();
+      
+      // قراءة المسارات المخصصة للطالب
+      allow read: if isSignedIn() && isStudent() &&
+        resource.data.centerId == userCenterId();
+      
+      // الكتابة (إضافة/تعديل) فقط من قبل المشرفين والمديرين
+      allow create, update: if isSignedIn() && 
+        (isAdmin() || isSupervisor()) &&
+        request.resource.data.centerId == userCenterId();
+      
+      allow delete: if isSignedIn() && isAdmin();
+    }
+
+    // ==================== GROUPS COLLECTION ====================
+    match /groups/{groupId} {
+      // قراءة الحلقات من قبل الموظفين في نفس المركز
+      allow read: if isSignedIn() && 
+        (isAdmin() || isSupervisor() || isTeacher()) &&
+        resource.data.centerId == userCenterId();
+      
+      // قراءة حلقة الطالب
+      allow read: if isSignedIn() && isStudent() &&
+        resource.data.centerId == userCenterId();
+      
+      // الكتابة من قبل المشرفين والمعلمين
+      allow create, update: if isSignedIn() && 
+        (isAdmin() || isSupervisor() || 
+         (isTeacher() && request.resource.data.teacherId == request.auth.uid)) &&
+        request.resource.data.centerId == userCenterId();
+      
+      allow delete: if isSignedIn() && (isAdmin() || isSupervisor());
+    }
+
+    // ==================== ATTENDANCE COLLECTION ====================
+    match /attendance/{attendanceId} {
+      // قراءة الحضور من قبل المعلم والمشرف والمدير
+      allow read: if isSignedIn() && 
+        (isAdmin() || isSupervisor() || isTeacher()) &&
+        resource.data.centerId == userCenterId();
+      
+      // قراءة الطالب لحضوره الخاص فقط
+      allow read: if isSignedIn() && isStudent() &&
+        resource.data.studentId == request.auth.uid;
+      
+      // كتابة من قبل المعلم المسؤول عن الحلقة
+      allow create, update: if isSignedIn() && 
+        (isAdmin() || isSupervisor() ||
+         (isTeacher() && request.resource.data.teacherId == request.auth.uid)) &&
+        request.resource.data.centerId == userCenterId();
+      
+      allow delete: if isSignedIn() && (isAdmin() || isSupervisor());
+    }
+
+    // ==================== STUDENT_ACHIEVEMENTS COLLECTION ====================
+    match /studentAchievements/{achievementId} {
+      // قراءة الإنجازات من قبل الموظفين في نفس المركز
+      allow read: if isSignedIn() && 
+        (isAdmin() || isSupervisor() || isTeacher()) &&
+        resource.data.centerId == userCenterId();
+      
+      // قراءة الطالب لإنجازاته الخاص فقط
+      allow read: if isSignedIn() && isStudent() &&
+        resource.data.studentId == request.auth.uid;
+      
+      // كتابة من قبل المعلم المسؤول
+      allow create, update: if isSignedIn() && 
+        (isAdmin() || isSupervisor() ||
+         (isTeacher() && request.resource.data.teacherId == request.auth.uid)) &&
+        request.resource.data.centerId == userCenterId();
+      
+      allow delete: if isSignedIn() && (isAdmin() || isSupervisor());
+    }
+
+    // ==================== MESSAGES COLLECTION ====================
+    match /messages/{messageId} {
+      // قراءة الرسائل من قبل المرسل والمستقبل فقط
+      allow read: if isSignedIn() && 
+        (resource.data.senderId == request.auth.uid || 
+         resource.data.recipientId == request.auth.uid);
+      
+      // إرسال رسائل جديدة
+      allow create: if isSignedIn() && 
+        request.resource.data.senderId == request.auth.uid &&
+        request.resource.data.timestamp == request.time;
+      
+      // لا يسمح بتعديل أو حذف الرسائل المرسلة
+      allow update, delete: if false;
+    }
+
+    // ==================== CONVERSATIONS COLLECTION ====================
+    match /conversations/{conversationId} {
+      // قراءة المحادثات من قبل المشاركين فقط
+      allow read: if isSignedIn() && 
+        (request.auth.uid in resource.data.participants);
+      
+      // إنشاء محادثة جديدة
+      allow create: if isSignedIn() &&
+        request.auth.uid in request.resource.data.participants;
+      
+      // تحديث المحادثة (مثل آخر رسالة)
+      allow update: if isSignedIn() && 
+        (request.auth.uid in resource.data.participants);
+      
+      allow delete: if false; // عدم السماح بحذف المحادثات
+    }
+
+    // ==================== CENTERS COLLECTION ====================
+    match /centers/{centerId} {
+      // قراءة بيانات المركز من قبل الموظفين في هذا المركز
+      allow read: if isSignedIn() && 
+        (isAdmin() || (userCenterId() == centerId));
+      
+      // كتابة من قبل المديرين فقط
+      allow create, update, delete: if isSignedIn() && isAdmin();
+    }
+
+    // ==================== TEACHERS COLLECTION ====================
+    match /teachers/{teacherId} {
+      // قراءة المعلمين من قبل الموظفين في نفس المركز
+      allow read: if isSignedIn() && 
+        (isAdmin() || isSupervisor() || isTeacher()) &&
+        resource.data.centerId == userCenterId();
+      
+      // كتابة من قبل المشرفين والمديرين
+      allow create, update: if isSignedIn() && 
+        (isAdmin() || isSupervisor()) &&
+        request.resource.data.centerId == userCenterId();
+      
+      allow delete: if isSignedIn() && isAdmin();
+    }
+
+    // ==================== DEFAULT DENY ====================
+    // أي مجموعة أخرى لا يُسمح بالوصول إليها إلا للمديرين
+    match /{document=**} {
+      allow read, write: if isSignedIn() && isAdmin();
+    }
+  }
+}

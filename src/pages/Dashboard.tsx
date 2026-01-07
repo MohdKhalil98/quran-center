@@ -5,8 +5,10 @@ import { useAuth } from '../context/AuthContext';
 
 interface DashboardStats {
   totalStudents: number;
+  totalUsers: number;
   activeGroups: number;
   teachers: number;
+  supervisors: number;
   reviewsThisWeek: number;
   recentUpdates: { text: string; date: string }[];
   loading: boolean;
@@ -34,8 +36,10 @@ const Dashboard = () => {
   const { userProfile, isTeacher, isAdmin, isSupervisor } = useAuth();
   const [stats, setStats] = useState<DashboardStats>({
     totalStudents: 0,
+    totalUsers: 0,
     activeGroups: 0,
     teachers: 0,
+    supervisors: 0,
     reviewsThisWeek: 0,
     recentUpdates: [],
     loading: true,
@@ -56,8 +60,10 @@ const Dashboard = () => {
   const fetchDashboard = async () => {
     try {
       let totalStudents = 0;
+      let totalUsers = 0;
       let activeGroups = 0;
       let teachers = 0;
+      let supervisors = 0;
       let reviewsThisWeek = 0;
       let recentUpdates: { text: string; date: string }[] = [];
 
@@ -155,6 +161,10 @@ const Dashboard = () => {
 
       } else {
         // Admin/Supervisor view
+        // جميع المستخدمين
+        const allUsersSnap = await getDocs(collection(db, 'users'));
+        totalUsers = allUsersSnap.size;
+
         // students from users collection
         const studentsQuery = query(
           collection(db, 'users'),
@@ -181,36 +191,53 @@ const Dashboard = () => {
         const teachersSnap = await getDocs(teachersQuery);
         teachers = teachersSnap.size;
 
-        // sessions -> reviews this week
-        const now = new Date();
-        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        const sessionsSnap = await getDocs(collection(db, 'sessions'));
-        reviewsThisWeek = sessionsSnap.docs.filter((d) => {
-          const data: any = d.data();
-          const type = data.type;
-          let date: Date | null = null;
-          if (data.date && typeof data.date.toDate === 'function') {
-            date = data.date.toDate();
-          } else if (data.date) {
-            date = new Date(data.date);
-          }
-          return type === 'review' && date && date >= weekAgo && date <= now;
-        }).length;
+        // supervisors from users collection
+        const supervisorsQuery = query(
+          collection(db, 'users'),
+          where('role', '==', 'supervisor')
+        );
+        const supervisorsSnap = await getDocs(supervisorsQuery);
+        supervisors = supervisorsSnap.size;
 
-        // recent activities
-        const activitiesSnap = await getDocs(collection(db, 'activities'));
-        recentUpdates = activitiesSnap.docs
-          .map((d) => ({ ...(d.data() as any) }))
-          .sort((a: any, b: any) => {
-            const da = a.date && typeof a.date.toDate === 'function' ? a.date.toDate() : new Date(a.date || 0);
-            const dbt = b.date && typeof b.date.toDate === 'function' ? b.date.toDate() : new Date(b.date || 0);
-            return dbt.getTime() - da.getTime();
-          })
-          .slice(0, 3)
-          .map((a: any) => ({
-            text: a.description || a.title || 'تحديث جديد',
-            date: ''
-          }));
+        // Admin recent activities (أعمال المطور)
+        if (isAdmin) {
+          recentUpdates = [
+            { text: 'إضافة مشرفين ومعلمين جدد', date: '' },
+            { text: 'مراجعة إعدادات النظام', date: '' },
+            { text: 'متابعة أداء المراكز', date: '' }
+          ];
+        } else {
+          // sessions -> reviews this week
+          const now = new Date();
+          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          const sessionsSnap = await getDocs(collection(db, 'sessions'));
+          reviewsThisWeek = sessionsSnap.docs.filter((d) => {
+            const data: any = d.data();
+            const type = data.type;
+            let date: Date | null = null;
+            if (data.date && typeof data.date.toDate === 'function') {
+              date = data.date.toDate();
+            } else if (data.date) {
+              date = new Date(data.date);
+            }
+            return type === 'review' && date && date >= weekAgo && date <= now;
+          }).length;
+
+          // recent activities
+          const activitiesSnap = await getDocs(collection(db, 'activities'));
+          recentUpdates = activitiesSnap.docs
+            .map((d) => ({ ...(d.data() as any) }))
+            .sort((a: any, b: any) => {
+              const da = a.date && typeof a.date.toDate === 'function' ? a.date.toDate() : new Date(a.date || 0);
+              const dbt = b.date && typeof b.date.toDate === 'function' ? b.date.toDate() : new Date(b.date || 0);
+              return dbt.getTime() - da.getTime();
+            })
+            .slice(0, 3)
+            .map((a: any) => ({
+              text: a.description || a.title || 'تحديث جديد',
+              date: ''
+            }));
+        }
       }
 
       // Attendance summary for today
@@ -343,11 +370,17 @@ const Dashboard = () => {
       setLowAttendanceAlerts([]);
     }      setStats({
         totalStudents,
+        totalUsers,
         activeGroups,
         teachers,
+        supervisors,
         reviewsThisWeek,
         recentUpdates: recentUpdates.length ? recentUpdates : (isTeacher ? [
           { text: 'لم تقم بتسجيل أي تحصيل بعد', date: '' }
+        ] : isAdmin ? [
+          { text: 'إضافة مشرفين ومعلمين جدد', date: '' },
+          { text: 'مراجعة إعدادات النظام', date: '' },
+          { text: 'متابعة أداء المراكز', date: '' }
         ] : [
           { text: 'تم إضافة مجموعة جديدة لحفظ جزء عمّ.', date: '' },
           { text: 'اكتمل تسميع خمسة طلاب لجزء تبارك هذا الأسبوع.', date: '' },
@@ -381,6 +414,11 @@ const Dashboard = () => {
     { title: 'طلابي', value: stats.totalStudents.toString(), description: 'طلاب في حلقاتي' },
     { title: 'حلقاتي', value: stats.activeGroups.toString(), description: 'عدد الحلقات المسندة إلي' },
     { title: 'تسجيلات الحضور', value: stats.reviewsThisWeek.toString(), description: 'تسجيلات هذا الأسبوع' }
+  ] : isAdmin ? [
+    { title: 'إجمالي المستخدمين', value: stats.totalUsers.toString(), description: 'جميع المستخدمين في النظام' },
+    { title: 'المشرفون', value: stats.supervisors.toString(), description: 'عدد المشرفين' },
+    { title: 'المعلمون', value: stats.teachers.toString(), description: 'عدد المعلمين' },
+    { title: 'الطلاب', value: stats.totalStudents.toString(), description: 'طلاب مسجلون حالياً' }
   ] : [
     { title: 'إجمالي الطلاب', value: stats.totalStudents.toString(), description: 'طلاب مسجلون حالياً' },
     { title: 'المجموعات', value: stats.activeGroups.toString(), description: 'إجمالي عدد المجموعات' },
@@ -410,7 +448,7 @@ const Dashboard = () => {
       </div>
 
       <section className="overview-card">
-        <h2>{isTeacher ? 'آخر أعمالي' : 'آخر التحديثات'}</h2>
+        <h2>{isTeacher ? 'آخر أعمالي' : isAdmin ? 'أعمال المطور' : 'آخر التحديثات'}</h2>
         <ul className="overview-list">
           {stats.recentUpdates.map((u, i) => (
             <li key={i}>
@@ -421,43 +459,48 @@ const Dashboard = () => {
         </ul>
       </section>
 
-      <section className="attendance-summary-card">
-        <h2>ملخص الحضور اليومي</h2>
-        <div className="summary-grid">
-          <div className="summary-item present">
-            <div className="summary-label">حاضرون</div>
-            <div className="summary-count">{attendanceSummary.present}</div>
-          </div>
-          <div className="summary-item absent">
-            <div className="summary-label">غائبون</div>
-            <div className="summary-count">{attendanceSummary.absent}</div>
-          </div>
-        </div>
-      </section>
-
-      {/* Low Attendance Alerts */}
-      {lowAttendanceAlerts.length > 0 && (
-        <section className="alerts-card">
-          <h2>
-            <span className="alert-icon">⚠️</span>
-            تنبيهات الحضور (الشهر الحالي)
-          </h2>
-          <p className="alerts-description">طلاب غابوا أكثر من نصف الحصص هذا الشهر</p>
-          <div className="alerts-list">
-            {lowAttendanceAlerts.map((alert) => (
-              <div key={alert.studentId} className="alert-item">
-                <div className="alert-content">
-                  <div className="alert-student-name">{alert.studentName}</div>
-                  <div className="alert-group">المجموعة: {alert.groupName}</div>
-                  <div className="alert-stats">
-                    <span className="alert-rate">نسبة الحضور: {alert.attendanceRate.toFixed(1)}%</span>
-                    <span className="alert-days">غاب {alert.absentDays} من {alert.totalDays} يوم</span>
-                  </div>
-                </div>
+      {/* إخفاء ملخص الحضور اليومي وتنبيهات الحضور للمطور */}
+      {!isAdmin && (
+        <>
+          <section className="attendance-summary-card">
+            <h2>ملخص الحضور اليومي</h2>
+            <div className="summary-grid">
+              <div className="summary-item present">
+                <div className="summary-label">حاضرون</div>
+                <div className="summary-count">{attendanceSummary.present}</div>
               </div>
-            ))}
-          </div>
-        </section>
+              <div className="summary-item absent">
+                <div className="summary-label">غائبون</div>
+                <div className="summary-count">{attendanceSummary.absent}</div>
+              </div>
+            </div>
+          </section>
+
+          {/* Low Attendance Alerts */}
+          {lowAttendanceAlerts.length > 0 && (
+            <section className="alerts-card">
+              <h2>
+                <span className="alert-icon">⚠️</span>
+                تنبيهات الحضور (الشهر الحالي)
+              </h2>
+              <p className="alerts-description">طلاب غابوا أكثر من نصف الحصص هذا الشهر</p>
+              <div className="alerts-list">
+                {lowAttendanceAlerts.map((alert) => (
+                  <div key={alert.studentId} className="alert-item">
+                    <div className="alert-content">
+                      <div className="alert-student-name">{alert.studentName}</div>
+                      <div className="alert-group">المجموعة: {alert.groupName}</div>
+                      <div className="alert-stats">
+                        <span className="alert-rate">نسبة الحضور: {alert.attendanceRate.toFixed(1)}%</span>
+                        <span className="alert-days">غاب {alert.absentDays} من {alert.totalDays} يوم</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </>
       )}
     </section>
   );

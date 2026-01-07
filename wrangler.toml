@@ -1,0 +1,17 @@
+name = "quran-center"
+type = "javascript"
+account_id = ""
+workers_dev = true
+
+[env.production]
+name = "quran-center"
+route = "example.com/*"
+zone_id = ""
+
+[build]
+command = "npm run build"
+cwd = "./"
+watch_paths = ["src/**/*.ts", "src/**/*.tsx"]
+
+[build.upload]
+format = "service-worker"

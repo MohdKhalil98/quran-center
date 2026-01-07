@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { collection, getDocs, doc, updateDoc, addDoc } from 'firebase/firestore';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { db, auth } from '../firebase';
+import { collection, getDocs, doc, updateDoc, setDoc } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
+import { db, secondaryAuth } from '../firebase';
 import { useAuth, UserProfile, UserRole } from '../context/AuthContext';
 import { Navigate } from 'react-router-dom';
 
@@ -40,9 +40,9 @@ const UserManagement = () => {
     setSubmitting(true);
 
     try {
-      // إنشاء المستخدم في Firebase Auth
+      // إنشاء المستخدم في Firebase Auth باستخدام secondary auth
       const userCredential = await createUserWithEmailAndPassword(
-        auth,
+        secondaryAuth,
         newUser.email,
         newUser.password
       );
@@ -58,9 +58,20 @@ const UserManagement = () => {
         active: true
       };
 
-      await addDoc(collection(db, 'users'), userProfile);
+      await setDoc(doc(db, 'users', userCredential.user.uid), userProfile);
 
-      alert(`تم إنشاء حساب ${getRoleName(newUser.role)} بنجاح!\n\nبيانات الدخول:\nالبريد: ${newUser.email}\nكلمة المرور: ${newUser.password}\n\nيرجى حفظ هذه البيانات وإرسالها للمستخدم.`);
+      // تسجيل خروج المستخدم الجديد من secondaryAuth
+      await signOut(secondaryAuth);
+
+      // تجهيز رسالة WhatsApp
+      const whatsappMessage = `مرحباً ${newUser.name}،\n\nتم إنشاء حسابك في نظام إدارة القرآن:\n\n📧 البريد الإلكتروني: ${newUser.email}\n🔐 كلمة المرور: ${newUser.password}\n\nيُرجى تغيير كلمة المرور بعد تسجيل الدخول الأول.\n\nرابط الدخول: https://almaherqu.com`;
+      
+      const whatsappUrl = `https://wa.me/${newUser.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(whatsappMessage)}`;
+      
+      // فتح WhatsApp في نافذة جديدة
+      window.open(whatsappUrl, '_blank');
+
+      alert(`تم إنشاء حساب ${getRoleName(newUser.role)} بنجاح!\n\nسيتم فتح WhatsApp لإرسال البيانات للمستخدم.`);
 
       setShowAddModal(false);
       setNewUser({
@@ -75,8 +86,10 @@ const UserManagement = () => {
       console.error('Error adding user:', error);
       if (error.code === 'auth/email-already-in-use') {
         alert('البريد الإلكتروني مستخدم بالفعل');
+      } else if (error.code === 'auth/weak-password') {
+        alert('كلمة المرور ضعيفة. يجب أن تكون 6 أحرف على الأقل');
       } else {
-        alert('حدث خطأ أثناء إنشاء المستخدم');
+        alert('حدث خطأ أثناء إنشاء المستخدم: ' + (error.message || 'خطأ غير معروف'));
       }
     } finally {
       setSubmitting(false);

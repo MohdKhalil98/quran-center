@@ -7,67 +7,82 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function userExists() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
     function userRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      return userExists() ? getUserData().role : null;
     }
 
     function userCenterId() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.centerId;
+      return userExists() ? getUserData().centerId : null;
     }
 
     function isAdmin() {
-      return userRole() == 'admin';
+      return userExists() && userRole() == 'admin';
     }
 
     function isSupervisor() {
-      return userRole() == 'supervisor';
+      return userExists() && userRole() == 'supervisor';
     }
 
     function isTeacher() {
-      return userRole() == 'teacher';
+      return userExists() && userRole() == 'teacher';
     }
 
     function isStudent() {
-      return userRole() == 'student';
+      return userExists() && userRole() == 'student';
     }
 
     function isParent() {
-      return userRole() == 'parent';
+      return userExists() && userRole() == 'parent';
     }
 
     // ==================== USERS COLLECTION ====================
     match /users/{userId} {
-      // قراءة ملف المستخدم نفسه
+      // السماح للمستخدم بقراءة ملفه الخاص
       allow read: if isSignedIn() && request.auth.uid == userId;
       
-      // قراءة ملفات الموظفين (للمشرفين والمعلمين)
+      // السماح للمديرين بقراءة جميع الملفات
+      allow read: if isSignedIn() && isAdmin();
+      
+      // السماح للمشرفين والمعلمين بقراءة ملفات مركزهم
       allow read: if isSignedIn() && 
-        (isAdmin() || isSupervisor() || isTeacher()) &&
+        (isSupervisor() || isTeacher()) &&
+        userExists() &&
+        exists(/databases/$(database)/documents/users/$(userId)) &&
         get(/databases/$(database)/documents/users/$(userId)).data.centerId == userCenterId();
       
-      // قراءة بيانات المعلم للطلاب في نفس المركز
-      allow read: if isSignedIn() && 
-        isStudent() && 
-        get(/databases/$(database)/documents/users/$(userId)).data.role == 'teacher' &&
+      // إنشاء حساب جديد - السماح للمديرين دائماً
+      allow create: if isSignedIn() && isAdmin();
+      
+      // السماح للمشرفين بإنشاء حسابات في مركزهم
+      allow create: if isSignedIn() && isSupervisor() && 
+        request.resource.data.centerId == userCenterId();
+      
+      // السماح للمستخدم الجديد بإنشاء ملفه الخاص (للتسجيل الذاتي)
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      
+      // تعديل من قبل المديرين
+      allow update: if isSignedIn() && isAdmin();
+      
+      // تعديل من قبل المشرفين لمستخدمي مركزهم
+      allow update: if isSignedIn() && isSupervisor() &&
+        exists(/databases/$(database)/documents/users/$(userId)) &&
         get(/databases/$(database)/documents/users/$(userId)).data.centerId == userCenterId();
       
-      // إنشاء حساب جديد - السماح للمديرين والمشرفين
-      allow create: if isSignedIn() && 
-        (isAdmin() || 
-         (isSupervisor() && request.resource.data.centerId == userCenterId()));
-      
-      // تعديل ملف المستخدم نفسه (معلومات شخصية فقط)
+      // تعديل المستخدم لملفه الخاص (معلومات شخصية فقط)
       allow update: if isSignedIn() && request.auth.uid == userId &&
         !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['uid', 'email', 'role', 'centerId', 'personalId']);
       
-      // تعديل من قبل المديرين والمشرفين
-      allow update: if isSignedIn() && isAdmin();
-      allow update: if isSignedIn() && isSupervisor() &&
-        resource.data.centerId == userCenterId() &&
-        get(/databases/$(database)/documents/users/$(userId)).data.centerId == userCenterId();
-      
       // حذف من قبل المديرين فقط
+      allow delete: if isSignedIn() && isAdmin();
       allow delete: if isSignedIn() && isAdmin();
     }
 

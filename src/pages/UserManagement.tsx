@@ -6,7 +6,7 @@ import { useAuth, UserProfile, UserRole } from '../context/AuthContext';
 import { Navigate } from 'react-router-dom';
 
 const UserManagement = () => {
-  const { isAdmin } = useAuth();
+  const { isAdmin, userProfile } = useAuth();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -40,16 +40,27 @@ const UserManagement = () => {
     setSubmitting(true);
 
     try {
-      // إنشاء المستخدم في Firebase Auth باستخدام secondary auth
+      // التحقق من أن المطور مسجل دخول
+      if (!userProfile || userProfile.role !== 'admin') {
+        alert('ليس لديك صلاحية لإضافة مستخدمين');
+        return;
+      }
+
+      // 1. إنشاء المستخدم في Firebase Auth باستخدام secondary auth
       const userCredential = await createUserWithEmailAndPassword(
         secondaryAuth,
         newUser.email,
         newUser.password
       );
 
-      // حفظ بيانات المستخدم في Firestore
-      const userProfile: UserProfile = {
-        uid: userCredential.user.uid,
+      const newUserId = userCredential.user.uid;
+
+      // 2. تسجيل خروج المستخدم الجديد فوراً من secondaryAuth
+      await signOut(secondaryAuth);
+
+      // 3. حفظ بيانات المستخدم في Firestore (باستخدام جلسة المطور الحالية)
+      const newUserProfile: UserProfile = {
+        uid: newUserId,
         email: newUser.email,
         name: newUser.name,
         role: newUser.role,
@@ -58,20 +69,18 @@ const UserManagement = () => {
         active: true
       };
 
-      await setDoc(doc(db, 'users', userCredential.user.uid), userProfile);
+      await setDoc(doc(db, 'users', newUserId), newUserProfile);
 
-      // تسجيل خروج المستخدم الجديد من secondaryAuth
-      await signOut(secondaryAuth);
-
-      // تجهيز رسالة WhatsApp
-      const whatsappMessage = `مرحباً ${newUser.name}،\n\nتم إنشاء حسابك في نظام إدارة القرآن:\n\n📧 البريد الإلكتروني: ${newUser.email}\n🔐 كلمة المرور: ${newUser.password}\n\nيُرجى تغيير كلمة المرور بعد تسجيل الدخول الأول.\n\nرابط الدخول: https://almaherqu.com`;
+      // 4. تجهيز رسالة WhatsApp
+      const whatsappMessage = `مرحباً ${newUser.name}،\n\nتم إنشاء حسابك في نظام رحلة الماهر:\n\n📧 البريد الإلكتروني: ${newUser.email}\n🔐 كلمة المرور: ${newUser.password}\n\nيُرجى تغيير كلمة المرور بعد تسجيل الدخول الأول.\n\nرابط الدخول: https://almaherqu.com`;
       
-      const whatsappUrl = `https://wa.me/${newUser.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(whatsappMessage)}`;
+      const phoneNumber = newUser.phone.replace(/[^0-9]/g, '');
+      const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(whatsappMessage)}`;
       
-      // فتح WhatsApp في نافذة جديدة
+      // 5. فتح WhatsApp في نافذة جديدة
       window.open(whatsappUrl, '_blank');
 
-      alert(`تم إنشاء حساب ${getRoleName(newUser.role)} بنجاح!\n\nسيتم فتح WhatsApp لإرسال البيانات للمستخدم.`);
+      alert(`✅ تم إنشاء حساب ${getRoleName(newUser.role)} بنجاح!\n\nسيتم فتح WhatsApp لإرسال البيانات للمستخدم.`);
 
       setShowAddModal(false);
       setNewUser({
@@ -84,12 +93,22 @@ const UserManagement = () => {
       fetchUsers();
     } catch (error: any) {
       console.error('Error adding user:', error);
+      
+      // تسجيل خروج من secondaryAuth في حالة الخطأ
+      try {
+        await signOut(secondaryAuth);
+      } catch (e) {
+        // تجاهل أخطاء تسجيل الخروج
+      }
+
       if (error.code === 'auth/email-already-in-use') {
-        alert('البريد الإلكتروني مستخدم بالفعل');
+        alert('❌ البريد الإلكتروني مستخدم بالفعل');
       } else if (error.code === 'auth/weak-password') {
-        alert('كلمة المرور ضعيفة. يجب أن تكون 6 أحرف على الأقل');
+        alert('❌ كلمة المرور ضعيفة. يجب أن تكون 6 أحرف على الأقل');
+      } else if (error.code === 'auth/invalid-email') {
+        alert('❌ البريد الإلكتروني غير صالح');
       } else {
-        alert('حدث خطأ أثناء إنشاء المستخدم: ' + (error.message || 'خطأ غير معروف'));
+        alert('❌ حدث خطأ أثناء إنشاء المستخدم: ' + (error.message || 'خطأ غير معروف'));
       }
     } finally {
       setSubmitting(false);

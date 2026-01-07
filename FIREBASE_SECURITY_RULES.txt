@@ -51,21 +51,23 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(userId)).data.role == 'teacher' &&
         get(/databases/$(database)/documents/users/$(userId)).data.centerId == userCenterId();
       
-      // إنشاء حساب جديد (للتسجيل)
-      allow create: if isSignedIn() && isAdmin();
+      // إنشاء حساب جديد - السماح للمديرين والمشرفين
+      allow create: if isSignedIn() && 
+        (isAdmin() || 
+         (isSupervisor() && request.resource.data.centerId == userCenterId()));
       
       // تعديل ملف المستخدم نفسه (معلومات شخصية فقط)
       allow update: if isSignedIn() && request.auth.uid == userId &&
-        request.resource.data.keys().hasAll(['uid', 'email', 'role', 'centerId']) &&
         !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['uid', 'email', 'role', 'centerId', 'personalId']);
       
-      // تعديل من قبل المشرفين والمديرين
+      // تعديل من قبل المديرين والمشرفين
       allow update: if isSignedIn() && isAdmin();
       allow update: if isSignedIn() && isSupervisor() &&
+        resource.data.centerId == userCenterId() &&
         get(/databases/$(database)/documents/users/$(userId)).data.centerId == userCenterId();
       
-      // حذف فقط من قبل المديرين
+      // حذف من قبل المديرين فقط
       allow delete: if isSignedIn() && isAdmin();
     }
 
@@ -157,11 +159,17 @@ service cloud.firestore {
       
       // إرسال رسائل جديدة
       allow create: if isSignedIn() && 
-        request.resource.data.senderId == request.auth.uid &&
-        request.resource.data.timestamp == request.time;
+        request.resource.data.senderId == request.auth.uid;
       
       // لا يسمح بتعديل أو حذف الرسائل المرسلة
       allow update, delete: if false;
+    }
+
+    // ==================== SUPERVISORS COLLECTION (إذا كانت موجودة) ====================
+    match /supervisors/{supervisorId} {
+      allow read: if isSignedIn() && isAdmin();
+      allow create, update: if isSignedIn() && isAdmin();
+      allow delete: if isSignedIn() && isAdmin();
     }
 
     // ==================== CONVERSATIONS COLLECTION ====================
@@ -198,12 +206,22 @@ service cloud.firestore {
         (isAdmin() || isSupervisor() || isTeacher()) &&
         resource.data.centerId == userCenterId();
       
-      // كتابة من قبل المشرفين والمديرين
-      allow create, update: if isSignedIn() && 
+      // قراءة المعلمين من قبل الطلاب في نفس المركز
+      allow read: if isSignedIn() && isStudent() &&
+        resource.data.centerId == userCenterId();
+      
+      // كتابة من قبل المشرفين والمديرين بدون تحقق من قوقع الأرقام
+      allow create: if isSignedIn() && 
         (isAdmin() || isSupervisor()) &&
         request.resource.data.centerId == userCenterId();
       
-      allow delete: if isSignedIn() && isAdmin();
+      allow update: if isSignedIn() && 
+        (isAdmin() || isSupervisor()) &&
+        request.resource.data.centerId == userCenterId();
+      
+      allow delete: if isSignedIn() && 
+        (isAdmin() || isSupervisor()) &&
+        resource.data.centerId == userCenterId();
     }
 
     // ==================== DEFAULT DENY ====================

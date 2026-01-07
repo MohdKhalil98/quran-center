@@ -19,10 +19,6 @@ const Login = () => {
     return <Navigate to={from} replace />;
   }
 
-  // التحقق من نوع المُعرّف (بريد أو رقم شخصي)
-  const isEmail = identifier.includes('@');
-  const isPersonalId = /^\d{9}$/.test(identifier);
-
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
@@ -38,23 +34,36 @@ const Login = () => {
     }
     
     setSubmitting(true);
+    const looksLikePersonalId = /^\d{3,}$/.test(identifier.trim());
+
     try {
-      if (isEmail) {
-        // تسجيل الدخول بالبريد الإلكتروني (للمشرفين والمعلمين)
-        await login(identifier, password);
-      } else if (isPersonalId) {
-        // تسجيل الدخول بالرقم الشخصي (للطلاب)
-        await loginWithPersonalId(identifier, password);
-      } else {
-        setError('يرجى إدخال بريد إلكتروني صحيح أو رقم شخصي (9 أرقام)');
-        setSubmitting(false);
-        return;
-      }
+      // 1) جرّب دائماً الدخول كبريد إلكتروني أولاً
+      await login(identifier, password);
       navigate(from, { replace: true });
+      return;
     } catch (err: any) {
-      if (err.message === 'USER_NOT_FOUND') {
-        setError('الرقم الشخصي غير مسجل في النظام');
-      } else if (err.message === 'ACCOUNT_NOT_ACTIVATED') {
+      // 2) إذا فشل وكان المُعرّف رقمياً فجرّب الدخول بالرقم الشخصي
+      if (looksLikePersonalId) {
+        try {
+          await loginWithPersonalId(identifier, password);
+          navigate(from, { replace: true });
+          return;
+        } catch (err2: any) {
+          if (err2.message === 'USER_NOT_FOUND') {
+            setError('البيانات غير صحيحة أو الحساب غير موجود');
+          } else if (err2.message === 'ACCOUNT_NOT_ACTIVATED') {
+            setError('حسابك لم يُفعّل بعد. يرجى انتظار اجتياز المقابلة.');
+          } else {
+            setError('تعذر تسجيل الدخول. يرجى التحقق من البيانات.');
+          }
+          console.error(err2);
+          setSubmitting(false);
+          return;
+        }
+      }
+
+      // 3) فشل الدخول بالبريد
+      if (err.message === 'ACCOUNT_NOT_ACTIVATED') {
         setError('حسابك لم يُفعّل بعد. يرجى انتظار اجتياز المقابلة.');
       } else {
         setError('تعذر تسجيل الدخول. يرجى التحقق من البيانات.');
@@ -82,21 +91,6 @@ const Login = () => {
               required
               placeholder="example@email.com أو 123456789"
             />
-            {identifier && !isEmail && !isPersonalId && identifier.length > 0 && (
-              <small style={{ color: '#ff9800', display: 'block', marginTop: '5px' }}>
-                💡 أدخل بريد إلكتروني أو رقم شخصي (9 أرقام)
-              </small>
-            )}
-            {isPersonalId && (
-              <small style={{ color: '#4caf50', display: 'block', marginTop: '5px' }}>
-                ✓ رقم شخصي صحيح (للطلاب)
-              </small>
-            )}
-            {isEmail && (
-              <small style={{ color: '#2196f3', display: 'block', marginTop: '5px' }}>
-                ✓ بريد إلكتروني (للمشرفين والمعلمين)
-              </small>
-            )}
           </label>
           <label>
             كلمة المرور

@@ -1,24 +1,5 @@
 {
   "version": 1,
   "include": ["/*"],
-  "exclude": [
-    "/static/*",
-    "/robots.txt",
-    "/manifest.json",
-    "/favicon.ico",
-    "*.svg",
-    "*.png",
-    "*.jpg",
-    "*.jpeg",
-    "*.gif",
-    "*.css",
-    "*.js"
-  ],
-  "rules": [
-    {
-      "path": "/*",
-      "methods": ["GET", "HEAD"],
-      "middlewares": []
-    }
-  ]
+  "exclude": ["/assets/*", "/static/*", "*.json", "*.txt", "*.xml", "*.ico", "*.css", "*.js", "*.png", "*.jpg", "*.jpeg", "*.gif", "*.svg", "*.webp"]
 }

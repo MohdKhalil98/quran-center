@@ -533,14 +533,14 @@ const Students = () => {
             <table>
               <thead>
                 <tr>
-                  <th>الاسم</th>
-                  <th>البريد الإلكتروني</th>
-                  <th>رقم الهاتف</th>
-                  <th>الحلقة</th>
-                  {!isTeacher && <th>المركز</th>}
-                  <th>حالة التفعيل</th>
-                  <th>حالة التسجيل</th>
-                  <th>الإجراءات</th>
+                  <th style={{width: '130px'}}>الاسم</th>
+                  <th style={{width: '180px'}}>البريد الإلكتروني</th>
+                  <th style={{width: '100px'}}>الهاتف</th>
+                  <th style={{width: '120px'}}>الحلقة</th>
+                  {!isTeacher && <th style={{width: '120px'}}>المركز</th>}
+                  <th style={{width: '80px'}}>التفعيل</th>
+                  <th style={{width: '120px'}}>التسجيل</th>
+                  <th style={{width: '80px'}}>الإجراءات</th>
                 </tr>
               </thead>
               <tbody>
@@ -549,13 +549,13 @@ const Students = () => {
                   let statusText = '';
                   let statusColor = '';
                   if (student.status === 'approved') {
-                    statusText = '✅ معتمد';
+                    statusText = 'معتمد';
                     statusColor = '#4caf50';
                   } else if (student.status === 'waiting_teacher_approval') {
-                    statusText = '⏳ بانتظار الموافقة';
+                    statusText = 'بانتظار';
                     statusColor = '#ff9800';
                   } else if (student.status === 'pending_registration') {
-                    statusText = '📝 قيد التسجيل';
+                    statusText = 'قيد التسجيل';
                     statusColor = '#2196f3';
                   } else {
                     statusText = student.status || 'غير محدد';
@@ -564,37 +564,37 @@ const Students = () => {
 
                   return (
                     <tr key={student.uid}>
-                      <td>{student.name}</td>
-                      <td>{student.email}</td>
-                      <td>{student.phone || '-'}</td>
-                      <td>{student.groupName}</td>
-                      {!isTeacher && <td>{student.centerName || '-'}</td>}
-                      <td>
-                        <span className={`status-badge ${student.active ? 'active' : 'inactive'}`}>
-                          {student.active ? '✅ نشط' : '⏸️ معطل'}
+                      <td title={student.name} style={{fontWeight: 600}}>{student.name}</td>
+                      <td title={student.email} style={{fontSize: '0.8rem', direction: 'ltr', textAlign: 'left'}}>{student.email}</td>
+                      <td style={{direction: 'ltr', textAlign: 'center', fontSize: '0.85rem'}}>{student.phone || '-'}</td>
+                      <td title={student.groupName} style={{fontSize: '0.82rem'}}>{student.groupName}</td>
+                      {!isTeacher && <td title={student.centerName} style={{fontSize: '0.82rem'}}>{student.centerName || '-'}</td>}
+                      <td style={{textAlign: 'center'}}>
+                        <span className={`status-badge ${student.active ? 'active' : 'inactive'}`} style={{fontSize: '0.75rem', padding: '3px 8px'}}>
+                          {student.active ? 'نشط' : 'معطل'}
                         </span>
                       </td>
-                      <td>
+                      <td style={{textAlign: 'center'}}>
                         <span style={{
                           backgroundColor: statusColor,
                           color: 'white',
-                          padding: '4px 8px',
+                          padding: '3px 8px',
                           borderRadius: '4px',
-                          fontSize: '0.85rem',
-                          whiteSpace: 'nowrap'
+                          fontSize: '0.75rem',
+                          whiteSpace: 'nowrap',
+                          display: 'inline-block'
                         }}>
                           {statusText}
                         </span>
                       </td>
-                      <td>
-                        <div className="card-actions">
-                          <button
-                            className="btn btn-sm btn-primary"
-                            onClick={() => handleOpenDetailsModal(student)}
-                          >
-                            المزيد
-                          </button>
-                        </div>
+                      <td style={{textAlign: 'center'}}>
+                        <button
+                          className="btn btn-sm btn-primary"
+                          onClick={() => handleOpenDetailsModal(student)}
+                          style={{padding: '5px 12px', fontSize: '0.8rem'}}
+                        >
+                          المزيد
+                        </button>
                       </td>
                     </tr>
                   );

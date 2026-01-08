@@ -1,5 +1,36 @@
 /* Specific styles for Students page can go here */
 
+/* تحسينات جدول الطلاب */
+.table-card {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-card table {
+  min-width: 950px;
+  table-layout: auto;
+}
+
+/* تنسيق الخلايا */
+.table-card td {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* تنسيق خاص لخلايا النص الطويل */
+.table-card td[title] {
+  cursor: help;
+}
+
+/* تنسيق أفضل للحالة */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 50px;
+}
+
 .filters-section {
   display: flex;
   gap: 10px;

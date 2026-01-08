@@ -159,6 +159,63 @@
   .info-note {
     text-align: center;
   }
+
+  /* تحسينات الجدول للهاتف */
+  .table-card {
+    border-radius: 8px;
+    margin: 0 -10px;
+  }
+
+  .table-card table {
+    min-width: 600px;
+    font-size: 0.8rem;
+  }
+
+  .table-card th,
+  .table-card td {
+    padding: 10px 8px;
+  }
+
+  .table-card th {
+    font-size: 0.75rem;
+  }
+
+  /* عرض البطاقات بشكل أفضل على الهاتف */
+  .cards-container {
+    grid-template-columns: 1fr !important;
+    gap: 15px;
+    padding: 0;
+  }
+
+  .data-card {
+    margin: 0;
+  }
+
+  /* قسم الطلاب الجدد */
+  .section-header {
+    padding: 12px 15px;
+    margin-bottom: 15px;
+  }
+
+  .section-header h2 {
+    font-size: 1rem;
+  }
+
+  /* أزرار أصغر */
+  .btn-sm {
+    padding: 6px 10px;
+    font-size: 0.75rem;
+  }
+
+  .view-mode-toggle {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .view-btn {
+    flex: 1;
+    text-align: center;
+  }
 }
 
 @media (max-width: 480px) {
@@ -169,5 +226,43 @@
 
   .count-badge {
     font-size: 1rem;
+  }
+
+  /* جدول أصغر للشاشات الصغيرة جداً */
+  .table-card table {
+    min-width: 500px;
+    font-size: 0.75rem;
+  }
+
+  .table-card th,
+  .table-card td {
+    padding: 8px 6px;
+  }
+
+  /* إخفاء بعض الأعمدة على الشاشات الصغيرة جداً */
+  .table-card th:nth-child(2),
+  .table-card td:nth-child(2) {
+    display: none; /* إخفاء البريد الإلكتروني */
+  }
+
+  .page__header h1 {
+    font-size: 1.4rem;
+  }
+
+  .page__header p {
+    font-size: 0.85rem;
+  }
+
+  /* بطاقات أصغر */
+  .data-card {
+    padding: 15px;
+  }
+
+  .data-card-header h3 {
+    font-size: 1rem;
+  }
+
+  .data-card-row {
+    font-size: 0.85rem;
   }
 }

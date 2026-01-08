@@ -423,20 +423,12 @@ const Students = () => {
                     <td>{student.name}</td>
                     <td>{student.phone || '-'}</td>
                     <td>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button
-                          className="btn btn-sm btn-success"
-                          onClick={() => handleOpenLevelModal(student)}
-                        >
-                          ✅ قبول وتحديد المستوى
-                        </button>
-                        <button
-                          className="btn btn-sm btn-danger"
-                          onClick={() => handleDeleteNewStudent(student)}
-                        >
-                          🗑️ حذف
-                        </button>
-                      </div>
+                      <button
+                        className="btn btn-sm btn-success"
+                        onClick={() => handleOpenLevelModal(student)}
+                      >
+                        ✅ تحديد المستوى
+                      </button>
                     </td>
                   </tr>
                 ))}

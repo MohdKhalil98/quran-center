@@ -115,11 +115,16 @@ const Groups = () => {
         setTeachers(teachersList);
 
         // Attach track names and teacher names to groups
-        const groupsWithDetails = groupsList.map((group) => ({
+        let groupsWithDetails = groupsList.map((group) => ({
           ...group,
           trackName: tracksList.find((tr) => tr.id === group.trackId)?.name || 'غير محدد',
           teacherName: teachersList.find((t) => t.uid === group.teacherId)?.name || 'غير محدد'
         }));
+
+        // تصفية الحلقات للمعلم - يرى فقط حلقاته
+        if (userProfile?.role === 'teacher' && userProfile?.uid) {
+          groupsWithDetails = groupsWithDetails.filter(g => g.teacherId === userProfile.uid);
+        }
 
         setGroups(groupsWithDetails);
         setTracks(tracksList);
@@ -322,13 +327,15 @@ const Groups = () => {
   return (
     <section className="page">
       <header className="page__header">
-        <h1>المجموعات</h1>
-        <p>عرض المجموعات والمعلمين المشرفين عليها.</p>
+        <h1>{userProfile?.role === 'teacher' ? 'حلقاتي' : 'المجموعات'}</h1>
+        <p>{userProfile?.role === 'teacher' ? 'عرض الحلقات المسندة إليك.' : 'عرض المجموعات والمعلمين المشرفين عليها.'}</p>
       </header>
 
-      <button className="btn btn-primary" onClick={() => setIsAdding(true)}>
-        + إضافة مجموعة جديدة
-      </button>
+      {userProfile?.role !== 'teacher' && (
+        <button className="btn btn-primary" onClick={() => setIsAdding(true)}>
+          + إضافة مجموعة جديدة
+        </button>
+      )}
 
       {isAdding && (
         <form className="form-card" onSubmit={handleAddGroup}>
@@ -442,18 +449,22 @@ const Groups = () => {
                 >
                   {openingChat === group.id ? '⏳' : '💬'} محادثة الحلقة
                 </button>
-                <button
-                  className="btn btn-sm btn-warning"
-                  onClick={() => handleEditGroup(group)}
-                >
-                  تعديل
-                </button>
-                <button
-                  className="btn btn-sm btn-danger"
-                  onClick={() => handleDeleteGroup(group.id || '')}
-                >
-                  حذف
-                </button>
+                {userProfile?.role !== 'teacher' && (
+                  <>
+                    <button
+                      className="btn btn-sm btn-warning"
+                      onClick={() => handleEditGroup(group)}
+                    >
+                      تعديل
+                    </button>
+                    <button
+                      className="btn btn-sm btn-danger"
+                      onClick={() => handleDeleteGroup(group.id || '')}
+                    >
+                      حذف
+                    </button>
+                  </>
+                )}
               </div>
             </article>
           ))

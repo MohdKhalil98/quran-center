@@ -10,6 +10,7 @@ interface DashboardStats {
   teachers: number;
   supervisors: number;
   reviewsThisWeek: number;
+  completedStudents: number;
   recentUpdates: { text: string; date: string }[];
   loading: boolean;
   error: string | null;
@@ -41,6 +42,7 @@ const Dashboard = () => {
     teachers: 0,
     supervisors: 0,
     reviewsThisWeek: 0,
+    completedStudents: 0,
     recentUpdates: [],
     loading: true,
     error: null
@@ -65,6 +67,7 @@ const Dashboard = () => {
       let teachers = 0;
       let supervisors = 0;
       let reviewsThisWeek = 0;
+      let completedStudents = 0;
       let recentUpdates: { text: string; date: string }[] = [];
 
       // For teachers - get their groups first
@@ -173,6 +176,37 @@ const Dashboard = () => {
         );
         const studentsSnap = await getDocs(studentsQuery);
         totalStudents = studentsSnap.size;
+
+        // Count successful students (with achievements and high average ratings)
+        try {
+          const achievementsSnap = await getDocs(collection(db, 'student_achievements'));
+          const studentAchievementsMap = new Map<string, number[]>();
+          
+          // Group achievements by student and collect ratings
+          achievementsSnap.docs.forEach(doc => {
+            const data = doc.data();
+            if (data.studentId && data.challengePassed && data.rating) {
+              if (!studentAchievementsMap.has(data.studentId)) {
+                studentAchievementsMap.set(data.studentId, []);
+              }
+              studentAchievementsMap.get(data.studentId)!.push(data.rating);
+            }
+          });
+          
+          // Count students with at least 5 achievements with average rating >= 7
+          let completedCount = 0;
+          studentAchievementsMap.forEach((ratings, studentId) => {
+            const avgRating = ratings.reduce((a, b) => a + b, 0) / ratings.length;
+            if (ratings.length >= 5 && avgRating >= 7) {
+              completedCount++;
+            }
+          });
+          
+          completedStudents = completedCount;
+        } catch (e) {
+          console.error('Error calculating completed students:', e);
+          completedStudents = 0;
+        }
 
         // groups (active)
         try {
@@ -375,6 +409,7 @@ const Dashboard = () => {
         teachers,
         supervisors,
         reviewsThisWeek,
+        completedStudents,
         recentUpdates: recentUpdates.length ? recentUpdates : (isTeacher ? [
           { text: 'لم تقم بتسجيل أي تحصيل بعد', date: '' }
         ] : isAdmin ? [
@@ -418,12 +453,13 @@ const Dashboard = () => {
     { title: 'إجمالي المستخدمين', value: stats.totalUsers.toString(), description: 'جميع المستخدمين في النظام' },
     { title: 'المشرفون', value: stats.supervisors.toString(), description: 'عدد المشرفين' },
     { title: 'المعلمون', value: stats.teachers.toString(), description: 'عدد المعلمين' },
-    { title: 'الطلاب', value: stats.totalStudents.toString(), description: 'طلاب مسجلون حالياً' }
+    { title: 'الطلاب', value: stats.totalStudents.toString(), description: 'طلاب مسجلون حالياً' },
+    { title: 'الطلاب الناجحون', value: stats.completedStudents.toString(), description: 'طلاب اجتازوا المقررات بنجاح' }
   ] : [
     { title: 'إجمالي الطلاب', value: stats.totalStudents.toString(), description: 'طلاب مسجلون حالياً' },
     { title: 'المجموعات', value: stats.activeGroups.toString(), description: 'إجمالي عدد المجموعات' },
     { title: 'المدرسون', value: stats.teachers.toString(), description: 'مشرفون على الحلقات' },
-    { title: 'المراجعات هذا الأسبوع', value: stats.reviewsThisWeek.toString(), description: 'عدد جلسات المراجعة المكتملة' }
+    { title: 'الطلاب الناجحون', value: stats.completedStudents.toString(), description: 'طلاب اجتازوا المقررات بنجاح' }
   ];
 
   return (

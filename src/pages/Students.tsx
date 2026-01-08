@@ -85,22 +85,27 @@ const Students = () => {
       }
 
       // Fetch students from users collection (role = student, status = approved)
-      // جلب جميع الطلاب المعتمدين ثم تصفيتهم في الكود (لتجنب الحاجة إلى indexes معقدة)
+      // جلب جميع الطلاب المعتمدين وجميع الطلاب الذين ينتظرون موافقة المعلم
       const studentsQuery = query(
         collection(db, 'users'),
-        where('role', '==', 'student'),
-        where('status', '==', 'approved')
+        where('role', '==', 'student')
       );
       
       const snapshot = await getDocs(studentsQuery);
-      let studentsList = snapshot.docs.map((doc) => {
-        const data = doc.data() as StudentUser;
-        return {
-          ...data,
-          groupName: groupsList.find(g => g.id === data.groupId)?.name || 'غير محدد',
-          centerName: centersList.find(c => c.id === data.centerId)?.name || ''
-        } as StudentUser;
-      });
+      let studentsList = snapshot.docs
+        .filter(doc => {
+          const status = doc.data().status;
+          // عرض الطلاب المعتمدين و الطلاب في انتظار الموافقة، لكن لا نعرض المرفوضين أو المعلقين الآخرين
+          return status === 'approved' || status === 'waiting_teacher_approval' || status === 'pending_registration';
+        })
+        .map((doc) => {
+          const data = doc.data() as StudentUser;
+          return {
+            ...data,
+            groupName: groupsList.find(g => g.id === data.groupId)?.name || 'غير محدد',
+            centerName: centersList.find(c => c.id === data.centerId)?.name || ''
+          } as StudentUser;
+        });
       
       // جلب الطلاب الجدد (pending_registration) - الذين تم استيرادهم للتو
       if (isAdmin || isSupervisor || isTeacher) {
@@ -447,45 +452,77 @@ const Students = () => {
           {filteredStudents.length === 0 ? (
             <p className="empty-state">لا يوجد طلاب حتى الآن</p>
           ) : (
-            filteredStudents.map((student) => (
-              <article key={student.uid} className="data-card">
-                <header className="data-card-header">
-                  <div>
-                    <h3>{student.name}</h3>
-                    <p className="data-card-id">{student.email}</p>
-                  </div>
-                  <div className="data-card-tag">
-                    <span className={student.active ? 'active' : 'inactive'}>
-                      {student.active ? 'نشط' : 'معطل'}
-                    </span>
-                  </div>
-                </header>
-                <section className="data-card-body">
-                  <div className="data-card-row">
-                    <label>رقم الهاتف:</label>
-                    <span>{student.phone || '-'}</span>
-                  </div>
-                  <div className="data-card-row">
-                    <label>الحلقة:</label>
-                    <span>{student.groupName}</span>
-                  </div>
-                  {!isTeacher && (
-                    <div className="data-card-row">
-                      <label>المركز:</label>
-                      <span>{student.centerName || '-'}</span>
+            filteredStudents.map((student) => {
+              // تحديد حالة التسجيل بناءً على status
+              let statusText = '';
+              let statusColor = '';
+              if (student.status === 'approved') {
+                statusText = '✅ معتمد';
+                statusColor = '#4caf50';
+              } else if (student.status === 'waiting_teacher_approval') {
+                statusText = '⏳ بانتظار الموافقة';
+                statusColor = '#ff9800';
+              } else if (student.status === 'pending_registration') {
+                statusText = '📝 قيد التسجيل';
+                statusColor = '#2196f3';
+              } else {
+                statusText = student.status || 'غير محدد';
+                statusColor = '#9e9e9e';
+              }
+
+              return (
+                <article key={student.uid} className="data-card">
+                  <header className="data-card-header">
+                    <div>
+                      <h3>{student.name}</h3>
+                      <p className="data-card-id">{student.email}</p>
                     </div>
-                  )}
-                </section>
-                <footer className="data-card-actions">
-                  <button
-                    className="btn btn-sm btn-primary"
-                    onClick={() => handleOpenDetailsModal(student)}
-                  >
-                    المزيد
-                  </button>
-                </footer>
-              </article>
-            ))
+                    <div className="data-card-tag">
+                      <span className={student.active ? 'active' : 'inactive'}>
+                        {student.active ? '✅ نشط' : '⏸️ معطل'}
+                      </span>
+                    </div>
+                  </header>
+                  <section className="data-card-body">
+                    <div className="data-card-row">
+                      <label>رقم الهاتف:</label>
+                      <span>{student.phone || '-'}</span>
+                    </div>
+                    <div className="data-card-row">
+                      <label>الحلقة:</label>
+                      <span>{student.groupName}</span>
+                    </div>
+                    {!isTeacher && (
+                      <div className="data-card-row">
+                        <label>المركز:</label>
+                        <span>{student.centerName || '-'}</span>
+                      </div>
+                    )}
+                    <div className="data-card-row">
+                      <label>حالة التسجيل:</label>
+                      <span style={{
+                        backgroundColor: statusColor,
+                        color: 'white',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        fontSize: '0.85rem',
+                        display: 'inline-block'
+                      }}>
+                        {statusText}
+                      </span>
+                    </div>
+                  </section>
+                  <footer className="data-card-actions">
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={() => handleOpenDetailsModal(student)}
+                    >
+                      المزيد
+                    </button>
+                  </footer>
+                </article>
+              );
+            })
           )}
         </div>
       ) : (
@@ -501,35 +538,67 @@ const Students = () => {
                   <th>رقم الهاتف</th>
                   <th>الحلقة</th>
                   {!isTeacher && <th>المركز</th>}
-                  <th>الحالة</th>
+                  <th>حالة التفعيل</th>
+                  <th>حالة التسجيل</th>
                   <th>الإجراءات</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredStudents.map((student) => (
-                  <tr key={student.uid}>
-                    <td>{student.name}</td>
-                    <td>{student.email}</td>
-                    <td>{student.phone || '-'}</td>
-                    <td>{student.groupName}</td>
-                    {!isTeacher && <td>{student.centerName || '-'}</td>}
-                    <td>
-                      <span className={`status-badge ${student.active ? 'active' : 'inactive'}`}>
-                        {student.active ? 'نشط' : 'معطل'}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="card-actions">
-                        <button
-                          className="btn btn-sm btn-primary"
-                          onClick={() => handleOpenDetailsModal(student)}
-                        >
-                          المزيد
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {filteredStudents.map((student) => {
+                  // تحديد حالة التسجيل بناءً على status
+                  let statusText = '';
+                  let statusColor = '';
+                  if (student.status === 'approved') {
+                    statusText = '✅ معتمد';
+                    statusColor = '#4caf50';
+                  } else if (student.status === 'waiting_teacher_approval') {
+                    statusText = '⏳ بانتظار الموافقة';
+                    statusColor = '#ff9800';
+                  } else if (student.status === 'pending_registration') {
+                    statusText = '📝 قيد التسجيل';
+                    statusColor = '#2196f3';
+                  } else {
+                    statusText = student.status || 'غير محدد';
+                    statusColor = '#9e9e9e';
+                  }
+
+                  return (
+                    <tr key={student.uid}>
+                      <td>{student.name}</td>
+                      <td>{student.email}</td>
+                      <td>{student.phone || '-'}</td>
+                      <td>{student.groupName}</td>
+                      {!isTeacher && <td>{student.centerName || '-'}</td>}
+                      <td>
+                        <span className={`status-badge ${student.active ? 'active' : 'inactive'}`}>
+                          {student.active ? '✅ نشط' : '⏸️ معطل'}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{
+                          backgroundColor: statusColor,
+                          color: 'white',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          fontSize: '0.85rem',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {statusText}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="card-actions">
+                          <button
+                            className="btn btn-sm btn-primary"
+                            onClick={() => handleOpenDetailsModal(student)}
+                          >
+                            المزيد
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -549,7 +618,20 @@ const Students = () => {
                 <p><strong>رقم الهاتف:</strong> {selectedStudent.phone || '-'}</p>
                 <p><strong>الحلقة:</strong> {selectedStudent.groupName}</p>
                 <p><strong>المركز:</strong> {selectedStudent.centerName || 'غير محدد'}</p>
-                <p><strong>الحالة:</strong> {selectedStudent.active ? 'نشط' : 'معطل'}</p>
+                <p><strong>حالة التفعيل:</strong> <span className={`status-badge ${selectedStudent.active ? 'active' : 'inactive'}`}>{selectedStudent.active ? '✅ نشط' : '⏸️ معطل'}</span></p>
+                <p><strong>حالة التسجيل:</strong> 
+                  <span style={{
+                    marginRight: '10px',
+                    backgroundColor: selectedStudent.status === 'approved' ? '#4caf50' : selectedStudent.status === 'waiting_teacher_approval' ? '#ff9800' : selectedStudent.status === 'pending_registration' ? '#2196f3' : '#9e9e9e',
+                    color: 'white',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    fontSize: '0.85rem',
+                    display: 'inline-block'
+                  }}>
+                    {selectedStudent.status === 'approved' ? '✅ معتمد' : selectedStudent.status === 'waiting_teacher_approval' ? '⏳ بانتظار الموافقة' : selectedStudent.status === 'pending_registration' ? '📝 قيد التسجيل' : selectedStudent.status || 'غير محدد'}
+                  </span>
+                </p>
                 <p><strong>تاريخ التسجيل:</strong> {new Date(selectedStudent.createdAt).toLocaleDateString('ar-EG')}</p>
               </div>
             </div>

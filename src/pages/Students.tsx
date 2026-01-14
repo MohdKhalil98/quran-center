@@ -40,7 +40,7 @@ interface Stage {
 }
 
 const Students = () => {
-  const { userProfile, isSupervisor, isAdmin, isTeacher } = useAuth();
+  const { userProfile, isSupervisor, isAdmin, isTeacher, getSupervisorCenterIds, canAccessCenter } = useAuth();
   const [students, setStudents] = useState<StudentUser[]>([]);
   const [newStudents, setNewStudents] = useState<StudentUser[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -150,10 +150,17 @@ const Students = () => {
       if (isTeacher && myGroupIds.length > 0) {
         // المعلم يرى فقط طلاب حلقاته
         studentsList = studentsList.filter(s => myGroupIds.includes(s.groupId || ''));
-      } else if (isSupervisor && userProfile?.centerId) {
-        // المشرف يرى طلاب مركزه
-        studentsList = studentsList.filter(s => s.centerId === userProfile.centerId);
-        setFilterCenterId(userProfile.centerId);
+      } else if (isSupervisor) {
+        // المشرف يرى طلاب مراكزه (دعم مراكز متعددة)
+        const supervisorCenterIds = getSupervisorCenterIds();
+        if (supervisorCenterIds.length > 0) {
+          studentsList = studentsList.filter(s => s.centerId && supervisorCenterIds.includes(s.centerId));
+          
+          // إذا كان لديه مركز واحد فقط، يتم تعيينه في الفلتر تلقائياً
+          if (supervisorCenterIds.length === 1) {
+            setFilterCenterId(supervisorCenterIds[0]);
+          }
+        }
       }
       // المطور يرى جميع الطلاب (بدون تصفية)
       

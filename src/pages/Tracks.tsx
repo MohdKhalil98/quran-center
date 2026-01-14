@@ -30,24 +30,42 @@ const Tracks: React.FC = () => {
   useEffect(() => {
     fetchTracks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userProfile?.centerId]);
+  }, [userProfile?.centerId, userProfile?.centerIds]);
 
   const fetchTracks = async () => {
     try {
       setLoading(true);
       let tracksData: Track[] = [];
       
-      // إذا كان المستخدم مشرف، جلب المساقات الخاصة بمركزه فقط
-      if (userProfile?.role === 'supervisor' && userProfile?.centerId) {
-        const tracksQuery = query(
-          collection(db, 'tracks'),
-          where('centerId', '==', userProfile.centerId)
-        );
-        const tracksSnapshot = await getDocs(tracksQuery);
-        tracksData = tracksSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Track[];
+      // إذا كان المستخدم مشرف، جلب المساقات الخاصة بمراكزه فقط (دعم متعدد)
+      if (userProfile?.role === 'supervisor') {
+        const centerIds = (userProfile.centerIds && userProfile.centerIds.length > 0)
+          ? userProfile.centerIds
+          : userProfile.centerId
+            ? [userProfile.centerId]
+            : [];
+        
+        if (centerIds.length > 0) {
+          // Firestore in query max 10 عناصر
+          const batches: string[][] = [];
+          for (let i = 0; i < centerIds.length; i += 10) {
+            batches.push(centerIds.slice(i, i + 10));
+          }
+
+          const results: Track[] = [];
+          for (const batch of batches) {
+            const tracksQuery = query(
+              collection(db, 'tracks'),
+              where('centerId', 'in', batch)
+            );
+            const tracksSnapshot = await getDocs(tracksQuery);
+            results.push(...tracksSnapshot.docs.map((doc) => ({
+              id: doc.id,
+              ...doc.data(),
+            })) as Track[]);
+          }
+          tracksData = results;
+        }
       } else {
         // للمطور: جلب جميع المساقات
         const tracksSnapshot = await getDocs(collection(db, 'tracks'));

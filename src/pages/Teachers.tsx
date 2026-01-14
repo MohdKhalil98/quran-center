@@ -25,7 +25,7 @@ interface Group {
 }
 
 const Teachers = () => {
-  const { userProfile, isSupervisor, isAdmin } = useAuth();
+  const { userProfile, isSupervisor, isAdmin, getSupervisorCenterIds, canAccessCenter } = useAuth();
   const { findOrCreateConversation, sendMessage } = useMessaging();
   const [teachers, setTeachers] = useState<TeacherUser[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -62,13 +62,29 @@ const Teachers = () => {
 
       // Fetch teachers from users collection (role = teacher)
       let teachersQuery;
-      if (isSupervisor && userProfile?.centerId) {
-        teachersQuery = query(
-          collection(db, 'users'),
-          where('role', '==', 'teacher'),
-          where('centerId', '==', userProfile.centerId)
-        );
-        setFilterCenterId(userProfile.centerId);
+      if (isSupervisor) {
+        // المشرف يرى معلمي مراكزه (دعم مراكز متعددة)
+        const supervisorCenterIds = getSupervisorCenterIds();
+        if (supervisorCenterIds.length > 0) {
+          // استخدام 'in' query للبحث في مراكز متعددة
+          teachersQuery = query(
+            collection(db, 'users'),
+            where('role', '==', 'teacher'),
+            where('centerId', 'in', supervisorCenterIds)
+          );
+          
+          // إذا كان لديه مركز واحد فقط، يتم تعيينه في الفلتر تلقائياً
+          if (supervisorCenterIds.length === 1) {
+            setFilterCenterId(supervisorCenterIds[0]);
+          }
+        } else {
+          // المشرف بدون مراكز - لا يرى أي معلم
+          teachersQuery = query(
+            collection(db, 'users'),
+            where('role', '==', 'teacher'),
+            where('centerId', '==', 'non-existent')
+          );
+        }
       } else {
         teachersQuery = query(
           collection(db, 'users'),

@@ -16,6 +16,7 @@ const navItems: NavItem[] = [
   { path: '/dashboard', label: 'لوحة التحكم', icon: '📊', roles: ['admin', 'supervisor', 'teacher'] },
   // صفحات المطور فقط
   { path: '/centers', label: 'مراكز القرآن', icon: '🏫', roles: ['admin'] },
+  { path: '/supervisor-centers', label: 'ربط المشرفين بالمراكز', icon: '🗂️', roles: ['admin'] },
   { path: '/batch-import', label: 'استيراد جماعي', icon: '📦', roles: ['admin'] },
   { path: '/teachers', label: 'المعلمون', icon: '👨‍🏫', roles: ['admin'] },
   { path: '/students', label: 'الطلاب', icon: '👨‍🎓', roles: ['admin'] },
@@ -39,7 +40,7 @@ const navItems: NavItem[] = [
 ];
 
 const Sidebar = () => {
-  const { logout, isAdmin, userProfile, isSupervisor, activeRole, availableRoles, switchRole, hasMultipleRoles } = useAuth();
+  const { logout, isAdmin, userProfile, isSupervisor, activeRole, availableRoles, switchRole, hasMultipleRoles, getSupervisorCenterIds } = useAuth();
   const [pendingCount, setPendingCount] = useState(0);
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
   const [newStudentsCount, setNewStudentsCount] = useState(0);
@@ -66,23 +67,27 @@ const Sidebar = () => {
 
   useEffect(() => {
     const fetchPendingCount = async () => {
-      if (!isSupervisor || !userProfile?.centerId) return;
+      if (!isSupervisor) return;
+      const centerIds = getSupervisorCenterIds();
+      if (centerIds.length === 0) return;
       
       try {
-        // جلب جميع الطلاب في المركز ثم تصفيتهم
-        const studentsQuery = query(
-          collection(db, 'users'),
-          where('role', '==', 'student'),
-          where('centerId', '==', userProfile.centerId)
-        );
-        const snapshot = await getDocs(studentsQuery);
-        
-        // عد الطلاب الذين حالتهم pending_registration فقط
-        const pendingRegistrations = snapshot.docs.filter(doc => 
-          doc.data().status === 'pending_registration'
-        );
-        
-        setPendingCount(pendingRegistrations.length);
+        // جلب الطلاب في المراكز المخصصة ثم تصفيتهم
+        let totalPending = 0;
+        for (const centerId of centerIds) {
+          const studentsQuery = query(
+            collection(db, 'users'),
+            where('role', '==', 'student'),
+            where('centerId', '==', centerId)
+          );
+          const snapshot = await getDocs(studentsQuery);
+          // عد الطلاب الذين حالتهم pending_registration فقط
+          const pendingRegistrations = snapshot.docs.filter(doc => 
+            doc.data().status === 'pending_registration'
+          );
+          totalPending += pendingRegistrations.length;
+        }
+        setPendingCount(totalPending);
       } catch (error) {
         console.error('Error fetching pending count:', error);
       }

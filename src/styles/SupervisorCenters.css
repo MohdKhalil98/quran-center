@@ -1,0 +1,89 @@
+/* Supervisor Centers Page Styles */
+
+.centers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #f9f9f9;
+}
+
+.checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #eee;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.checkbox-item:hover {
+  background: #f0f8ff;
+  border-color: #4caf50;
+}
+
+.checkbox-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.checkbox-item .center-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.checkbox-item .center-info strong {
+  font-size: 1rem;
+  color: #333;
+}
+
+.checkbox-item .center-info small {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.checkbox-item.selected {
+  background: #e8f5e9;
+  border-color: #4caf50;
+}
+
+/* Modal improvements */
+.modal-content {
+  min-width: 500px;
+  max-width: 600px;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-footer {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding: 15px 20px;
+  border-top: 1px solid #eee;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .modal-content {
+    min-width: auto;
+    width: 90vw;
+    margin: 20px;
+  }
+  
+  .centers-list {
+    max-height: 250px;
+  }
+}

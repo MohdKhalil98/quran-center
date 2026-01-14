@@ -25,7 +25,8 @@ export interface UserProfile {
   role: UserRole; // الصلاحية الرئيسية
   roles?: UserRole[]; // صلاحيات متعددة (اختياري)
   personalId?: string; // الرقم الشخصي - 9 أرقام
-  centerId?: string; // للمشرف والمعلم والطالب
+  centerId?: string; // للمعلم والطالب - مركز واحد
+  centerIds?: string[]; // للمشرف - مراكز متعددة
   studentId?: string; // لولي الأمر
   groupId?: string; // للطالب - الحلقة المنضم إليها
   phone?: string;
@@ -67,6 +68,9 @@ type AuthContextValue = {
   switchRole: (role: UserRole) => void;
   hasMultipleRoles: boolean;
   getDefaultRoute: () => string;
+  // دعم مراكز متعددة للمشرف
+  getSupervisorCenterIds: () => string[];
+  canAccessCenter: (centerId: string) => boolean;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -248,6 +252,28 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
     }
   };
 
+  // دعم مراكز متعددة للمشرف
+  const getSupervisorCenterIds = (): string[] => {
+    if (!userProfile || !isSupervisor) return [];
+    
+    // إذا كان هناك centerIds (جديد) استخدمه، وإلا استخدم centerId القديم
+    if (userProfile.centerIds && userProfile.centerIds.length > 0) {
+      return userProfile.centerIds;
+    } else if (userProfile.centerId) {
+      return [userProfile.centerId];
+    }
+    
+    return [];
+  };
+
+  const canAccessCenter = (centerId: string): boolean => {
+    if (isAdmin) return true;
+    if (!isSupervisor) return false;
+    
+    const supervisorCenters = getSupervisorCenterIds();
+    return supervisorCenters.includes(centerId);
+  };
+
   const value = useMemo(
     () => ({
       user,
@@ -269,7 +295,10 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
       availableRoles,
       switchRole,
       hasMultipleRoles,
-      getDefaultRoute
+      getDefaultRoute,
+      // دعم مراكز متعددة للمشرف
+      getSupervisorCenterIds,
+      canAccessCenter
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [user, userProfile, loading, activeRole, availableRoles]

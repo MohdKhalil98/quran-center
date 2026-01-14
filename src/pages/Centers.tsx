@@ -21,7 +21,7 @@ interface CenterUser extends UserProfile {
 }
 
 const Centers = () => {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isSupervisor, getSupervisorCenterIds, canAccessCenter } = useAuth();
   const [centers, setCenters] = useState<Center[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddCenterModal, setShowAddCenterModal] = useState(false);
@@ -63,10 +63,18 @@ const Centers = () => {
   const fetchCenters = async () => {
     try {
       const centersSnap = await getDocs(collection(db, 'centers'));
-      const centersList = centersSnap.docs.map(doc => ({
+      let centersList = centersSnap.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       } as Center));
+      
+      // تصفية المراكز للمشرفين (يرون مراكزهم فقط)
+      if (isSupervisor) {
+        const supervisorCenterIds = getSupervisorCenterIds();
+        centersList = centersList.filter(center => supervisorCenterIds.includes(center.id));
+      }
+      // المدراء يرون جميع المراكز
+      
       setCenters(centersList);
     } catch (error) {
       console.error('Error fetching centers:', error);
@@ -293,7 +301,7 @@ const Centers = () => {
     });
   };
 
-  if (!isAdmin) {
+  if (!isAdmin && !isSupervisor) {
     return <Navigate to="/dashboard" replace />;
   }
 

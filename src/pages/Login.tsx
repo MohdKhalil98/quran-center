@@ -86,8 +86,15 @@ const Login = () => {
 
   return (
     <div className="login-page">
+      <div className="login-page__header">
+        <h1 className="login-page__title">رحلة الماهر لإدارة مراكز القرآن الكريم</h1>
+        <p className="login-page__description">
+          هذه المنصة مخصصة لإدارة شؤون الطلاب والمعلمين في مراكز تحفيظ القرآن الكريم.
+        </p>
+      </div>
+
       <div className="login-card">
-        <h1>تسجيل الدخول</h1>
+        <h2>تسجيل الدخول</h2>
         <p className="login-card__subtitle">
           أدخل بريدك الإلكتروني أو رقمك الشخصي مع كلمة المرور.
         </p>
@@ -121,6 +128,16 @@ const Login = () => {
           طالب جديد؟ <Link to="/register">سجّل في قائمة الانتظار</Link>
         </p>
       </div>
+
+      <nav className="login-page__links">
+        <a href="#">من نحن</a>
+        <a href="#">سياسة الخصوصية</a>
+        <a href="#">اتصل بنا</a>
+      </nav>
+
+      <footer className="login-page__footer">
+        © 2026 رحلة الماهر لإدارة مراكز القرآن الكريم. جميع الحقوق محفوظة.
+      </footer>
     </div>
   );
 };

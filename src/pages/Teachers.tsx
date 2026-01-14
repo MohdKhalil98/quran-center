@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { collection, getDocs, doc, updateDoc, query, orderBy, where, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../firebase';
+import { collection, getDocs, doc, updateDoc, query, orderBy, where, deleteDoc, addDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, signOut, signInWithEmailAndPassword } from 'firebase/auth';
+import { db, auth } from '../firebase';
 import { useAuth, UserProfile } from '../context/AuthContext';
 import { useMessaging } from '../hooks/useMessaging';
+import { generateTemporaryPassword } from '../utils/passwordGenerator';
 import '../styles/Shared.css';
 import '../styles/Teachers.css';
 
@@ -37,6 +39,15 @@ const Teachers = () => {
   const [filterCenterId, setFilterCenterId] = useState<string>('');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editFormData, setEditFormData] = useState<TeacherUser | null>(null);
+  const [showAddTeacherModal, setShowAddTeacherModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [newTeacher, setNewTeacher] = useState({
+    name: '',
+    email: '',
+    password: generateTemporaryPassword(),
+    phone: '',
+    centerId: ''
+  });
 
   useEffect(() => {
     fetchData();
@@ -112,6 +123,124 @@ const Teachers = () => {
     } catch (error) {
       console.error('Error fetching data:', error);
       setLoading(false);
+    }
+  };
+
+  // فتح modal إضافة معلم جديد
+  const handleOpenAddTeacherModal = () => {
+    const supervisorCenterIds = getSupervisorCenterIds();
+    setNewTeacher({
+      name: '',
+      email: '',
+      password: generateTemporaryPassword(),
+      phone: '',
+      centerId: supervisorCenterIds.length === 1 ? supervisorCenterIds[0] : ''
+    });
+    setShowAddTeacherModal(true);
+  };
+
+  // إضافة معلم جديد
+  const handleAddTeacher = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!newTeacher.centerId) {
+      alert('يرجى اختيار المركز');
+      return;
+    }
+    
+    if (!newTeacher.phone || newTeacher.phone.trim() === '') {
+      alert('يرجى إدخال رقم الهاتف لإرسال بيانات الدخول عبر واتساب');
+      return;
+    }
+    
+    setSubmitting(true);
+
+    try {
+      // حفظ بيانات المستخدم الحالي لإعادة تسجيل الدخول
+      const currentUser = auth.currentUser;
+      const currentEmail = currentUser?.email;
+      
+      // إنشاء حساب في Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        newTeacher.email,
+        newTeacher.password
+      );
+
+      // حفظ بيانات المستخدم في Firestore
+      const userProfile: UserProfile = {
+        uid: userCredential.user.uid,
+        email: newTeacher.email,
+        name: newTeacher.name,
+        role: 'teacher',
+        roles: ['teacher'],
+        phone: newTeacher.phone,
+        centerId: newTeacher.centerId,
+        createdAt: new Date().toISOString(),
+        active: true
+      };
+
+      // استخدام setDoc مع uid كـ document ID
+      await setDoc(doc(db, 'users', userCredential.user.uid), userProfile);
+      
+      // الحصول على اسم المركز
+      const centerName = centers.find(c => c.id === newTeacher.centerId)?.name || '';
+      
+      // تنسيق رقم الهاتف
+      let phoneNumber = newTeacher.phone.replace(/[\s+-]/g, '');
+      if (phoneNumber.startsWith('0')) {
+        phoneNumber = '973' + phoneNumber.substring(1);
+      }
+      if (!phoneNumber.startsWith('973')) {
+        phoneNumber = '973' + phoneNumber;
+      }
+      
+      // إنشاء رسالة واتساب
+      const message = `مرحباً ${newTeacher.name}،
+
+تم إنشاء حسابك كمعلم في ${centerName} بنجاح!
+
+البريد الإلكتروني: ${newTeacher.email}
+كلمة المرور المؤقتة: ${newTeacher.password}
+
+ملاحظة مهمة:
+• يرجى تغيير كلمة المرور بعد تسجيل الدخول الأول
+• يمكنك تغيير كلمة المرور من قائمة الإعدادات
+
+رابط النظام: ${window.location.origin}
+
+نتمنى لك تجربة موفقة!`;
+      
+      // فتح واتساب
+      const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+      window.open(whatsappUrl, '_blank');
+
+      // تسجيل خروج المستخدم الجديد
+      await signOut(auth);
+      
+      // إعادة تسجيل دخول المستخدم الحالي
+      if (currentEmail) {
+        const adminPassword = prompt('من فضلك أدخل كلمة مرورك لإعادة تسجيل الدخول:');
+        if (adminPassword) {
+          await signInWithEmailAndPassword(auth, currentEmail, adminPassword);
+        }
+      }
+
+      alert(`تم إنشاء حساب المعلم بنجاح!\n\nتم فتح واتساب لإرسال بيانات الدخول إلى ${newTeacher.name}`);
+
+      setShowAddTeacherModal(false);
+      fetchData();
+    } catch (error: any) {
+      console.error('Error adding teacher:', error);
+      if (error.code === 'auth/email-already-in-use') {
+        alert('البريد الإلكتروني مستخدم بالفعل');
+      } else if (error.code === 'auth/wrong-password') {
+        alert('كلمة المرور غير صحيحة. لم يتم إعادة تسجيل دخولك.');
+      } else {
+        alert('حدث خطأ أثناء إنشاء المعلم');
+      }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -251,11 +380,13 @@ const Teachers = () => {
       </header>
 
       <div className="page-actions-header">
-        {isAdmin && (
-          <p className="info-note">💡 لإضافة معلم جديد، اذهب إلى صفحة "مراكز القرآن" واختر المركز ثم أضف المعلم</p>
-        )}
         {isSupervisor && (
-          <p className="info-note">💡 لإضافة معلم جديد، يرجى التواصل مع مدير النظام</p>
+          <button 
+            className="btn btn-primary"
+            onClick={handleOpenAddTeacherModal}
+          >
+            ➕ إضافة معلم جديد
+          </button>
         )}
 
         <div className="filters-section">
@@ -484,6 +615,112 @@ const Teachers = () => {
                 إلغاء
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal إضافة معلم جديد */}
+      {showAddTeacherModal && (
+        <div className="modal-overlay" onClick={() => setShowAddTeacherModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>إضافة معلم جديد</h2>
+              <button className="close-btn" onClick={() => setShowAddTeacherModal(false)}>&times;</button>
+            </div>
+            <form onSubmit={handleAddTeacher}>
+              <div className="modal-body">
+                {getSupervisorCenterIds().length > 1 && (
+                  <div className="form-row">
+                    <label htmlFor="teacher-center">المركز *</label>
+                    <select
+                      id="teacher-center"
+                      value={newTeacher.centerId}
+                      onChange={e => setNewTeacher({ ...newTeacher, centerId: e.target.value })}
+                      required
+                    >
+                      <option value="">اختر المركز</option>
+                      {centers
+                        .filter(c => getSupervisorCenterIds().includes(c.id))
+                        .map(center => (
+                          <option key={center.id} value={center.id}>{center.name}</option>
+                        ))}
+                    </select>
+                  </div>
+                )}
+                <div className="form-row">
+                  <label htmlFor="teacher-name">الاسم الكامل *</label>
+                  <input
+                    id="teacher-name"
+                    type="text"
+                    value={newTeacher.name}
+                    onChange={e => setNewTeacher({ ...newTeacher, name: e.target.value })}
+                    required
+                    placeholder="أدخل اسم المعلم"
+                  />
+                </div>
+                <div className="form-row">
+                  <label htmlFor="teacher-email">البريد الإلكتروني *</label>
+                  <input
+                    id="teacher-email"
+                    type="email"
+                    value={newTeacher.email}
+                    onChange={e => setNewTeacher({ ...newTeacher, email: e.target.value })}
+                    required
+                    placeholder="أدخل البريد الإلكتروني"
+                  />
+                </div>
+                <div className="form-row">
+                  <label htmlFor="teacher-password">كلمة المرور المؤقتة *</label>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                      id="teacher-password"
+                      type="text"
+                      value={newTeacher.password}
+                      readOnly
+                      style={{ flex: 1 }}
+                    />
+                    <button 
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => setNewTeacher({ ...newTeacher, password: generateTemporaryPassword() })}
+                      title="توليد كلمة مرور جديدة"
+                    >
+                      🔄
+                    </button>
+                    <button 
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => navigator.clipboard.writeText(newTeacher.password)}
+                      title="نسخ كلمة المرور"
+                    >
+                      📋
+                    </button>
+                  </div>
+                </div>
+                <div className="form-row">
+                  <label htmlFor="teacher-phone">رقم الهاتف (واتساب) *</label>
+                  <input
+                    id="teacher-phone"
+                    type="tel"
+                    value={newTeacher.phone}
+                    onChange={e => setNewTeacher({ ...newTeacher, phone: e.target.value })}
+                    required
+                    placeholder="05xxxxxxxx"
+                  />
+                  <small style={{ color: '#666', marginTop: '4px' }}>
+                    📱 سيتم إرسال بيانات الدخول عبر واتساب إلى هذا الرقم
+                  </small>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowAddTeacherModal(false)}>
+                  إلغاء
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={submitting}>
+                  {submitting ? 'جاري الإنشاء...' : 'إنشاء حساب المعلم'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

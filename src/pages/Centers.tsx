@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, setDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, setDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, signOut, signInWithEmailAndPassword } from 'firebase/auth';
 import { db, auth } from '../firebase';
 import { useAuth, UserProfile, UserRole } from '../context/AuthContext';
@@ -20,12 +20,18 @@ interface CenterUser extends UserProfile {
   id?: string;
 }
 
+interface Supervisor extends UserProfile {
+  centerIds?: string[];
+}
+
 const Centers = () => {
   const { isAdmin, isSupervisor, getSupervisorCenterIds, canAccessCenter } = useAuth();
   const [centers, setCenters] = useState<Center[]>([]);
+  const [allSupervisors, setAllSupervisors] = useState<Supervisor[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddCenterModal, setShowAddCenterModal] = useState(false);
-  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [showAddSupervisorModal, setShowAddSupervisorModal] = useState(false);
+  const [showManageSupervisorsModal, setShowManageSupervisorsModal] = useState(false);
   const [selectedCenter, setSelectedCenter] = useState<Center | null>(null);
   const [centerUsers, setCenterUsers] = useState<CenterUser[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -37,28 +43,27 @@ const Centers = () => {
     phone: ''
   });
 
-  const [newUser, setNewUser] = useState({
+  const [newSupervisor, setNewSupervisor] = useState({
     name: '',
     email: '',
     password: generateTemporaryPassword(),
-    phone: '',
-    role: 'supervisor' as UserRole,
-    roles: [] as UserRole[] // صلاحيات متعددة
+    phone: ''
   });
 
   useEffect(() => {
     fetchCenters();
+    fetchAllSupervisors();
   }, []);
 
-  // توليد كلمة مرور جديدة عند فتح نموذج إضافة مستخدم
+  // توليد كلمة مرور جديدة عند فتح نموذج إضافة مشرف
   useEffect(() => {
-    if (showAddUserModal) {
-      setNewUser(prev => ({
+    if (showAddSupervisorModal) {
+      setNewSupervisor(prev => ({
         ...prev,
         password: generateTemporaryPassword()
       }));
     }
-  }, [showAddUserModal]);
+  }, [showAddSupervisorModal]);
 
   const fetchCenters = async () => {
     try {
@@ -80,6 +85,24 @@ const Centers = () => {
       console.error('Error fetching centers:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAllSupervisors = async () => {
+    try {
+      const usersQuery = query(collection(db, 'users'), where('role', '==', 'supervisor'));
+      const usersSnap = await getDocs(usersQuery);
+      const supervisorsList = usersSnap.docs.map(doc => {
+        const data = doc.data();
+        return {
+          ...data,
+          uid: data.uid || doc.id,
+          centerIds: data.centerIds || []
+        } as Supervisor;
+      });
+      setAllSupervisors(supervisorsList);
+    } catch (error) {
+      console.error('Error fetching supervisors:', error);
     }
   };
 
@@ -134,18 +157,43 @@ const Centers = () => {
     }
   };
 
-  const handleAddUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedCenter) return;
-    
-    // التحقق من اختيار صلاحية واحدة على الأقل
-    if (newUser.roles.length === 0) {
-      alert('يرجى اختيار صلاحية واحدة على الأقل');
-      return;
+  // ربط/إلغاء ربط مشرف بمركز
+  const handleToggleSupervisorCenter = async (supervisor: Supervisor, centerId: string) => {
+    try {
+      const userDoc = doc(db, 'users', supervisor.uid);
+      // دمج centerIds مع centerId القديم إن وجد
+      let currentCenterIds = supervisor.centerIds || [];
+      if (supervisor.centerId && !currentCenterIds.includes(supervisor.centerId)) {
+        currentCenterIds = [...currentCenterIds, supervisor.centerId];
+      }
+      
+      const isAssigned = currentCenterIds.includes(centerId);
+      
+      if (isAssigned) {
+        // إزالة المركز من قائمة المشرف
+        await updateDoc(userDoc, {
+          centerIds: arrayRemove(centerId)
+        });
+      } else {
+        // إضافة المركز لقائمة المشرف
+        await updateDoc(userDoc, {
+          centerIds: arrayUnion(centerId)
+        });
+      }
+      
+      // تحديث القائمة
+      fetchAllSupervisors();
+    } catch (error) {
+      console.error('Error updating supervisor centers:', error);
+      alert('حدث خطأ أثناء تحديث المشرف');
     }
+  };
+
+  const handleAddSupervisor = async (e: React.FormEvent) => {
+    e.preventDefault();
     
     // التحقق من وجود رقم هاتف
-    if (!newUser.phone || newUser.phone.trim() === '') {
+    if (!newSupervisor.phone || newSupervisor.phone.trim() === '') {
       alert('يرجى إدخال رقم الهاتف لإرسال بيانات الدخول عبر واتساب');
       return;
     }
@@ -160,30 +208,28 @@ const Centers = () => {
       // إنشاء حساب في Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(
         auth,
-        newUser.email,
-        newUser.password
+        newSupervisor.email,
+        newSupervisor.password
       );
 
       // حفظ بيانات المستخدم في Firestore
       const userProfile: UserProfile = {
         uid: userCredential.user.uid,
-        email: newUser.email,
-        name: newUser.name,
-        role: newUser.role,
-        roles: newUser.roles.length > 0 ? newUser.roles : undefined, // إضافة الصلاحيات المتعددة
-        phone: newUser.phone,
-        centerId: selectedCenter.id,
+        email: newSupervisor.email,
+        name: newSupervisor.name,
+        role: 'supervisor',
+        roles: ['supervisor'],
+        phone: newSupervisor.phone,
+        centerIds: selectedCenter ? [selectedCenter.id] : [], // المراكز التي يشرف عليها
         createdAt: new Date().toISOString(),
         active: true
       };
 
       // استخدام setDoc مع uid كـ document ID
       await setDoc(doc(db, 'users', userCredential.user.uid), userProfile);
-
-      const roleText = newUser.role === 'supervisor' ? 'مشرف' : 'معلم';
       
       // تنسيق رقم الهاتف (إزالة + أو 00 والمسافات)
-      let phoneNumber = newUser.phone.replace(/[\s+-]/g, '');
+      let phoneNumber = newSupervisor.phone.replace(/[\s+-]/g, '');
       // إذا كان الرقم يبدأ بـ 0، استبدله بكود الدولة (مملكة البحرين 973)
       if (phoneNumber.startsWith('0')) {
         phoneNumber = '973' + phoneNumber.substring(1);
@@ -194,12 +240,12 @@ const Centers = () => {
       }
       
       // إنشاء رسالة واتساب
-      const message = `مرحباً ${newUser.name}،
+      const message = `مرحباً ${newSupervisor.name}،
 
-تم إنشاء حسابك في نظام ${selectedCenter.name} بنجاح!
+تم إنشاء حسابك كمشرف في النظام بنجاح!
 
-البريد الإلكتروني: ${newUser.email}
-كلمة المرور المؤقتة: ${newUser.password}
+البريد الإلكتروني: ${newSupervisor.email}
+كلمة المرور المؤقتة: ${newSupervisor.password}
 
 ملاحظة مهمة:
 • يرجى تغيير كلمة المرور بعد تسجيل الدخول الأول
@@ -212,9 +258,6 @@ const Centers = () => {
       // فتح واتساب
       const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
       
-      console.log('رقم الهاتف:', phoneNumber);
-      console.log('رابط واتساب:', whatsappUrl);
-      
       window.open(whatsappUrl, '_blank');
 
       // تسجيل خروج المستخدم الجديد
@@ -222,27 +265,25 @@ const Centers = () => {
       
       // إعادة تسجيل دخول المستخدم الحالي (المطور)
       if (currentEmail) {
-        // ملاحظة: يجب على المطور أن يكون مسجل الدخول مسبقاً
-        // في حالة Production، يفضل استخدام Firebase Admin SDK
         const adminPassword = prompt('من فضلك أدخل كلمة مرورك لإعادة تسجيل الدخول:');
         if (adminPassword) {
           await signInWithEmailAndPassword(auth, currentEmail, adminPassword);
         }
       }
 
-      alert(`تم إنشاء حساب ${roleText} بنجاح!\n\nتم فتح واتساب لإرسال بيانات الدخول إلى ${newUser.name}`);
+      alert(`تم إنشاء حساب المشرف بنجاح!\n\nتم فتح واتساب لإرسال بيانات الدخول إلى ${newSupervisor.name}`);
 
-      setShowAddUserModal(false);
-      setNewUser({ name: '', email: '', password: generateTemporaryPassword(), phone: '', role: 'supervisor', roles: [] });
-      fetchCenterUsers(selectedCenter.id);
+      setShowAddSupervisorModal(false);
+      setNewSupervisor({ name: '', email: '', password: generateTemporaryPassword(), phone: '' });
+      fetchAllSupervisors();
     } catch (error: any) {
-      console.error('Error adding user:', error);
+      console.error('Error adding supervisor:', error);
       if (error.code === 'auth/email-already-in-use') {
         alert('البريد الإلكتروني مستخدم بالفعل');
       } else if (error.code === 'auth/wrong-password') {
         alert('كلمة المرور غير صحيحة. لم يتم إعادة تسجيل دخولك.');
       } else {
-        alert('حدث خطأ أثناء إنشاء المستخدم');
+        alert('حدث خطأ أثناء إنشاء المشرف');
       }
     } finally {
       setSubmitting(false);
@@ -271,33 +312,29 @@ const Centers = () => {
     }
   };
 
-  const handleToggleUserStatus = async (user: CenterUser) => {
+  const handleToggleSupervisorStatus = async (supervisor: Supervisor) => {
     try {
-      const userDoc = doc(db, 'users', user.uid);
-      await updateDoc(userDoc, { active: !user.active });
-      if (selectedCenter) {
-        fetchCenterUsers(selectedCenter.id);
-      }
+      const userDoc = doc(db, 'users', supervisor.uid);
+      await updateDoc(userDoc, { active: !supervisor.active });
+      fetchAllSupervisors();
     } catch (error) {
-      console.error('Error updating user:', error);
-      alert('حدث خطأ أثناء تحديث حالة المستخدم');
+      console.error('Error updating supervisor:', error);
+      alert('حدث خطأ أثناء تحديث حالة المشرف');
     }
   };
 
-  const handleRoleChange = (role: UserRole) => {
-    setNewUser(prev => {
-      const newRoles = prev.roles.includes(role)
-        ? prev.roles.filter(r => r !== role)
-        : [...prev.roles, role];
-      
-      // تعيين الصلاحية الرئيسية (أول صلاحية محددة أو الافتراضي)
-      const mainRole = newRoles.length > 0 ? newRoles[0] : 'supervisor';
-      
-      return {
-        ...prev,
-        role: mainRole,
-        roles: newRoles
-      };
+  // الحصول على مشرفي المركز المحدد (دعم centerIds الجديد و centerId القديم)
+  const getCenterSupervisors = (centerId: string) => {
+    return allSupervisors.filter(s => {
+      // التحقق من centerIds (الجديد)
+      if (s.centerIds && s.centerIds.includes(centerId)) {
+        return true;
+      }
+      // التحقق من centerId (القديم) للتوافقية
+      if (s.centerId === centerId) {
+        return true;
+      }
+      return false;
     });
   };
 
@@ -355,6 +392,9 @@ const Centers = () => {
                   </div>
                   <p className="center-address">📍 {center.address}</p>
                   <p className="center-phone">📞 {center.phone}</p>
+                  <p className="center-supervisors">
+                    👨‍💼 {getCenterSupervisors(center.id).length} مشرف
+                  </p>
                 </div>
               ))}
             </div>
@@ -366,64 +406,53 @@ const Centers = () => {
           <div className="center-details">
             <div className="center-details-header">
               <h2>{selectedCenter.name}</h2>
-              <button 
-                className="btn btn-success" 
-                onClick={() => setShowAddUserModal(true)}
-              >
-                ➕ إضافة مشرف/معلم
-              </button>
-            </div>
-
-            <div className="users-section">
-              <h3>المشرفون</h3>
-              <div className="users-list">
-                {centerUsers.filter(u => u.role === 'supervisor').length === 0 ? (
-                  <p className="no-data">لا يوجد مشرفون</p>
-                ) : (
-                  centerUsers.filter(u => u.role === 'supervisor').map(user => (
-                    <div key={user.uid} className="user-card">
-                      <div className="user-info">
-                        <span className="user-name">{user.name}</span>
-                        <span className="user-email">{user.email}</span>
-                      </div>
-                      <div className="user-actions">
-                        <span className={`status-badge ${user.active ? 'active' : 'inactive'}`}>
-                          {user.active ? 'نشط' : 'معطل'}
-                        </span>
-                        <button 
-                          className="btn btn-sm"
-                          onClick={() => handleToggleUserStatus(user)}
-                        >
-                          {user.active ? 'إيقاف' : 'تفعيل'}
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
+              <div className="header-actions">
+                <button 
+                  className="btn btn-primary" 
+                  onClick={() => setShowManageSupervisorsModal(true)}
+                >
+                  👨‍💼 إدارة المشرفين
+                </button>
+                <button 
+                  className="btn btn-success" 
+                  onClick={() => setShowAddSupervisorModal(true)}
+                >
+                  ➕ مشرف جديد
+                </button>
               </div>
             </div>
 
             <div className="users-section">
-              <h3>المعلمون</h3>
+              <h3>المشرفون على هذا المركز ({getCenterSupervisors(selectedCenter.id).length})</h3>
               <div className="users-list">
-                {centerUsers.filter(u => u.role === 'teacher').length === 0 ? (
-                  <p className="no-data">لا يوجد معلمون</p>
+                {getCenterSupervisors(selectedCenter.id).length === 0 ? (
+                  <p className="no-data">لا يوجد مشرفون مرتبطون بهذا المركز</p>
                 ) : (
-                  centerUsers.filter(u => u.role === 'teacher').map(user => (
-                    <div key={user.uid} className="user-card">
+                  getCenterSupervisors(selectedCenter.id).map(supervisor => (
+                    <div key={supervisor.uid} className="user-card">
                       <div className="user-info">
-                        <span className="user-name">{user.name}</span>
-                        <span className="user-email">{user.email}</span>
+                        <span className="user-name">{supervisor.name}</span>
+                        <span className="user-email">{supervisor.email}</span>
+                        <span className="user-centers">
+                          📍 {supervisor.centerIds?.length || 0} مركز
+                        </span>
                       </div>
                       <div className="user-actions">
-                        <span className={`status-badge ${user.active ? 'active' : 'inactive'}`}>
-                          {user.active ? 'نشط' : 'معطل'}
+                        <span className={`status-badge ${supervisor.active ? 'active' : 'inactive'}`}>
+                          {supervisor.active ? 'نشط' : 'معطل'}
                         </span>
                         <button 
-                          className="btn btn-sm"
-                          onClick={() => handleToggleUserStatus(user)}
+                          className="btn btn-sm btn-danger"
+                          onClick={() => handleToggleSupervisorCenter(supervisor, selectedCenter.id)}
+                          title="إزالة من هذا المركز"
                         >
-                          {user.active ? 'إيقاف' : 'تفعيل'}
+                          إزالة
+                        </button>
+                        <button 
+                          className="btn btn-sm"
+                          onClick={() => handleToggleSupervisorStatus(supervisor)}
+                        >
+                          {supervisor.active ? 'إيقاف' : 'تفعيل'}
                         </button>
                       </div>
                     </div>
@@ -504,52 +533,81 @@ const Centers = () => {
         </div>
       )}
 
-      {/* Modal إضافة مستخدم */}
-      {showAddUserModal && (
-        <div className="modal-overlay" onClick={() => setShowAddUserModal(false)}>
+      {/* Modal إدارة المشرفين */}
+      {showManageSupervisorsModal && selectedCenter && (
+        <div className="modal-overlay" onClick={() => setShowManageSupervisorsModal(false)}>
+          <div className="modal-content modal-large" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>إدارة مشرفي {selectedCenter.name}</h2>
+              <button className="close-btn" onClick={() => setShowManageSupervisorsModal(false)}>&times;</button>
+            </div>
+            <div className="modal-body">
+              <p className="modal-description">
+                اختر المشرفين الذين سيكون لهم صلاحية الوصول لهذا المركز. يمكن للمشرف الواحد إدارة أكثر من مركز.
+              </p>
+              
+              {allSupervisors.length === 0 ? (
+                <p className="no-data">لا يوجد مشرفون في النظام. قم بإضافة مشرف جديد أولاً.</p>
+              ) : (
+                <div className="supervisors-checklist">
+                  {allSupervisors.map(supervisor => {
+                    // التحقق من الربط باستخدام centerIds أو centerId القديم
+                    const isAssigned = supervisor.centerIds?.includes(selectedCenter.id) || supervisor.centerId === selectedCenter.id;
+                    // حساب عدد المراكز
+                    let centersCount = supervisor.centerIds?.length || 0;
+                    if (supervisor.centerId && !supervisor.centerIds?.includes(supervisor.centerId)) {
+                      centersCount += 1;
+                    }
+                    return (
+                      <div key={supervisor.uid} className={`supervisor-check-item ${isAssigned ? 'assigned' : ''}`}>
+                        <label className="checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={isAssigned}
+                            onChange={() => handleToggleSupervisorCenter(supervisor, selectedCenter.id)}
+                          />
+                          <div className="supervisor-check-info">
+                            <span className="supervisor-name">{supervisor.name}</span>
+                            <span className="supervisor-email">{supervisor.email}</span>
+                            <span className="supervisor-centers-count">
+                              يشرف على {centersCount} مركز
+                            </span>
+                          </div>
+                        </label>
+                        <span className={`status-indicator ${supervisor.active ? 'active' : 'inactive'}`}>
+                          {supervisor.active ? '✓ نشط' : '✗ معطل'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-primary" onClick={() => setShowManageSupervisorsModal(false)}>
+                تم
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal إضافة مشرف جديد */}
+      {showAddSupervisorModal && (
+        <div className="modal-overlay" onClick={() => setShowAddSupervisorModal(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>إضافة مشرف/معلم - {selectedCenter?.name}</h2>
-              <button className="close-btn" onClick={() => setShowAddUserModal(false)}>&times;</button>
+              <h2>إضافة مشرف جديد</h2>
+              <button className="close-btn" onClick={() => setShowAddSupervisorModal(false)}>&times;</button>
             </div>
-            <form onSubmit={handleAddUser}>
+            <form onSubmit={handleAddSupervisor}>
               <div className="modal-body">
-                <div className="form-group">
-                  <label>نوع الحساب (يمكنك اختيار أكثر من صلاحية) *</label>
-                  <div className="roles-checkboxes">
-                    <label className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={newUser.roles.includes('supervisor')}
-                        onChange={() => handleRoleChange('supervisor')}
-                      />
-                      <span>👨‍💼 مشرف - يمكنه إدارة المعلمين والطلاب والحلقات</span>
-                    </label>
-                    <label className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={newUser.roles.includes('teacher')}
-                        onChange={() => handleRoleChange('teacher')}
-                      />
-                      <span>👨‍🏫 معلم - يمكنه تسجيل الحضور وتحديث التحصيل</span>
-                    </label>
-                  </div>
-                  {newUser.roles.length === 0 && (
-                    <small className="form-hint error">⚠️ يرجى اختيار صلاحية واحدة على الأقل</small>
-                  )}
-                  {newUser.roles.length > 0 && (
-                    <small className="form-hint success">
-                      الصلاحية الرئيسية: {newUser.role === 'supervisor' ? '👨‍💼 مشرف' : '👨‍🏫 معلم'}
-                      {newUser.roles.length > 1 && ' | يمكن التبديل بين الصلاحيات من الـ Sidebar'}
-                    </small>
-                  )}
-                </div>
                 <div className="form-group">
                   <label>الاسم الكامل *</label>
                   <input
                     type="text"
-                    value={newUser.name}
-                    onChange={e => setNewUser({ ...newUser, name: e.target.value })}
+                    value={newSupervisor.name}
+                    onChange={e => setNewSupervisor({ ...newSupervisor, name: e.target.value })}
                     required
                   />
                 </div>
@@ -557,8 +615,8 @@ const Centers = () => {
                   <label>البريد الإلكتروني *</label>
                   <input
                     type="email"
-                    value={newUser.email}
-                    onChange={e => setNewUser({ ...newUser, email: e.target.value })}
+                    value={newSupervisor.email}
+                    onChange={e => setNewSupervisor({ ...newSupervisor, email: e.target.value })}
                     required
                   />
                 </div>
@@ -567,8 +625,8 @@ const Centers = () => {
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <input
                       type="text"
-                      value={newUser.password}
-                      onChange={e => setNewUser({ ...newUser, password: e.target.value })}
+                      value={newSupervisor.password}
+                      onChange={e => setNewSupervisor({ ...newSupervisor, password: e.target.value })}
                       required
                       minLength={6}
                       readOnly
@@ -577,7 +635,7 @@ const Centers = () => {
                     <button 
                       type="button"
                       className="btn btn-secondary"
-                      onClick={() => setNewUser({ ...newUser, password: generateTemporaryPassword() })}
+                      onClick={() => setNewSupervisor({ ...newSupervisor, password: generateTemporaryPassword() })}
                       title="توليد كلمة مرور جديدة"
                     >
                       🔄
@@ -585,22 +643,22 @@ const Centers = () => {
                     <button 
                       type="button"
                       className="btn btn-secondary"
-                      onClick={() => navigator.clipboard.writeText(newUser.password)}
+                      onClick={() => navigator.clipboard.writeText(newSupervisor.password)}
                       title="نسخ كلمة المرور"
                     >
                       📋
                     </button>
                   </div>
                   <small className="form-hint success">
-                    💡 كلمة المرور المؤقتة يمكن للمستخدم تغييرها من صفحة الإعدادات
+                    💡 كلمة المرور المؤقتة يمكن للمشرف تغييرها من صفحة الإعدادات
                   </small>
                 </div>
                 <div className="form-group">
                   <label>رقم الهاتف (واتساب) *</label>
                   <input
                     type="tel"
-                    value={newUser.phone}
-                    onChange={e => setNewUser({ ...newUser, phone: e.target.value })}
+                    value={newSupervisor.phone}
+                    onChange={e => setNewSupervisor({ ...newSupervisor, phone: e.target.value })}
                     required
                     placeholder="05xxxxxxxx"
                   />
@@ -608,13 +666,25 @@ const Centers = () => {
                     📱 سيتم إرسال بيانات الدخول عبر واتساب إلى هذا الرقم
                   </small>
                 </div>
+                {selectedCenter && (
+                  <div className="form-group">
+                    <label className="checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={true}
+                        disabled
+                      />
+                      <span>سيتم ربط المشرف بمركز: <strong>{selectedCenter.name}</strong></span>
+                    </label>
+                  </div>
+                )}
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowAddUserModal(false)}>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowAddSupervisorModal(false)}>
                   إلغاء
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={submitting}>
-                  {submitting ? 'جاري الإنشاء...' : 'إنشاء الحساب'}
+                  {submitting ? 'جاري الإنشاء...' : 'إنشاء حساب المشرف'}
                 </button>
               </div>
             </form>

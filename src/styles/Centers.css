@@ -455,6 +455,135 @@
   font-weight: bold;
 }
 
+/* Center Supervisors Count */
+.center-supervisors {
+  margin: 4px 0;
+  font-size: 0.85rem;
+  color: #4f46e5;
+  font-weight: 500;
+}
+
+/* Header Actions */
+.header-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* User Centers Count */
+.user-centers {
+  font-size: 0.8rem;
+  color: #4f46e5;
+  background: #eef2ff;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+/* Modal Large */
+.modal-large {
+  max-width: 600px;
+}
+
+.modal-description {
+  color: #666;
+  font-size: 0.95rem;
+  margin-bottom: 20px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border-right: 3px solid #4f46e5;
+}
+
+/* Supervisors Checklist */
+.supervisors-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.supervisor-check-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f8fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 16px;
+  transition: all 0.2s ease;
+}
+
+.supervisor-check-item.assigned {
+  background: #eef2ff;
+  border-color: #4f46e5;
+}
+
+.supervisor-check-item .checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  cursor: pointer;
+  margin: 0;
+  padding: 0;
+}
+
+.supervisor-check-item .checkbox-label input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.supervisor-check-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.supervisor-name {
+  font-weight: 600;
+  color: #333;
+  font-size: 1rem;
+}
+
+.supervisor-email {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.supervisor-centers-count {
+  font-size: 0.8rem;
+  color: #4f46e5;
+}
+
+.status-indicator {
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+.status-indicator.active {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-indicator.inactive {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+/* Danger Button */
+.btn-danger {
+  background: #ef4444;
+  color: white;
+}
+
+.btn-danger:hover {
+  background: #dc2626;
+}
+
 /* No Data */
 .no-data {
   text-align: center;
@@ -489,6 +618,15 @@
     gap: 12px;
   }
 
+  .header-actions {
+    width: 100%;
+  }
+
+  .header-actions .btn {
+    flex: 1;
+    justify-content: center;
+  }
+
   .user-card {
     flex-direction: column;
     align-items: flex-start;
@@ -513,6 +651,12 @@
   .modal-footer .btn {
     width: 100%;
     justify-content: center;
+  }
+
+  .supervisor-check-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
   }
 }
 

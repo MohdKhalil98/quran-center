@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
-import { collection, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
+import { collection, getDocs, query, where, orderBy, limit, doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
+
+interface Center {
+  id: string;
+  name: string;
+}
 
 interface DashboardStats {
   totalStudents: number;
@@ -34,7 +39,9 @@ interface LowAttendanceAlert {
 }
 
 const Dashboard = () => {
-  const { userProfile, isTeacher, isAdmin, isSupervisor } = useAuth();
+  const { userProfile, isTeacher, isAdmin, isSupervisor, getSupervisorCenterIds } = useAuth();
+  const [supervisorCenters, setSupervisorCenters] = useState<Center[]>([]);
+  const [selectedCenterId, setSelectedCenterId] = useState<string>('');
   const [stats, setStats] = useState<DashboardStats>({
     totalStudents: 0,
     totalUsers: 0,
@@ -58,6 +65,35 @@ const Dashboard = () => {
 
   const [lowAttendanceAlerts, setLowAttendanceAlerts] = useState<LowAttendanceAlert[]>([]);
   const [teacherGroups, setTeacherGroups] = useState<string[]>([]);
+
+  // جلب مراكز المشرف
+  const fetchSupervisorCenters = async () => {
+    if (!isSupervisor) return;
+    
+    const centerIds = getSupervisorCenterIds();
+    if (centerIds.length === 0) return;
+    
+    try {
+      const centersData: Center[] = [];
+      for (const centerId of centerIds) {
+        const centerDoc = await getDoc(doc(db, 'centers', centerId));
+        if (centerDoc.exists()) {
+          centersData.push({
+            id: centerDoc.id,
+            name: centerDoc.data().name
+          });
+        }
+      }
+      setSupervisorCenters(centersData);
+      
+      // تعيين المركز الأول كافتراضي
+      if (centersData.length > 0 && !selectedCenterId) {
+        setSelectedCenterId(centersData[0].id);
+      }
+    } catch (error) {
+      console.error('Error fetching supervisor centers:', error);
+    }
+  };
 
   const fetchDashboard = async () => {
     try {
@@ -431,6 +467,7 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
+    fetchSupervisorCenters();
     fetchDashboard();
   }, []);
 
@@ -468,6 +505,45 @@ const Dashboard = () => {
         <h1>لوحة التحكم</h1>
         <p>{isTeacher ? `مرحباً ${userProfile?.name || 'بك'}، هذه لوحة التحكم الخاصة بك.` : 'مرحباً بك في مركز متابعة تحفيظ القرآن.'}</p>
       </header>
+
+      {/* اختيار المركز للمشرفين */}
+      {isSupervisor && supervisorCenters.length > 1 && (
+        <div className="center-selector-card" style={{
+          background: '#eef2ff',
+          border: '2px solid #4f46e5',
+          borderRadius: '12px',
+          padding: '16px 20px',
+          marginBottom: '24px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '16px',
+          flexWrap: 'wrap'
+        }}>
+          <span style={{ fontWeight: '600', color: '#4f46e5' }}>🏛️ المركز الحالي:</span>
+          <select
+            value={selectedCenterId}
+            onChange={(e) => setSelectedCenterId(e.target.value)}
+            style={{
+              padding: '10px 20px',
+              borderRadius: '8px',
+              border: '2px solid #4f46e5',
+              fontSize: '1rem',
+              fontWeight: '500',
+              background: 'white',
+              color: '#333',
+              cursor: 'pointer',
+              minWidth: '200px'
+            }}
+          >
+            {supervisorCenters.map(center => (
+              <option key={center.id} value={center.id}>{center.name}</option>
+            ))}
+          </select>
+          <span style={{ color: '#666', fontSize: '0.9rem' }}>
+            (أنت مشرف على {supervisorCenters.length} مراكز)
+          </span>
+        </div>
+      )}
 
       {stats.error && (
         <div style={{ color: 'red', padding: '10px', marginBottom: '20px' }}>{stats.error}</div>

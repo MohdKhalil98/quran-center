@@ -16,7 +16,6 @@ const navItems: NavItem[] = [
   { path: '/dashboard', label: 'لوحة التحكم', icon: '📊', roles: ['admin', 'supervisor', 'teacher'] },
   // صفحات المطور فقط
   { path: '/centers', label: 'مراكز القرآن', icon: '🏫', roles: ['admin'] },
-  { path: '/supervisor-centers', label: 'ربط المشرفين بالمراكز', icon: '🗂️', roles: ['admin'] },
   { path: '/batch-import', label: 'استيراد جماعي', icon: '📦', roles: ['admin'] },
   { path: '/teachers', label: 'المعلمون', icon: '👨‍🏫', roles: ['admin'] },
   { path: '/students', label: 'الطلاب', icon: '👨‍🎓', roles: ['admin'] },

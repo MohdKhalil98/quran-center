@@ -13,9 +13,16 @@ interface Track {
   centerId?: string;
 }
 
+interface Center {
+  id: string;
+  name: string;
+}
+
 const Tracks: React.FC = () => {
-  const { userProfile } = useAuth();
+  const { userProfile, getSupervisorCenterIds } = useAuth();
   const [tracks, setTracks] = useState<Track[]>([]);
+  const [centers, setCenters] = useState<Center[]>([]);
+  const [selectedCenterId, setSelectedCenterId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingTrack, setEditingTrack] = useState<Track | null>(null);
@@ -28,62 +35,83 @@ const Tracks: React.FC = () => {
   });
 
   useEffect(() => {
-    fetchTracks();
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        
+        // الحصول على مراكز المشرف
+        const supervisorCenterIds = getSupervisorCenterIds();
+        const isSupervisorWithMultipleCenters = userProfile?.role === 'supervisor' && supervisorCenterIds.length > 0;
+        
+        // جلب بيانات المراكز للمشرف
+        if (isSupervisorWithMultipleCenters) {
+          const centersList: Center[] = [];
+          for (const centerId of supervisorCenterIds) {
+            const centerDoc = await getDocs(query(collection(db, 'centers'), where('__name__', '==', centerId)));
+            if (!centerDoc.empty) {
+              const data = centerDoc.docs[0].data();
+              centersList.push({
+                id: centerId,
+                name: data.name || centerId
+              });
+            } else {
+              centersList.push({
+                id: centerId,
+                name: centerId
+              });
+            }
+          }
+          setCenters(centersList);
+          
+          // تحديد المركز الافتراضي
+          if (!selectedCenterId && centersList.length > 0) {
+            setSelectedCenterId(centersList[0].id);
+          }
+        }
+        
+        const activeCenterId = isSupervisorWithMultipleCenters 
+          ? (selectedCenterId || supervisorCenterIds[0])
+          : userProfile?.centerId;
+        
+        let tracksData: Track[] = [];
+        
+        // إذا كان المستخدم مشرف، جلب المساقات الخاصة بالمركز المحدد
+        if (userProfile?.role === 'supervisor' && activeCenterId) {
+          const tracksQuery = query(
+            collection(db, 'tracks'),
+            where('centerId', '==', activeCenterId)
+          );
+          const tracksSnapshot = await getDocs(tracksQuery);
+          tracksData = tracksSnapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          })) as Track[];
+        } else {
+          // للمطور: جلب جميع المساقات
+          const tracksSnapshot = await getDocs(collection(db, 'tracks'));
+          tracksData = tracksSnapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          })) as Track[];
+        }
+        
+        // ترتيب المساقات حسب الاسم
+        tracksData.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+        setTracks(tracksData);
+      } catch (error) {
+        console.error('Error fetching tracks:', error);
+        alert('حدث خطأ في جلب المساقات');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userProfile?.centerId, userProfile?.centerIds]);
+  }, [userProfile?.centerId, userProfile?.centerIds, selectedCenterId]);
 
   const fetchTracks = async () => {
-    try {
-      setLoading(true);
-      let tracksData: Track[] = [];
-      
-      // إذا كان المستخدم مشرف، جلب المساقات الخاصة بمراكزه فقط (دعم متعدد)
-      if (userProfile?.role === 'supervisor') {
-        const centerIds = (userProfile.centerIds && userProfile.centerIds.length > 0)
-          ? userProfile.centerIds
-          : userProfile.centerId
-            ? [userProfile.centerId]
-            : [];
-        
-        if (centerIds.length > 0) {
-          // Firestore in query max 10 عناصر
-          const batches: string[][] = [];
-          for (let i = 0; i < centerIds.length; i += 10) {
-            batches.push(centerIds.slice(i, i + 10));
-          }
-
-          const results: Track[] = [];
-          for (const batch of batches) {
-            const tracksQuery = query(
-              collection(db, 'tracks'),
-              where('centerId', 'in', batch)
-            );
-            const tracksSnapshot = await getDocs(tracksQuery);
-            results.push(...tracksSnapshot.docs.map((doc) => ({
-              id: doc.id,
-              ...doc.data(),
-            })) as Track[]);
-          }
-          tracksData = results;
-        }
-      } else {
-        // للمطور: جلب جميع المساقات
-        const tracksSnapshot = await getDocs(collection(db, 'tracks'));
-        tracksData = tracksSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Track[];
-      }
-      
-      // ترتيب المساقات حسب الاسم
-      tracksData.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
-      setTracks(tracksData);
-    } catch (error) {
-      console.error('Error fetching tracks:', error);
-      alert('حدث خطأ في جلب المساقات');
-    } finally {
-      setLoading(false);
-    }
+    // This function is kept for compatibility but data is now fetched in useEffect
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -124,9 +152,15 @@ const Tracks: React.FC = () => {
           createdAt: new Date(),
         };
         
-        // إضافة centerId إذا كان المستخدم مشرف
-        if (userProfile?.centerId) {
-          trackData.centerId = userProfile.centerId;
+        // إضافة centerId - استخدام المركز المحدد للمشرف متعدد المراكز
+        const supervisorCenterIds = getSupervisorCenterIds();
+        const isSupervisorWithMultipleCenters = userProfile?.role === 'supervisor' && supervisorCenterIds.length > 0;
+        const activeCenterId = isSupervisorWithMultipleCenters 
+          ? (selectedCenterId || supervisorCenterIds[0])
+          : userProfile?.centerId;
+        
+        if (activeCenterId) {
+          trackData.centerId = activeCenterId;
         }
         
         await addDoc(collection(db, 'tracks'), trackData);
@@ -189,6 +223,25 @@ const Tracks: React.FC = () => {
             + إضافة مساق جديد
           </button>
         </div>
+        
+        {/* اختيار المركز للمشرف متعدد المراكز */}
+        {userProfile?.role === 'supervisor' && centers.length > 1 && (
+          <div className="center-selector" style={{ marginBottom: '1rem', padding: '1rem', backgroundColor: '#f5f5f5', borderRadius: '8px' }}>
+            <label htmlFor="centerSelect" style={{ marginLeft: '0.5rem', fontWeight: 'bold' }}>المركز:</label>
+            <select
+              id="centerSelect"
+              value={selectedCenterId}
+              onChange={(e) => setSelectedCenterId(e.target.value)}
+              style={{ padding: '0.5rem', borderRadius: '4px', minWidth: '200px', border: '1px solid #ddd' }}
+            >
+              {centers.map((center) => (
+                <option key={center.id} value={center.id}>
+                  {center.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {loading ? (
           <div className="loading-container">

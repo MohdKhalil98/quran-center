@@ -6,6 +6,7 @@ import ConfirmModal from '../components/ConfirmModal';
 import MessageBox from '../components/MessageBox';
 import { useAuth } from '../context/AuthContext';
 import quranCurriculum, { QuranJuz, QuranSurah } from '../data/quranCurriculum';
+import { arabicReadingCurriculum, ArabicLevel, ArabicLesson, ARABIC_READING_POINTS, getNextLesson as getNextArabicLesson, getNextLevel as getNextArabicLevel } from '../data/arabicReadingCurriculum';
 
 // Challenge types for the 3-challenge system
 type ChallengeType = 'memorization' | 'near_review' | 'far_review';
@@ -141,6 +142,14 @@ const StudentAchievements = () => {
   // Curriculum from local data (quranCurriculum.ts)
   const [curriculumLevels] = useState<CurriculumLevel[]>(getCurriculumLevels());
   
+  // Track type for the selected group
+  const [currentTrackType, setCurrentTrackType] = useState<'quran' | 'arabic_reading'>('quran');
+  const [tracks, setTracks] = useState<{id: string; name: string}[]>([]);
+  
+  // Arabic Reading curriculum state
+  const [arabicLevel, setArabicLevel] = useState<ArabicLevel | null>(null);
+  const [arabicLesson, setArabicLesson] = useState<ArabicLesson | null>(null);
+  
   // Teacher groups
   const [teacherGroups, setTeacherGroups] = useState<any[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string>('');
@@ -176,6 +185,23 @@ const StudentAchievements = () => {
   };
 
   // Curriculum is now loaded from local quranCurriculum.ts - no Firebase fetch needed
+
+  // Fetch tracks (المساقات) on mount
+  useEffect(() => {
+    const fetchTracks = async () => {
+      try {
+        const tracksSnapshot = await getDocs(collection(db, 'tracks'));
+        const tracksList = tracksSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          name: doc.data().name
+        }));
+        setTracks(tracksList);
+      } catch (error) {
+        console.error('Error fetching tracks:', error);
+      }
+    };
+    fetchTracks();
+  }, []);
 
   // Fetch teacher's groups
   useEffect(() => {
@@ -213,6 +239,22 @@ const StudentAchievements = () => {
         return;
       }
 
+      // تحديد نوع المساق للحلقة المختارة
+      const selectedGroup = teacherGroups.find(g => g.id === selectedGroupId);
+      if (selectedGroup && selectedGroup.trackId && tracks.length > 0) {
+        const track = tracks.find(t => t.id === selectedGroup.trackId);
+        const trackName = track?.name || '';
+        
+        const isArabicReading = trackName.includes('تأسيس') || 
+                               trackName.includes('قراءة') ||
+                               trackName.includes('عربية') ||
+                               trackName.toLowerCase().includes('arabic') || 
+                               trackName.toLowerCase().includes('reading');
+        
+        setCurrentTrackType(isArabicReading ? 'arabic_reading' : 'quran');
+        console.log('Auto-detected track:', trackName, 'Type:', isArabicReading ? 'arabic_reading' : 'quran');
+      }
+
       try {
         const studentsQuery = query(
           collection(db, 'users'),
@@ -238,7 +280,7 @@ const StudentAchievements = () => {
     };
 
     fetchGroupStudents();
-  }, [isTeacher, selectedGroupId]);
+  }, [isTeacher, selectedGroupId, tracks, teacherGroups]);
 
   // Fetch achievements and all students
   useEffect(() => {
@@ -327,6 +369,24 @@ const StudentAchievements = () => {
     const groupId = e.target.value;
     setSelectedGroupId(groupId);
     resetForm();
+    
+    // تحديد نوع المساق للحلقة المختارة
+    const selectedGroup = teacherGroups.find(g => g.id === groupId);
+    if (selectedGroup && selectedGroup.trackId) {
+      const track = tracks.find(t => t.id === selectedGroup.trackId);
+      const trackName = track?.name || '';
+      
+      const isArabicReading = trackName.includes('تأسيس') || 
+                             trackName.includes('قراءة') ||
+                             trackName.includes('عربية') ||
+                             trackName.toLowerCase().includes('arabic') || 
+                             trackName.toLowerCase().includes('reading');
+      
+      setCurrentTrackType(isArabicReading ? 'arabic_reading' : 'quran');
+      console.log('Group track:', trackName, 'Type:', isArabicReading ? 'arabic_reading' : 'quran');
+    } else {
+      setCurrentTrackType('quran'); // الافتراضي
+    }
   };
 
   // Handle student selection
@@ -336,6 +396,8 @@ const StudentAchievements = () => {
       setSelectedStudent(null);
       setStudentLevel(null);
       setStudentStage(null);
+      setArabicLevel(null);
+      setArabicLesson(null);
       setCompletedChallenges(new Set());
       return;
     }
@@ -364,41 +426,93 @@ const StudentAchievements = () => {
       
       setSelectedStudent(freshStudent || null);
       
-      if (freshStudent && curriculumLevels.length > 0) {
-        // Find student's current level and stage from Firebase curriculum
-        const level = curriculumLevels.find(l => l.id === freshStudent.levelId) || curriculumLevels[0];
-        setStudentLevel(level);
-        
-        let currentStage: CurriculumStage | null = null;
-        if (level && level.stages.length > 0) {
-          currentStage = level.stages.find(s => s.id === freshStudent.stageId) || level.stages[0];
-          setStudentStage(currentStage);
-        } else {
-          setStudentStage(null);
-        }
-        
-        // Fetch completed challenges for this student in current stage
-        if (currentStage) {
-          const achievementsQuery = query(
-            collection(db, 'student_achievements'),
-            where('studentId', '==', studentId),
-            where('stageId', '==', currentStage.id),
-            where('challengePassed', '==', true)
-          );
-          const snapshot = await getDocs(achievementsQuery);
+      // تحديد نوع المساق من بيانات الطالب أو من الحلقة
+      let trackType = currentTrackType;
+      
+      // أولاً: التحقق من trackType المخزن في بيانات الطالب
+      if (freshStudent?.trackType) {
+        trackType = freshStudent.trackType;
+        setCurrentTrackType(trackType);
+      } 
+      // ثانياً: التحقق من الحلقة إذا لم يكن موجوداً في الطالب
+      else if (freshStudent?.groupId) {
+        const studentGroup = teacherGroups.find(g => g.id === freshStudent.groupId) || 
+                            { trackId: '' };
+        if (studentGroup.trackId && tracks.length > 0) {
+          const track = tracks.find(t => t.id === studentGroup.trackId);
+          const trackName = track?.name || '';
           
-          const completed = new Set<ChallengeType>();
-          snapshot.forEach(docSnap => {
-            const data = docSnap.data();
-            if (data.challengeType) {
-              completed.add(data.challengeType as ChallengeType);
-            }
-          });
-          setCompletedChallenges(completed);
+          const isArabicReading = trackName.includes('تأسيس') || 
+                                 trackName.includes('قراءة') ||
+                                 trackName.includes('عربية') ||
+                                 trackName.toLowerCase().includes('arabic') || 
+                                 trackName.toLowerCase().includes('reading');
+          
+          trackType = isArabicReading ? 'arabic_reading' : 'quran';
+          setCurrentTrackType(trackType);
+        }
+      }
+      
+      console.log('Student track type:', trackType, 'Student:', freshStudent?.name);
+      
+      // تحميل المنهج بناءً على نوع المساق
+      if (trackType === 'arabic_reading') {
+        // منهج القراءة العربية
+        if (freshStudent) {
+          const level = arabicReadingCurriculum.find(l => l.id === freshStudent.levelId) || arabicReadingCurriculum[0];
+          setArabicLevel(level);
+          
+          const lesson = level.lessons.find(l => l.id === freshStudent.stageId) || level.lessons[0];
+          setArabicLesson(lesson);
+          
+          // إخفاء حالة القرآن
+          setStudentLevel(null);
+          setStudentStage(null);
+          
+          console.log('Arabic Reading - Level:', level.name, 'Lesson:', lesson.name);
         }
       } else {
-        setStudentLevel(null);
-        setStudentStage(null);
+        // منهج حفظ القرآن
+        if (freshStudent && curriculumLevels.length > 0) {
+          // Find student's current level and stage from Firebase curriculum
+          const level = curriculumLevels.find(l => l.id === freshStudent.levelId) || curriculumLevels[0];
+          setStudentLevel(level);
+          
+          let currentStage: CurriculumStage | null = null;
+          if (level && level.stages.length > 0) {
+            currentStage = level.stages.find(s => s.id === freshStudent.stageId) || level.stages[0];
+            setStudentStage(currentStage);
+          } else {
+            setStudentStage(null);
+          }
+          
+          // إخفاء حالة القراءة العربية
+          setArabicLevel(null);
+          setArabicLesson(null);
+          
+          // Fetch completed challenges for this student in current stage
+          if (currentStage) {
+            const achievementsQuery = query(
+              collection(db, 'student_achievements'),
+              where('studentId', '==', studentId),
+              where('stageId', '==', currentStage.id),
+              where('challengePassed', '==', true)
+            );
+            const snapshot = await getDocs(achievementsQuery);
+            
+            const completed = new Set<ChallengeType>();
+            snapshot.forEach(docSnap => {
+              const data = docSnap.data();
+              if (data.challengeType) {
+                completed.add(data.challengeType as ChallengeType);
+              }
+            });
+            setCompletedChallenges(completed);
+          }
+        } else {
+          setStudentLevel(null);
+          setStudentStage(null);
+        }
       }
     } catch (error) {
       console.error('Error fetching student data:', error);
@@ -922,10 +1036,100 @@ const StudentAchievements = () => {
     }
   };
 
+  // دالة تسجيل إتمام درس القراءة العربية
+  const handleRecordArabicLesson = async () => {
+    if (!selectedStudent || !arabicLevel || !arabicLesson) {
+      showMessage('error', 'خطأ', 'يرجى اختيار الطالب');
+      return;
+    }
+
+    try {
+      // حساب النقاط
+      let points = ARABIC_READING_POINTS.LESSON_COMPLETION;
+      if (challengeRating === 5) {
+        points += ARABIC_READING_POINTS.PERFECT_RATING;
+      }
+
+      // تسجيل الإنجاز
+      await addDoc(collection(db, 'student_achievements'), {
+        studentId: selectedStudent.id,
+        studentName: selectedStudent.name,
+        trackType: 'arabic_reading',
+        levelId: arabicLevel.id,
+        levelName: arabicLevel.name,
+        stageId: arabicLesson.id,
+        stageName: arabicLesson.name,
+        challengeType: 'lesson_completion',
+        challengePassed: true,
+        rating: challengeRating,
+        notes: challengeNotes,
+        points: points,
+        date: recordDate,
+        recordedBy: userProfile?.uid,
+        recordedAt: new Date().toISOString()
+      });
+
+      // الحصول على الدرس التالي
+      const { lesson: nextLesson, levelCompleted } = getNextArabicLesson(arabicLevel.id, arabicLesson.id);
+
+      if (levelCompleted) {
+        // انتهى المستوى - التحقق من وجود مستوى تالي
+        const nextLevel = getNextArabicLevel(arabicLevel.id);
+        
+        if (nextLevel) {
+          // الانتقال للمستوى التالي
+          await updateDoc(doc(db, 'users', selectedStudent.id), {
+            levelId: nextLevel.id,
+            levelName: nextLevel.name,
+            stageId: nextLevel.lessons[0].id,
+            stageName: nextLevel.lessons[0].name,
+            points: (selectedStudent.points || 0) + points + ARABIC_READING_POINTS.LEVEL_COMPLETION
+          });
+          
+          showMessage('success', '🎉 مبارك!', `أتم الطالب ${arabicLevel.name} بنجاح! انتقل إلى ${nextLevel.name}`);
+          
+          // تحديث الواجهة
+          setArabicLevel(nextLevel);
+          setArabicLesson(nextLevel.lessons[0]);
+        } else {
+          // انتهى من كل المستويات!
+          await updateDoc(doc(db, 'users', selectedStudent.id), {
+            points: (selectedStudent.points || 0) + points + ARABIC_READING_POINTS.LEVEL_COMPLETION,
+            completedCurriculum: true
+          });
+          
+          showMessage('success', '🏆 تهانينا!', 'أتم الطالب منهج القراءة العربية بالكامل!');
+        }
+      } else if (nextLesson) {
+        // الانتقال للدرس التالي
+        await updateDoc(doc(db, 'users', selectedStudent.id), {
+          stageId: nextLesson.id,
+          stageName: nextLesson.name,
+          points: (selectedStudent.points || 0) + points
+        });
+        
+        showMessage('success', '✅ تم', `تم تسجيل الدرس بنجاح. الدرس التالي: ${nextLesson.name}`);
+        
+        // تحديث الواجهة
+        setArabicLesson(nextLesson);
+      }
+
+      // إعادة تعيين الملاحظات
+      setChallengeNotes('');
+      setChallengeRating(5);
+
+    } catch (error) {
+      console.error('Error recording arabic lesson:', error);
+      showMessage('error', 'خطأ', 'حدث خطأ أثناء حفظ البيانات');
+    }
+  };
+
   const resetForm = () => {
     setSelectedStudent(null);
     setStudentLevel(null);
     setStudentStage(null);
+    setArabicLevel(null);
+    setArabicLesson(null);
     setSelectedChallengeType('');
     setChallengeRating(5);
     setChallengeNotes('');
@@ -1238,8 +1442,87 @@ const StudentAchievements = () => {
           </select>
         </div>
 
-        {/* Student Level & Stage Info */}
-        {selectedStudent && studentLevel && studentStage && (
+        {/* Arabic Reading Curriculum Interface */}
+        {selectedStudent && currentTrackType === 'arabic_reading' && arabicLevel && arabicLesson && (
+          <div className="student-progress-info arabic-reading-mode">
+            <div className="progress-header">
+              <h4>📖 موقع الطالب الحالي - القراءة العربية</h4>
+            </div>
+            <div className="progress-badges">
+              <div className="level-info">
+                <span className="badge-label">المستوى:</span>
+                <span className="level-badge">{arabicLevel.name}</span>
+              </div>
+              <div className="lesson-info-badge">
+                <span className="badge-label">الدرس:</span>
+                <span className="stage-badge">{arabicLesson.name}</span>
+              </div>
+            </div>
+            
+            {/* Single Lesson Card for Arabic Reading */}
+            <div className="arabic-lesson-card">
+              <div className="lesson-icon">📚</div>
+              <div className="lesson-info">
+                <h5>الدرس الحالي</h5>
+                <p>{arabicLesson.name}</p>
+              </div>
+              <div className="lesson-points">
+                {ARABIC_READING_POINTS.LESSON_COMPLETION} نقطة
+              </div>
+            </div>
+            
+            {/* Arabic Reading Recording Form */}
+            <div className="arabic-recording-form">
+              <h4>📝 تسجيل إتمام الدرس</h4>
+              
+              <div className="form-row">
+                <div className="form-group">
+                  <label>التقييم</label>
+                  <select 
+                    value={challengeRating} 
+                    onChange={(e) => setChallengeRating(Number(e.target.value))}
+                    className="rating-select"
+                  >
+                    {[1, 2, 3, 4, 5].map(n => (
+                      <option key={n} value={n}>{n} - {'⭐'.repeat(n)}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div className="form-group">
+                  <label>التاريخ</label>
+                  <input 
+                    type="date" 
+                    value={recordDate}
+                    onChange={(e) => setRecordDate(e.target.value)}
+                  />
+                </div>
+              </div>
+              
+              <div className="form-group">
+                <label>ملاحظات</label>
+                <textarea
+                  value={challengeNotes}
+                  onChange={(e) => setChallengeNotes(e.target.value)}
+                  placeholder="ملاحظات عن أداء الطالب..."
+                  rows={2}
+                />
+              </div>
+              
+              <div className="form-actions">
+                <button 
+                  className="btn btn-success"
+                  onClick={handleRecordArabicLesson}
+                >
+                  ✅ تسجيل إتمام الدرس والانتقال للتالي
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Quran Memorization Interface */}
+        {selectedStudent && currentTrackType === 'quran' && studentLevel && studentStage && (
           <div className="student-progress-info">
             <div className="progress-header">
               <h4>📊 موقع الطالب الحالي</h4>

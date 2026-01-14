@@ -19,8 +19,9 @@ const DevTools = () => {
         // State for centers and groups
         const [centers, setCenters] = useState<any[]>([]);
         const [groups, setGroups] = useState<any[]>([]);
+        const [allStudents, setAllStudents] = useState<any[]>([]);
 
-        // Fetch centers and groups on mount
+        // Fetch centers, groups and students on mount
         useEffect(() => {
           const fetchCenters = async () => {
             const snap = await getDocs(collection(db, 'centers'));
@@ -30,8 +31,14 @@ const DevTools = () => {
             const snap = await getDocs(collection(db, 'groups'));
             setGroups(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
           };
+          const fetchStudents = async () => {
+            const q = query(collection(db, 'users'), where('role', '==', 'student'));
+            const snap = await getDocs(q);
+            setAllStudents(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+          };
           fetchCenters();
           fetchGroups();
+          fetchStudents();
         }, []);
     // --- Import Students State ---
     const [csvFile, setCsvFile] = useState<File | null>(null);
@@ -125,6 +132,42 @@ const DevTools = () => {
     points: true,
     achievements: true
   });
+
+  // فلاتر حذف الطلاب
+  const [deleteFilterMode, setDeleteFilterMode] = useState<'all' | 'filtered'>('all');
+  const [selectedCenterId, setSelectedCenterId] = useState<string>('');
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+
+  // تصفية الحلقات حسب المركز المختار
+  const filteredGroups = selectedCenterId 
+    ? groups.filter(g => g.centerId === selectedCenterId) 
+    : groups;
+
+  // تصفية الطلاب حسب المركز والحلقة المختارة
+  const filteredStudents = allStudents.filter(s => {
+    if (selectedCenterId && s.centerId !== selectedCenterId) return false;
+    if (selectedGroupId && s.groupId !== selectedGroupId) return false;
+    return true;
+  });
+
+  // تحديد/إلغاء تحديد جميع الطلاب المصفاة
+  const toggleSelectAllStudents = () => {
+    if (selectedStudentIds.length === filteredStudents.length) {
+      setSelectedStudentIds([]);
+    } else {
+      setSelectedStudentIds(filteredStudents.map(s => s.id));
+    }
+  };
+
+  // تحديد/إلغاء تحديد طالب واحد
+  const toggleStudentSelection = (studentId: string) => {
+    if (selectedStudentIds.includes(studentId)) {
+      setSelectedStudentIds(selectedStudentIds.filter(id => id !== studentId));
+    } else {
+      setSelectedStudentIds([...selectedStudentIds, studentId]);
+    }
+  };
 
   const seedDemoData = async () => {
     setRunning(true);
@@ -224,11 +267,47 @@ const DevTools = () => {
       
       // Students are in 'users' collection with role='student'
       if (deleteOptions.students) {
-        // Delete students from users collection
-        const studentsQuery = query(collection(db, 'users'), where('role', '==', 'student'));
-        const studentsSnap = await getDocs(studentsQuery);
-        for (const d of studentsSnap.docs) {
-          await deleteDoc(doc(db, 'users', d.id));
+        if (deleteFilterMode === 'filtered' && selectedStudentIds.length > 0) {
+          // حذف الطلاب المحددين فقط
+          for (const studentId of selectedStudentIds) {
+            await deleteDoc(doc(db, 'users', studentId));
+          }
+        } else if (deleteFilterMode === 'filtered' && (selectedCenterId || selectedGroupId)) {
+          // حذف الطلاب حسب الفلتر (المركز أو الحلقة)
+          let studentsQuery;
+          if (selectedCenterId && selectedGroupId) {
+            studentsQuery = query(
+              collection(db, 'users'), 
+              where('role', '==', 'student'),
+              where('centerId', '==', selectedCenterId),
+              where('groupId', '==', selectedGroupId)
+            );
+          } else if (selectedCenterId) {
+            studentsQuery = query(
+              collection(db, 'users'), 
+              where('role', '==', 'student'),
+              where('centerId', '==', selectedCenterId)
+            );
+          } else if (selectedGroupId) {
+            studentsQuery = query(
+              collection(db, 'users'), 
+              where('role', '==', 'student'),
+              where('groupId', '==', selectedGroupId)
+            );
+          } else {
+            studentsQuery = query(collection(db, 'users'), where('role', '==', 'student'));
+          }
+          const studentsSnap = await getDocs(studentsQuery);
+          for (const d of studentsSnap.docs) {
+            await deleteDoc(doc(db, 'users', d.id));
+          }
+        } else {
+          // حذف جميع الطلاب
+          const studentsQuery = query(collection(db, 'users'), where('role', '==', 'student'));
+          const studentsSnap = await getDocs(studentsQuery);
+          for (const d of studentsSnap.docs) {
+            await deleteDoc(doc(db, 'users', d.id));
+          }
         }
       }
       
@@ -275,7 +354,19 @@ const DevTools = () => {
       }
 
       const deletedItems = [];
-      if (deleteOptions.students) deletedItems.push('الطلاب');
+      if (deleteOptions.students) {
+        if (deleteFilterMode === 'filtered') {
+          if (selectedStudentIds.length > 0) {
+            deletedItems.push(`${selectedStudentIds.length} طالب محدد`);
+          } else if (selectedCenterId || selectedGroupId) {
+            deletedItems.push('طلاب المركز/الحلقة المحددة');
+          } else {
+            deletedItems.push('جميع الطلاب');
+          }
+        } else {
+          deletedItems.push('جميع الطلاب');
+        }
+      }
       if (deleteOptions.teachers) deletedItems.push('المعلمين');
       if (deleteOptions.groups) deletedItems.push('الحلقات والمساقات');
       if (deleteOptions.points) deletedItems.push('نقاط الطلاب');
@@ -298,6 +389,11 @@ const DevTools = () => {
   const cancelDelete = () => {
     setShowDeleteModal(false);
     setDeleteMessage('');
+    // إعادة تعيين الفلاتر
+    setDeleteFilterMode('all');
+    setSelectedCenterId('');
+    setSelectedGroupId('');
+    setSelectedStudentIds([]);
   };
 
   const reloadAllData = async () => {
@@ -498,8 +594,148 @@ const DevTools = () => {
                         checked={deleteOptions.students}
                         onChange={(e) => setDeleteOptions({ ...deleteOptions, students: e.target.checked })}
                       />
-                      <span>جميع الطلاب</span>
+                      <span>الطلاب</span>
                     </label>
+
+                    {/* فلاتر حذف الطلاب */}
+                    {deleteOptions.students && (
+                      <div style={{ marginRight: '25px', marginTop: '10px', padding: '15px', background: '#f5f5f5', borderRadius: '8px' }}>
+                        <div style={{ marginBottom: '10px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
+                            <input
+                              type="radio"
+                              name="deleteFilterMode"
+                              checked={deleteFilterMode === 'all'}
+                              onChange={() => {
+                                setDeleteFilterMode('all');
+                                setSelectedCenterId('');
+                                setSelectedGroupId('');
+                                setSelectedStudentIds([]);
+                              }}
+                            />
+                            <span>حذف جميع الطلاب</span>
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input
+                              type="radio"
+                              name="deleteFilterMode"
+                              checked={deleteFilterMode === 'filtered'}
+                              onChange={() => setDeleteFilterMode('filtered')}
+                            />
+                            <span>تحديد طلاب معينين (فلترة)</span>
+                          </label>
+                        </div>
+
+                        {deleteFilterMode === 'filtered' && (
+                          <div style={{ marginTop: '15px' }}>
+                            {/* اختيار المركز */}
+                            <div style={{ marginBottom: '10px' }}>
+                              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '0.9rem' }}>المركز:</label>
+                              <select
+                                value={selectedCenterId}
+                                onChange={(e) => {
+                                  setSelectedCenterId(e.target.value);
+                                  setSelectedGroupId('');
+                                  setSelectedStudentIds([]);
+                                }}
+                                style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
+                              >
+                                <option value="">جميع المراكز</option>
+                                {centers.map(center => (
+                                  <option key={center.id} value={center.id}>{center.name}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* اختيار الحلقة */}
+                            <div style={{ marginBottom: '10px' }}>
+                              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '0.9rem' }}>الحلقة:</label>
+                              <select
+                                value={selectedGroupId}
+                                onChange={(e) => {
+                                  setSelectedGroupId(e.target.value);
+                                  setSelectedStudentIds([]);
+                                }}
+                                style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
+                              >
+                                <option value="">جميع الحلقات</option>
+                                {filteredGroups.map(group => (
+                                  <option key={group.id} value={group.id}>{group.name}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* قائمة الطلاب للتحديد */}
+                            <div style={{ marginTop: '15px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                <label style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>
+                                  الطلاب ({filteredStudents.length}):
+                                </label>
+                                <button 
+                                  type="button"
+                                  onClick={toggleSelectAllStudents}
+                                  style={{ 
+                                    padding: '4px 10px', 
+                                    fontSize: '0.8rem', 
+                                    background: '#2196f3', 
+                                    color: 'white', 
+                                    border: 'none', 
+                                    borderRadius: '4px',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  {selectedStudentIds.length === filteredStudents.length ? 'إلغاء تحديد الكل' : 'تحديد الكل'}
+                                </button>
+                              </div>
+                              <div style={{ 
+                                maxHeight: '200px', 
+                                overflowY: 'auto', 
+                                border: '1px solid #ddd', 
+                                borderRadius: '4px',
+                                background: 'white'
+                              }}>
+                                {filteredStudents.length === 0 ? (
+                                  <div style={{ padding: '15px', textAlign: 'center', color: '#888' }}>
+                                    لا يوجد طلاب مطابقين للفلتر
+                                  </div>
+                                ) : (
+                                  filteredStudents.map(student => (
+                                    <label 
+                                      key={student.id} 
+                                      style={{ 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        gap: '8px', 
+                                        padding: '8px 10px',
+                                        borderBottom: '1px solid #eee',
+                                        cursor: 'pointer',
+                                        background: selectedStudentIds.includes(student.id) ? '#e3f2fd' : 'transparent'
+                                      }}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedStudentIds.includes(student.id)}
+                                        onChange={() => toggleStudentSelection(student.id)}
+                                      />
+                                      <span>{student.name || 'بدون اسم'}</span>
+                                      <span style={{ fontSize: '0.8rem', color: '#888', marginRight: 'auto' }}>
+                                        {student.personalId || student.email || ''}
+                                      </span>
+                                    </label>
+                                  ))
+                                )}
+                              </div>
+                              {selectedStudentIds.length > 0 && (
+                                <div style={{ marginTop: '10px', padding: '8px', background: '#ffebee', borderRadius: '4px', fontSize: '0.9rem', color: '#c62828' }}>
+                                  ⚠️ سيتم حذف {selectedStudentIds.length} طالب
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <label className="checkbox-label">
                       <input
                         type="checkbox"

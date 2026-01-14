@@ -11,15 +11,24 @@ interface Center {
   address: string;
 }
 
+interface Track {
+  id: string;
+  name: string;
+  centerId: string;
+}
+
 const Register = () => {
   const { user } = useAuth();
   const [centers, setCenters] = useState<Center[]>([]);
+  const [tracks, setTracks] = useState<Track[]>([]);
   const [loadingCenters, setLoadingCenters] = useState(true);
+  const [loadingTracks, setLoadingTracks] = useState(false);
   const [formData, setFormData] = useState({
+    personalId: '',
     name: '',
     phone: '',
-    personalId: '',
-    centerId: ''
+    centerId: '',
+    trackId: ''
   });
   const [checkingPersonalId, setCheckingPersonalId] = useState(false);
   const [personalIdError, setPersonalIdError] = useState<string | null>(null);
@@ -52,6 +61,44 @@ const Register = () => {
     };
     fetchCenters();
   }, []);
+
+  // جلب المساقات عند تغيير المركز
+  useEffect(() => {
+    const fetchTracks = async () => {
+      if (!formData.centerId) {
+        console.log('No center selected');
+        setTracks([]);
+        return;
+      }
+
+      setLoadingTracks(true);
+      console.log('Fetching tracks for centerId:', formData.centerId);
+      try {
+        const tracksSnap = await getDocs(
+          query(collection(db, 'tracks'), where('centerId', '==', formData.centerId))
+        );
+        console.log('Found tracks count:', tracksSnap.docs.length);
+        console.log('Track documents:', tracksSnap.docs.map(doc => ({ id: doc.id, data: doc.data() })));
+        
+        const tracksList = tracksSnap.docs.map(doc => ({
+          id: doc.id,
+          name: doc.data().name,
+          centerId: doc.data().centerId
+        } as Track));
+        console.log('Processed tracks list:', tracksList);
+        setTracks(tracksList);
+        // امسح تحديد المسق عند تغيير المركز
+        setFormData(prev => ({ ...prev, trackId: '' }));
+      } catch (error) {
+        console.error('Error fetching tracks:', error);
+        setTracks([]);
+      } finally {
+        setLoadingTracks(false);
+      }
+    };
+
+    fetchTracks();
+  }, [formData.centerId]);
 
   // التحقق الفوري من الرقم الشخصي عند الإدخال
   useEffect(() => {
@@ -133,12 +180,8 @@ const Register = () => {
       return;
     }
 
-    if (!formData.personalId.trim()) {
-      setError('الرقم الشخصي مطلوب');
-      return;
-    }
-
-    if (formData.personalId.length !== 9) {
+    // الرقم الشخصي اختياري مؤقتاً
+    if (formData.personalId.trim() && formData.personalId.length !== 9) {
       setError('الرقم الشخصي يجب أن يكون 9 أرقام بالضبط');
       return;
     }
@@ -148,25 +191,33 @@ const Register = () => {
       return;
     }
 
-    // التحقق النهائي من عدم تكرار الرقم الشخصي
-    setCheckingPersonalId(true);
-    const personalIdExists = await checkPersonalIdExists(formData.personalId);
-    setCheckingPersonalId(false);
-    
-    if (personalIdExists) {
-      setPersonalIdError('⚠️ هذا الرقم مسجل مسبقاً! استخدم رقماً آخر');
-      setError('❌ الرقم الشخصي ' + formData.personalId + ' موجود بالفعل في النظام. لا يمكن التسجيل بنفس الرقم مرتين.');
+    if (!formData.trackId) {
+      setError('يجب اختيار المسق');
       return;
+    }
+
+    // التحقق النهائي من عدم تكرار الرقم الشخصي (فقط إذا تم إدخاله)
+    if (formData.personalId.trim()) {
+      setCheckingPersonalId(true);
+      const personalIdExists = await checkPersonalIdExists(formData.personalId);
+      setCheckingPersonalId(false);
+      
+      if (personalIdExists) {
+        setPersonalIdError('⚠️ هذا الرقم مسجل مسبقاً! استخدم رقماً آخر');
+        setError('❌ الرقم الشخصي ' + formData.personalId + ' موجود بالفعل في النظام. لا يمكن التسجيل بنفس الرقم مرتين.');
+        return;
+      }
     }
 
     setSubmitting(true);
     try {
       // إضافة طلب تسجيل جديد - سجل واحد فقط يتم تحديثه خلال جميع المراحل
       await addDoc(collection(db, 'users'), {
+        personalId: formData.personalId.trim(),
         name: formData.name.trim(),
         phone: formData.phone.trim(),
-        personalId: formData.personalId.trim(),
         centerId: formData.centerId,
+        trackId: formData.trackId,
         role: 'student',
         status: 'pending_registration', // المرحلة 1: في انتظار جدولة المقابلة
         active: true,
@@ -175,7 +226,6 @@ const Register = () => {
         email: 'Unknown',
         password: 'Unknown',
         groupId: 'Unknown',
-        trackId: 'Unknown',
         levelId: 'Unknown',
         levelName: 'Unknown',
         stageId: 'Unknown',
@@ -185,7 +235,7 @@ const Register = () => {
       });
 
       setShowSuccessMessage(true);
-      setFormData({ name: '', phone: '', personalId: '', centerId: '' });
+      setFormData({ personalId: '', name: '', phone: '', centerId: '', trackId: '' });
     } catch (err: any) {
       console.error('Registration error:', err);
       console.error('Error code:', err.code);
@@ -209,40 +259,14 @@ const Register = () => {
         </p>
         <form className="login-form" onSubmit={handleSubmit}>
           <label>
-            الاسم الكامل *
-            <input
-              type="text"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              required
-              placeholder="أدخل اسمك الكامل"
-            />
-          </label>
-
-          <label>
-            رقم الهاتف *
-            <input
-              type="tel"
-              name="phone"
-              value={formData.phone}
-              onChange={handleChange}
-              required
-              placeholder="973xxxxxxxx"
-            />
-          </label>
-
-          <label>
-            الرقم الشخصي * <small style={{ fontWeight: 'normal', color: '#666' }}>(9 أرقام)</small>
+            الرقم الشخصي <small style={{ fontWeight: 'normal', color: '#666' }}>(اختياري - 9 أرقام)</small>
             <input
               type="text"
               name="personalId"
               value={formData.personalId}
               onChange={handleChange}
-              required
               placeholder="أدخل الرقم الشخصي (9 أرقام)"
               maxLength={9}
-              pattern="[0-9]{9}"
               inputMode="numeric"
               style={personalIdError ? { borderColor: '#d32f2f' } : {}}
             />
@@ -266,6 +290,30 @@ const Register = () => {
                 {personalIdError}
               </small>
             )}
+          </label>
+
+          <label>
+            الاسم الكامل *
+            <input
+              type="text"
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
+              required
+              placeholder="أدخل اسمك الكامل"
+            />
+          </label>
+
+          <label>
+            رقم الهاتف *
+            <input
+              type="tel"
+              name="phone"
+              value={formData.phone}
+              onChange={handleChange}
+              required
+              placeholder="973xxxxxxxx"
+            />
           </label>
 
           <label>
@@ -293,6 +341,34 @@ const Register = () => {
               </small>
             )}
           </label>
+
+          {formData.centerId && (
+            <label>
+              المسق *
+              <select
+                name="trackId"
+                value={formData.trackId}
+                onChange={handleChange}
+                required
+                disabled={loadingTracks}
+              >
+                <option value="">
+                  {loadingTracks ? 'جاري تحميل المساقات...' : 
+                   tracks.length === 0 ? 'لا توجد مساقات متاحة' : 'اختر المسق'}
+                </option>
+                {tracks.map(track => (
+                  <option key={track.id} value={track.id}>
+                    {track.name}
+                  </option>
+                ))}
+              </select>
+              {!loadingTracks && tracks.length === 0 && formData.centerId && (
+                <small style={{ color: '#d32f2f', display: 'block', marginTop: '5px' }}>
+                  ⚠️ لا توجد مساقات للمركز المختار. تواصل مع المسؤول.
+                </small>
+              )}
+            </label>
+          )}
 
           {error && <div className="form-error">{error}</div>}
 

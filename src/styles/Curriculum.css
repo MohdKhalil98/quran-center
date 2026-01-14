@@ -2122,3 +2122,102 @@
     padding: 2px 6px;
   }
 }
+
+/* Track Selector Styles */
+.track-selector {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 25px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.track-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px 30px;
+  border: 2px solid #e0e0e0;
+  background: white;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: #666;
+}
+
+.track-btn:hover {
+  border-color: #4caf50;
+  color: #4caf50;
+  background: #f8fff8;
+}
+
+.track-btn.active {
+  border-color: #4caf50;
+  background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+}
+
+.track-icon {
+  font-size: 1.4rem;
+}
+
+.track-name {
+  font-size: 1rem;
+}
+
+/* Lesson Item Styles for Arabic Reading */
+.lesson-item {
+  cursor: default;
+  background: #f8f9fa;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  transition: background 0.2s ease;
+}
+
+.lesson-item:hover {
+  background: #e8f5e9;
+}
+
+/* Supervisor Approval Note */
+.supervisor-approval-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 15px;
+  background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+  border-radius: 8px;
+  margin-top: 15px;
+  font-size: 0.9rem;
+  color: #e65100;
+  border: 1px solid #ffcc80;
+}
+
+.supervisor-approval-note .note-icon {
+  font-size: 1.2rem;
+}
+
+/* Supervisor tag in level header */
+.level-info-tag.supervisor {
+  background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+  color: white;
+  border: none;
+}
+
+@media (max-width: 768px) {
+  .track-selector {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .track-btn {
+    padding: 12px 20px;
+    font-size: 0.9rem;
+  }
+
+  .track-icon {
+    font-size: 1.2rem;
+  }
+}

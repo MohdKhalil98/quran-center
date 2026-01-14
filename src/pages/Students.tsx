@@ -3,6 +3,7 @@ import { collection, getDocs, doc, updateDoc, query, orderBy, where } from 'fire
 import { db } from '../firebase';
 import { useAuth, UserProfile } from '../context/AuthContext';
 import quranCurriculum from '../data/quranCurriculum';
+import { arabicReadingCurriculum } from '../data/arabicReadingCurriculum';
 import '../styles/Shared.css';
 import '../styles/Students.css';
 
@@ -20,6 +21,12 @@ interface Group {
   id: string;
   name: string;
   teacherId?: string;
+  trackId?: string;
+}
+
+interface Track {
+  id: string;
+  name: string;
 }
 
 interface Level {
@@ -37,6 +44,7 @@ const Students = () => {
   const [students, setStudents] = useState<StudentUser[]>([]);
   const [newStudents, setNewStudents] = useState<StudentUser[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
+  const [tracks, setTracks] = useState<Track[]>([]);
   const [centers, setCenters] = useState<Center[]>([]);
   const [levels, setLevels] = useState<Level[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
@@ -50,6 +58,7 @@ const Students = () => {
   const [showLevelModal, setShowLevelModal] = useState(false);
   const [selectedNewStudent, setSelectedNewStudent] = useState<StudentUser | null>(null);
   const [selectedLevelId, setSelectedLevelId] = useState('');
+  const [currentTrackType, setCurrentTrackType] = useState<'quran' | 'arabic_reading'>('quran');
 
   useEffect(() => {
     fetchData();
@@ -65,13 +74,22 @@ const Students = () => {
       }));
       setCenters(centersList);
 
+      // Fetch tracks (المساقات)
+      const tracksSnapshot = await getDocs(collection(db, 'tracks'));
+      const tracksList = tracksSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        name: doc.data().name
+      }));
+      setTracks(tracksList);
+
       // Fetch groups
       const groupsQuery = query(collection(db, 'groups'), orderBy('name'));
       const groupsSnapshot = await getDocs(groupsQuery);
       const groupsList = groupsSnapshot.docs.map((doc) => ({
         id: doc.id,
         name: doc.data().name,
-        teacherId: doc.data().teacherId
+        teacherId: doc.data().teacherId,
+        trackId: doc.data().trackId
       }));
       setGroups(groupsList);
 
@@ -205,6 +223,42 @@ const Students = () => {
 
   const handleOpenLevelModal = (student: StudentUser) => {
     setSelectedNewStudent(student);
+    
+    // تحديد نوع المساق بناءً على الحلقة
+    const studentGroup = groups.find(g => g.id === student.groupId);
+    const trackId = studentGroup?.trackId || '';
+    
+    // جلب اسم المساق من قائمة المساقات
+    const track = tracks.find(t => t.id === trackId);
+    const trackName = track?.name || '';
+    
+    // تحديد إذا كان مساق القراءة العربية أو القرآن بناءً على اسم المساق
+    const isArabicReading = trackName.includes('تأسيس') || 
+                           trackName.includes('قراءة') ||
+                           trackName.includes('عربية') ||
+                           trackName.toLowerCase().includes('arabic') || 
+                           trackName.toLowerCase().includes('reading');
+    
+    console.log('Track ID:', trackId, 'Track Name:', trackName, 'Is Arabic Reading:', isArabicReading);
+    
+    if (isArabicReading) {
+      setCurrentTrackType('arabic_reading');
+      // جلب مستويات القراءة العربية
+      const arabicLevels = arabicReadingCurriculum.map((level) => ({
+        id: level.id,
+        name: level.name
+      }));
+      setLevels(arabicLevels);
+    } else {
+      setCurrentTrackType('quran');
+      // جلب مستويات حفظ القرآن
+      const quranLevels = quranCurriculum.map((juz) => ({
+        id: juz.id,
+        name: juz.name
+      }));
+      setLevels(quranLevels);
+    }
+    
     setShowLevelModal(true);
   };
 
@@ -247,16 +301,37 @@ const Students = () => {
     }
 
     try {
-      // الحصول على المرحلة الأولى من المنهج المحلي
-      const selectedLevelData = quranCurriculum.find(juz => juz.id === selectedLevelId);
-      
-      if (!selectedLevelData || !selectedLevelData.surahs || selectedLevelData.surahs.length === 0) {
-        alert('لا توجد مراحل لهذا المستوى');
-        return;
-      }
-
-      const firstStage = selectedLevelData.surahs[0];
+      let firstStage: { id: string; name: string };
       const selectedLevel = levels.find(l => l.id === selectedLevelId);
+      
+      // تحديد المرحلة الأولى بناءً على نوع المساق
+      if (currentTrackType === 'arabic_reading') {
+        // منهج القراءة العربية
+        const selectedLevelData = arabicReadingCurriculum.find(level => level.id === selectedLevelId);
+        
+        if (!selectedLevelData || !selectedLevelData.lessons || selectedLevelData.lessons.length === 0) {
+          alert('لا توجد دروس لهذا المستوى');
+          return;
+        }
+        
+        firstStage = {
+          id: selectedLevelData.lessons[0].id,
+          name: selectedLevelData.lessons[0].name
+        };
+      } else {
+        // منهج حفظ القرآن
+        const selectedLevelData = quranCurriculum.find(juz => juz.id === selectedLevelId);
+        
+        if (!selectedLevelData || !selectedLevelData.surahs || selectedLevelData.surahs.length === 0) {
+          alert('لا توجد مراحل لهذا المستوى');
+          return;
+        }
+        
+        firstStage = {
+          id: selectedLevelData.surahs[0].id,
+          name: selectedLevelData.surahs[0].name
+        };
+      }
 
       // تحديث حالة الطالب وتعيين المستوى الابتدائي
       await updateDoc(doc(db, 'users', selectedNewStudent.uid), {
@@ -265,6 +340,7 @@ const Students = () => {
         levelName: selectedLevel?.name || '',
         stageId: firstStage.id,
         stageName: firstStage.name,
+        trackType: currentTrackType, // حفظ نوع المساق
         approvedByTeacherAt: new Date().toISOString()
       });
 

@@ -88,6 +88,9 @@ service cloud.firestore {
 
     // ==================== TRACKS COLLECTION ====================
     match /tracks/{trackId} {
+      // السماح بقراءة المساقات لأي شخص (للاختيار أثناء التسجيل)
+      allow read: if true;
+      
       // قراءة المسارات من قبل الموظفين والمشرفين في نفس المركز
       allow read: if isSignedIn() && 
         (isAdmin() || isSupervisor() || isTeacher()) &&
@@ -206,9 +209,8 @@ service cloud.firestore {
 
     // ==================== CENTERS COLLECTION ====================
     match /centers/{centerId} {
-      // قراءة بيانات المركز من قبل الموظفين في هذا المركز
-      allow read: if isSignedIn() && 
-        (isAdmin() || (userCenterId() == centerId));
+      // السماح بقراءة المراكز لأي شخص (للاختيار أثناء التسجيل)
+      allow read: if true;
       
       // كتابة من قبل المديرين فقط
       allow create, update, delete: if isSignedIn() && isAdmin();

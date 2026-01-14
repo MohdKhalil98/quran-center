@@ -49,9 +49,15 @@ export const parseCSV = (csvText: string): { valid: UserImportData[]; errors: Ar
         continue;
       }
 
-      if (!data.email || !data.email.trim()) {
-        errors.push({ row: i + 1, error: 'البريد الإلكتروني مفقود' });
-        continue;
+      // إذا كان البريد فارغ، نستخدم الرقم الشخصي لإنشاء بريد افتراضي
+      let email = data.email ? data.email.trim() : '';
+      if (!email) {
+        if (data.personalid && data.personalid.trim()) {
+          email = `${data.personalid.trim()}@quran-center.local`;
+        } else {
+          errors.push({ row: i + 1, error: 'البريد الإلكتروني مفقود ولا يوجد رقم شخصي لإنشاء بريد افتراضي' });
+          continue;
+        }
       }
 
       if (!data.phone || !data.phone.trim()) {
@@ -69,16 +75,16 @@ export const parseCSV = (csvText: string): { valid: UserImportData[]; errors: Ar
         continue;
       }
 
-      // التحقق من صحة البريد الإلكتروني
+      // التحقق من صحة البريد الإلكتروني (السماح بالبريد الداخلي)
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(data.email)) {
-        errors.push({ row: i + 1, error: `البريد الإلكتروني غير صحيح: ${data.email}` });
+      if (!emailRegex.test(email)) {
+        errors.push({ row: i + 1, error: `البريد الإلكتروني غير صحيح: ${email}` });
         continue;
       }
 
       valid.push({
         name: data.name.trim(),
-        email: data.email.trim().toLowerCase(),
+        email: email.toLowerCase(),
         phone: data.phone.trim(),
         personalId: data.personalid ? data.personalid.trim() : undefined,
         role: data.role,

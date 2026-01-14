@@ -255,13 +255,16 @@ ${user.personalId ? `الرقم الشخصي: ${user.personalId}` : ''}
                 <p>يجب أن يحتوي ملفك على الأعمدة التالية:</p>
                 <ul className="column-list">
                   <li><strong>name</strong> - الاسم الكامل (مطلوب)</li>
-                  <li><strong>email</strong> - البريد الإلكتروني (مطلوب)</li>
+                  <li><strong>email</strong> - البريد الإلكتروني (اختياري - إذا فارغ يُنشأ من الرقم الشخصي)</li>
                   <li><strong>phone</strong> - رقم الهاتف (مطلوب)</li>
-                  <li><strong>personalId</strong> - الرقم الشخصي (اختياري - للطلاب)</li>
+                  <li><strong>personalId</strong> - الرقم الشخصي (مطلوب إذا كان البريد فارغ)</li>
                   <li><strong>role</strong> - الدور: supervisor, teacher, student, parent (مطلوب)</li>
                   <li><strong>centerId</strong> - معرف المركز (مطلوب)</li>
                   <li><strong>groupId</strong> - معرف المجموعة (اختياري)</li>
                 </ul>
+                <p style={{ fontSize: '0.9rem', color: '#666', marginTop: '10px' }}>
+                  💡 <strong>ملاحظة:</strong> إذا كان البريد الإلكتروني فارغاً، سيتم إنشاء بريد افتراضي بالصيغة: <code>الرقم_الشخصي@quran-center.local</code>
+                </p>
 
                 <button
                   className="btn btn-secondary"

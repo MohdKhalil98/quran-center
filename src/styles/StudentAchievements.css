@@ -1225,3 +1225,168 @@
     width: 100%;
   }
 }
+/* Arabic Reading Mode Styles */
+.arabic-reading-mode {
+  background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+  border: 2px solid #4caf50;
+}
+
+.arabic-reading-mode .progress-header h4 {
+  color: #2e7d32;
+}
+
+.arabic-reading-mode .progress-badges {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 15px;
+  padding: 15px;
+  background: white;
+  border-radius: 8px;
+}
+
+.progress-badges .level-info,
+.progress-badges .lesson-info-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.progress-badges .badge-label {
+  font-weight: bold;
+  color: #666;
+  min-width: 70px;
+  font-size: 0.95rem;
+}
+
+.progress-badges .level-badge,
+.progress-badges .stage-badge {
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: bold;
+  color: white;
+  background: #4caf50;
+  flex: 1;
+  text-align: right;
+  min-width: 150px;
+}
+
+.arabic-lesson-card {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin: 20px 0;
+}
+
+.arabic-lesson-card .lesson-icon {
+  font-size: 2.5rem;
+}
+
+.arabic-lesson-card .lesson-info h5 {
+  margin: 0 0 5px 0;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.arabic-lesson-card .lesson-info p {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: #333;
+}
+
+.arabic-lesson-card .lesson-points {
+  margin-right: auto;
+  background: #4caf50;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: bold;
+}
+
+.arabic-recording-form {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  margin-top: 15px;
+}
+
+.arabic-recording-form h4 {
+  margin: 0 0 15px 0;
+  color: #333;
+  font-size: 1.1rem;
+}
+
+.arabic-recording-form .form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.arabic-recording-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.arabic-recording-form .form-group label {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.arabic-recording-form .form-group input,
+.arabic-recording-form .form-group select,
+.arabic-recording-form .form-group textarea {
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-family: inherit;
+}
+
+.arabic-recording-form .form-actions {
+  margin-top: 15px;
+}
+
+.arabic-recording-form .btn-success {
+  width: 100%;
+  padding: 12px;
+  font-size: 1rem;
+}
+
+@media (max-width: 768px) {
+  .arabic-reading-mode .progress-badges {
+    flex-direction: column;
+  }
+
+  .progress-badges .level-info,
+  .progress-badges .lesson-info-badge {
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .progress-badges .level-badge,
+  .progress-badges .stage-badge {
+    width: 100%;
+  }
+
+  .arabic-lesson-card {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .arabic-lesson-card .lesson-points {
+    margin-right: 0;
+    width: 100%;
+  }
+
+  .arabic-recording-form .form-row {
+    grid-template-columns: 1fr;
+  }
+}

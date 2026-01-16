@@ -26,6 +26,9 @@ const Register = () => {
   const [formData, setFormData] = useState({
     personalId: '',
     name: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
     phone: '',
     centerId: '',
     trackId: ''
@@ -175,6 +178,33 @@ const Register = () => {
       return;
     }
 
+    if (!formData.email.trim()) {
+      setError('البريد الإلكتروني مطلوب');
+      return;
+    }
+
+    // التحقق من صيغة البريد الإلكتروني
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email.trim())) {
+      setError('صيغة البريد الإلكتروني غير صحيحة');
+      return;
+    }
+
+    if (!formData.password) {
+      setError('كلمة المرور مطلوبة');
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      setError('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      setError('كلمة المرور وتأكيدها غير متطابقتين');
+      return;
+    }
+
     if (!formData.phone.trim()) {
       setError('رقم الهاتف مطلوب');
       return;
@@ -215,6 +245,8 @@ const Register = () => {
       await addDoc(collection(db, 'users'), {
         personalId: formData.personalId.trim(),
         name: formData.name.trim(),
+        email: formData.email.trim().toLowerCase(),
+        password: formData.password, // سيتم استخدامها لإنشاء حساب Firebase Auth لاحقاً
         phone: formData.phone.trim(),
         centerId: formData.centerId,
         trackId: formData.trackId,
@@ -222,9 +254,7 @@ const Register = () => {
         status: 'pending_registration', // المرحلة 1: في انتظار جدولة المقابلة
         active: true,
         createdAt: serverTimestamp(),
-        // الحقول التي ستُملأ لاحقاً
-        email: 'Unknown',
-        password: 'Unknown',
+        // الحقول التي ستُملأ لاحقاً من قبل المشرف
         groupId: 'Unknown',
         levelId: 'Unknown',
         levelName: 'Unknown',
@@ -235,7 +265,7 @@ const Register = () => {
       });
 
       setShowSuccessMessage(true);
-      setFormData({ personalId: '', name: '', phone: '', centerId: '', trackId: '' });
+      setFormData({ personalId: '', name: '', email: '', password: '', confirmPassword: '', phone: '', centerId: '', trackId: '' });
     } catch (err: any) {
       console.error('Registration error:', err);
       console.error('Error code:', err.code);
@@ -302,6 +332,54 @@ const Register = () => {
               required
               placeholder="أدخل اسمك الكامل"
             />
+          </label>
+
+          <label>
+            البريد الإلكتروني *
+            <input
+              type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
+              required
+              placeholder="example@email.com"
+              style={{ direction: 'ltr', textAlign: 'left' }}
+            />
+          </label>
+
+          <label>
+            كلمة المرور *
+            <input
+              type="password"
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
+              required
+              placeholder="أدخل كلمة المرور (6 أحرف على الأقل)"
+              minLength={6}
+            />
+          </label>
+
+          <label>
+            تأكيد كلمة المرور *
+            <input
+              type="password"
+              name="confirmPassword"
+              value={formData.confirmPassword}
+              onChange={handleChange}
+              required
+              placeholder="أعد إدخال كلمة المرور"
+            />
+            {formData.password && formData.confirmPassword && formData.password !== formData.confirmPassword && (
+              <small style={{ color: '#d32f2f', display: 'block', marginTop: '5px' }}>
+                ⚠️ كلمة المرور غير متطابقة
+              </small>
+            )}
+            {formData.password && formData.confirmPassword && formData.password === formData.confirmPassword && (
+              <small style={{ color: '#4caf50', display: 'block', marginTop: '5px' }}>
+                ✓ كلمة المرور متطابقة
+              </small>
+            )}
           </label>
 
           <label>

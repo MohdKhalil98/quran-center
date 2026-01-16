@@ -22,6 +22,7 @@ import Messages from './pages/Messages';
 import Conversation from './pages/Conversation';
 import ChangePassword from './pages/ChangePassword';
 import BatchImport from './pages/BatchImport';
+import Subscriptions from './pages/Subscriptions';
 import { useAuth } from './context/AuthContext';
 
 // Component to handle default redirect based on role
@@ -61,6 +62,7 @@ function App() {
           <Route path="/messages/:conversationId" element={<Conversation />} />
           <Route path="/change-password" element={<ChangePassword />} />
           <Route path="/batch-import" element={<BatchImport />} />
+          <Route path="/subscriptions" element={<Subscriptions />} />
         </Route>
       </Route>
       <Route path="*" element={<DefaultRedirect />} />

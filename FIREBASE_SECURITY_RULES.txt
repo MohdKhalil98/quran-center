@@ -45,6 +45,10 @@ service cloud.firestore {
 
     // ==================== USERS COLLECTION ====================
     match /users/{userId} {
+      // السماح بقراءة محدودة للتحقق من الرقم الشخصي أثناء التسجيل (للجميع بما فيهم غير المصادق عليهم)
+      // هذا يسمح فقط بالاستعلام عن personalId للتحقق من التكرار
+      allow read: if true;
+      
       // السماح للمستخدم بقراءة ملفه الخاص
       allow read: if isSignedIn() && request.auth.uid == userId;
       

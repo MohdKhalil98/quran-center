@@ -21,6 +21,7 @@ const navItems: NavItem[] = [
   { path: '/students', label: 'الطلاب', icon: '👨‍🎓', roles: ['admin'] },
   // صفحات المشرف
   { path: '/pending-requests', label: 'طلبات الانتظار', icon: '⏳', roles: ['supervisor'], showBadge: true },
+  { path: '/subscriptions', label: 'الاشتراكات', icon: '💳', roles: ['supervisor'] },
   { path: '/tracks', label: 'المساقات', icon: '📋', roles: ['supervisor'] },
   { path: '/groups', label: 'المجموعات', icon: '👥', roles: ['supervisor'] },
   { path: '/teachers', label: 'المعلمون', icon: '👨‍🏫', roles: ['supervisor'] },

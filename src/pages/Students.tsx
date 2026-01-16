@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, getDocs, doc, updateDoc, query, orderBy, where } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, deleteDoc, addDoc, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth, UserProfile } from '../context/AuthContext';
 import quranCurriculum from '../data/quranCurriculum';
@@ -22,6 +22,7 @@ interface Group {
   name: string;
   teacherId?: string;
   trackId?: string;
+  centerId?: string;
 }
 
 interface Track {
@@ -59,6 +60,14 @@ const Students = () => {
   const [selectedNewStudent, setSelectedNewStudent] = useState<StudentUser | null>(null);
   const [selectedLevelId, setSelectedLevelId] = useState('');
   const [currentTrackType, setCurrentTrackType] = useState<'quran' | 'arabic_reading'>('quran');
+  const [deleting, setDeleting] = useState(false);
+  // فلاتر جديدة
+  const [filterStatus, setFilterStatus] = useState<string>('');
+  const [filterActive, setFilterActive] = useState<string>('');
+  const [searchName, setSearchName] = useState<string>('');
+  // تقسيم الصفحات
+  const [currentPage, setCurrentPage] = useState(1);
+  const studentsPerPage = 20;
 
   useEffect(() => {
     fetchData();
@@ -89,7 +98,8 @@ const Students = () => {
         id: doc.id,
         name: doc.data().name,
         teacherId: doc.data().teacherId,
-        trackId: doc.data().trackId
+        trackId: doc.data().trackId,
+        centerId: doc.data().centerId
       }));
       setGroups(groupsList);
 
@@ -113,8 +123,8 @@ const Students = () => {
       let studentsList = snapshot.docs
         .filter(doc => {
           const status = doc.data().status;
-          // عرض الطلاب المعتمدين و الطلاب في انتظار الموافقة، لكن لا نعرض المرفوضين أو المعلقين الآخرين
-          return status === 'approved' || status === 'waiting_teacher_approval' || status === 'pending_registration';
+          // عرض الطلاب المعتمدين و الطلاب في انتظار موافقة المعلم فقط
+          return status === 'approved' || status === 'waiting_teacher_approval';
         })
         .map((doc) => {
           const data = doc.data() as StudentUser;
@@ -124,27 +134,6 @@ const Students = () => {
             centerName: centersList.find(c => c.id === data.centerId)?.name || ''
           } as StudentUser;
         });
-      
-      // جلب الطلاب الجدد (pending_registration) - الذين تم استيرادهم للتو
-      if (isAdmin || isSupervisor || isTeacher) {
-        const newPendingQuery = query(
-          collection(db, 'users'),
-          where('role', '==', 'student'),
-          where('status', '==', 'pending_registration')
-        );
-        const newPendingSnapshot = await getDocs(newPendingQuery);
-        const newPendingList = newPendingSnapshot.docs.map((doc) => {
-          const data = doc.data() as StudentUser;
-          return {
-            ...data,
-            groupName: groupsList.find(g => g.id === data.groupId)?.name || 'غير محدد',
-            centerName: centersList.find(c => c.id === data.centerId)?.name || ''
-          } as StudentUser;
-        });
-        
-        // إضافة الطلاب الجدد إلى القائمة
-        studentsList = [...studentsList, ...newPendingList];
-      }
       
       // تصفية الطلاب حسب الدور
       if (isTeacher && myGroupIds.length > 0) {
@@ -386,13 +375,30 @@ const Students = () => {
   const filteredStudents = students.filter(s => {
     if (filterCenterId && s.centerId !== filterCenterId) return false;
     if (filterGroupId && s.groupId !== filterGroupId) return false;
+    if (filterStatus && s.status !== filterStatus) return false;
+    if (filterActive === 'active' && !s.active) return false;
+    if (filterActive === 'inactive' && s.active) return false;
+    if (searchName && !s.name?.toLowerCase().includes(searchName.toLowerCase())) return false;
     return true;
   });
 
-  // الحلقات المتاحة للفلتر
+  // حسابات الصفحات
+  const totalPages = Math.ceil(filteredStudents.length / studentsPerPage);
+  const indexOfLastStudent = currentPage * studentsPerPage;
+  const indexOfFirstStudent = indexOfLastStudent - studentsPerPage;
+  const currentStudents = filteredStudents.slice(indexOfFirstStudent, indexOfLastStudent);
+
+  // إعادة تعيين الصفحة عند تغيير الفلتر
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterCenterId, filterGroupId, filterStatus, filterActive, searchName]);
+
+  // الحلقات المتاحة للفلتر - تصفية حسب المركز المختار
   const availableGroups = isTeacher 
     ? groups.filter(g => teacherGroupIds.includes(g.id))
-    : groups;
+    : filterCenterId 
+      ? groups.filter(g => g.centerId === filterCenterId)
+      : groups;
 
   if (loading) {
     return (
@@ -437,14 +443,27 @@ const Students = () => {
         )}
 
         <div className="filters-section">
-          {isAdmin && (
+          {/* البحث بالاسم */}
+          <input
+            type="text"
+            className="filter-input"
+            placeholder="🔍 بحث بالاسم..."
+            value={searchName}
+            onChange={(e) => setSearchName(e.target.value)}
+            style={{ minWidth: '150px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #ddd' }}
+          />
+          
+          {(isAdmin || (isSupervisor && getSupervisorCenterIds().length > 1)) && (
             <select 
               className="filter-select"
               value={filterCenterId} 
-              onChange={(e) => setFilterCenterId(e.target.value)}
+              onChange={(e) => {
+                setFilterCenterId(e.target.value);
+                setFilterGroupId(''); // إعادة تعيين فلتر الحلقات عند تغيير المركز
+              }}
             >
               <option value="">جميع المراكز</option>
-              {centers.map(center => (
+              {(isSupervisor ? centers.filter(c => getSupervisorCenterIds().includes(c.id)) : centers).map(center => (
                 <option key={center.id} value={center.id}>{center.name}</option>
               ))}
             </select>
@@ -461,6 +480,28 @@ const Students = () => {
               ))}
             </select>
           )}
+          
+          {/* فلتر حالة التسجيل */}
+          <select 
+            className="filter-select"
+            value={filterStatus} 
+            onChange={(e) => setFilterStatus(e.target.value)}
+          >
+            <option value="">جميع حالات التسجيل</option>
+            <option value="approved">✅ معتمد</option>
+            <option value="waiting_teacher_approval">⏳ بانتظار الموافقة</option>
+          </select>
+          
+          {/* فلتر حالة التفعيل */}
+          <select 
+            className="filter-select"
+            value={filterActive} 
+            onChange={(e) => setFilterActive(e.target.value)}
+          >
+            <option value="">جميع حالات التفعيل</option>
+            <option value="active">✅ نشط</option>
+            <option value="inactive">⏸️ معطل</option>
+          </select>
         </div>
 
         <div className="view-mode-toggle">
@@ -481,8 +522,37 @@ const Students = () => {
         </div>
       </div>
 
-      <div className="students-count-bar">
-        <span className="count-badge">{filteredStudents.length}</span> طالب
+      <div className="students-count-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+        <div>
+          <span className="count-badge">{filteredStudents.length}</span> طالب
+          {totalPages > 1 && (
+            <span style={{ marginRight: '15px', color: '#666', fontSize: '0.9rem' }}>
+              (الصفحة {currentPage} من {totalPages})
+            </span>
+          )}
+        </div>
+        {(filterCenterId || filterGroupId || filterStatus || filterActive || searchName) && (
+          <button
+            onClick={() => {
+              setFilterCenterId('');
+              setFilterGroupId('');
+              setFilterStatus('');
+              setFilterActive('');
+              setSearchName('');
+            }}
+            style={{
+              background: '#f44336',
+              color: 'white',
+              border: 'none',
+              padding: '6px 12px',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '0.85rem'
+            }}
+          >
+            ❌ إعادة تعيين الفلاتر
+          </button>
+        )}
       </div>
 
       {/* قسم الطلاب الجدد - للمعلمين فقط */}
@@ -524,10 +594,10 @@ const Students = () => {
 
       {viewMode === 'cards' ? (
         <div className="cards-container">
-          {filteredStudents.length === 0 ? (
+          {currentStudents.length === 0 ? (
             <p className="empty-state">لا يوجد طلاب حتى الآن</p>
           ) : (
-            filteredStudents.map((student) => {
+            currentStudents.map((student) => {
               // تحديد حالة التسجيل بناءً على status
               let statusText = '';
               let statusColor = '';
@@ -619,7 +689,7 @@ const Students = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredStudents.map((student) => {
+                {currentStudents.map((student) => {
                   // تحديد حالة التسجيل بناءً على status
                   let statusText = '';
                   let statusColor = '';
@@ -680,6 +750,108 @@ const Students = () => {
         </div>
       )}
 
+      {/* التنقل بين الصفحات */}
+      {totalPages > 1 && (
+        <div className="pagination" style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: '8px',
+          marginTop: '20px',
+          marginBottom: '20px',
+          flexWrap: 'wrap'
+        }}>
+          <button
+            onClick={() => setCurrentPage(1)}
+            disabled={currentPage === 1}
+            style={{
+              padding: '8px 12px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              background: currentPage === 1 ? '#f5f5f5' : 'white',
+              cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+              color: currentPage === 1 ? '#999' : '#333'
+            }}
+          >
+            « الأولى
+          </button>
+          <button
+            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+            disabled={currentPage === 1}
+            style={{
+              padding: '8px 12px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              background: currentPage === 1 ? '#f5f5f5' : 'white',
+              cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+              color: currentPage === 1 ? '#999' : '#333'
+            }}
+          >
+            ‹ السابق
+          </button>
+          
+          {/* أرقام الصفحات */}
+          {Array.from({ length: Math.min(5, totalPages) }, (_, i): number => {
+            let pageNum: number;
+            if (totalPages <= 5) {
+              pageNum = i + 1;
+            } else if (currentPage <= 3) {
+              pageNum = i + 1;
+            } else if (currentPage >= totalPages - 2) {
+              pageNum = totalPages - 4 + i;
+            } else {
+              pageNum = currentPage - 2 + i;
+            }
+            return pageNum;
+          }).map((pageNum: number) => (
+              <button
+                key={pageNum}
+                onClick={() => setCurrentPage(pageNum)}
+                style={{
+                  padding: '8px 14px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  background: currentPage === pageNum ? '#4caf50' : 'white',
+                  color: currentPage === pageNum ? 'white' : '#333',
+                  cursor: 'pointer',
+                  fontWeight: currentPage === pageNum ? 'bold' : 'normal'
+                }}
+              >
+                {pageNum}
+              </button>
+          ))}
+          
+          <button
+            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+            disabled={currentPage === totalPages}
+            style={{
+              padding: '8px 12px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              background: currentPage === totalPages ? '#f5f5f5' : 'white',
+              cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+              color: currentPage === totalPages ? '#999' : '#333'
+            }}
+          >
+            التالي ›
+          </button>
+          <button
+            onClick={() => setCurrentPage(totalPages)}
+            disabled={currentPage === totalPages}
+            style={{
+              padding: '8px 12px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              background: currentPage === totalPages ? '#f5f5f5' : 'white',
+              cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+              color: currentPage === totalPages ? '#999' : '#333'
+            }}
+          >
+            الأخيرة »
+          </button>
+        </div>
+      )}
+
       {isDetailsModalOpen && selectedStudent && (
         <div className="modal-overlay" onClick={handleCloseDetailsModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -722,8 +894,44 @@ const Students = () => {
                   {selectedStudent.active ? '⏸️ إيقاف' : '▶️ تفعيل'}
                 </button>
               )}
-              <button className="btn btn-secondary" onClick={handleCloseDetailsModal}>
-                إغلاق
+              <button 
+                className="btn btn-danger" 
+                onClick={async () => {
+                  if (!selectedStudent?.uid) return;
+                  if (!window.confirm(`هل أنت متأكد من حذف الطالب "${selectedStudent.name}"؟\n\nسيتم حذف بياناته من قاعدة البيانات وإرسال طلب للمطور لحذفه من نظام المصادقة.`)) return;
+                  
+                  setDeleting(true);
+                  try {
+                    // إرسال رسالة للمطور لحذف الطالب من Auth
+                    await addDoc(collection(db, 'admin_requests'), {
+                      type: 'delete_auth_user',
+                      userId: selectedStudent.uid,
+                      userName: selectedStudent.name,
+                      userEmail: selectedStudent.email,
+                      requestedBy: userProfile?.name || 'Unknown',
+                      requestedByRole: userProfile?.role,
+                      requestedAt: new Date().toISOString(),
+                      status: 'pending',
+                      message: `طلب حذف المستخدم ${selectedStudent.name} (${selectedStudent.email}) من Firebase Auth`
+                    });
+                    
+                    // حذف بيانات الطالب من Firestore
+                    await deleteDoc(doc(db, 'users', selectedStudent.uid));
+                    
+                    // تحديث الـ state
+                    setStudents(prev => prev.filter(s => s.uid !== selectedStudent.uid));
+                    alert('تم حذف بيانات الطالب وإرسال طلب للمطور لحذفه من نظام المصادقة');
+                    handleCloseDetailsModal();
+                  } catch (error) {
+                    console.error('Error deleting student:', error);
+                    alert('حدث خطأ أثناء حذف الطالب');
+                  } finally {
+                    setDeleting(false);
+                  }
+                }}
+                disabled={deleting}
+              >
+                {deleting ? '⏳ جاري الحذف...' : '🗑️ حذف'}
               </button>
             </div>
           </div>

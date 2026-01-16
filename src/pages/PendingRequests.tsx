@@ -38,10 +38,11 @@ interface Group {
 interface Track {
   id: string;
   name: string;
+  centerId: string;
 }
 
 const PendingRequests = () => {
-  const { isSupervisor, userProfile } = useAuth();
+  const { isSupervisor, userProfile, getSupervisorCenterIds } = useAuth();
   const [pendingStudents, setPendingStudents] = useState<PendingStudent[]>([]);
   const [interviewStudents, setInterviewStudents] = useState<PendingStudent[]>([]);
   const [pendingLevelApprovals, setPendingLevelApprovals] = useState<PendingStudent[]>([]);
@@ -63,6 +64,13 @@ const PendingRequests = () => {
   const [studentPassword, setStudentPassword] = useState('');
   const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
   
+  // فلترة وترتيب
+  const [filterCenterId, setFilterCenterId] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<'date' | 'name' | 'center'>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [centers, setCenters] = useState<{id: string, name: string}[]>([]);
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
+  
   // Message Box state
   const [messageBox, setMessageBox] = useState<{
     open: boolean;
@@ -75,32 +83,104 @@ const PendingRequests = () => {
     setMessageBox({ open: true, type, title, message });
   };
 
+  // الحصول على مراكز المشرف
+  const supervisorCenterIds = getSupervisorCenterIds();
+
   useEffect(() => {
-    if (userProfile?.centerId) {
+    if (supervisorCenterIds.length > 0) {
       fetchCurriculum();
       fetchPendingStudents();
       fetchGroups();
       fetchTracks();
+      fetchCenters();
     }
-  }, [userProfile]);
+  }, [userProfile, supervisorCenterIds.length]);
+
+  // جلب قائمة المراكز
+  const fetchCenters = async () => {
+    try {
+      const centersList: {id: string, name: string}[] = [];
+      for (const centerId of supervisorCenterIds) {
+        const centerDoc = await getDoc(doc(db, 'centers', centerId));
+        if (centerDoc.exists()) {
+          centersList.push({ id: centerId, name: centerDoc.data().name });
+        }
+      }
+      setCenters(centersList);
+    } catch (error) {
+      console.error('Error fetching centers:', error);
+    }
+  };
+
+  // دالة الفلترة والترتيب
+  const filterAndSortStudents = (students: PendingStudent[]) => {
+    let filtered = [...students];
+    
+    // فلترة حسب المركز
+    if (filterCenterId !== 'all') {
+      filtered = filtered.filter(s => s.centerId === filterCenterId);
+    }
+    
+    // الترتيب
+    filtered.sort((a, b) => {
+      let comparison = 0;
+      
+      switch (sortBy) {
+        case 'name':
+          comparison = (a.name || '').localeCompare(b.name || '', 'ar');
+          break;
+        case 'center':
+          comparison = (a.centerName || '').localeCompare(b.centerName || '', 'ar');
+          break;
+        case 'date':
+        default:
+          const dateA = a.createdAt ? (typeof a.createdAt === 'object' && 'toDate' in a.createdAt ? (a.createdAt as any).toDate() : new Date(a.createdAt as string)) : new Date(0);
+          const dateB = b.createdAt ? (typeof b.createdAt === 'object' && 'toDate' in b.createdAt ? (b.createdAt as any).toDate() : new Date(b.createdAt as string)) : new Date(0);
+          comparison = dateA.getTime() - dateB.getTime();
+          break;
+      }
+      
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+    
+    return filtered;
+  };
+
+  // تجميع الطلاب حسب المركز
+  const groupByCenter = (students: PendingStudent[]) => {
+    const grouped: { [centerId: string]: { centerName: string, students: PendingStudent[] } } = {};
+    
+    students.forEach(student => {
+      const centerId = student.centerId || 'unknown';
+      if (!grouped[centerId]) {
+        grouped[centerId] = { centerName: student.centerName || 'غير محدد', students: [] };
+      }
+      grouped[centerId].students.push(student);
+    });
+    
+    return grouped;
+  };
 
   const fetchTracks = async () => {
     try {
-      let tracksQuery;
-      if (userProfile?.centerId) {
-        tracksQuery = query(
+      if (supervisorCenterIds.length === 0) return;
+      
+      // جلب المساقات لجميع مراكز المشرف
+      let allTracks: Track[] = [];
+      for (const centerId of supervisorCenterIds) {
+        const tracksQuery = query(
           collection(db, 'tracks'),
-          where('centerId', '==', userProfile.centerId)
+          where('centerId', '==', centerId)
         );
-      } else {
-        tracksQuery = collection(db, 'tracks');
+        const tracksSnap = await getDocs(tracksQuery);
+        const tracksList = tracksSnap.docs.map(doc => ({
+          id: doc.id,
+          name: doc.data().name,
+          centerId: centerId
+        }));
+        allTracks = [...allTracks, ...tracksList];
       }
-      const tracksSnap = await getDocs(tracksQuery);
-      const tracksList = tracksSnap.docs.map(doc => ({
-        id: doc.id,
-        name: doc.data().name
-      }));
-      setTracks(tracksList);
+      setTracks(allTracks);
     } catch (error) {
       console.error('Error fetching tracks:', error);
     }
@@ -108,20 +188,23 @@ const PendingRequests = () => {
 
   // Fetch curriculum from Firebase
   const fetchCurriculum = async () => {
-    if (!userProfile?.centerId) return;
+    if (supervisorCenterIds.length === 0) return;
 
     try {
-      const curriculumRef = collection(db, 'curriculum');
-      const q = query(curriculumRef, where('centerId', '==', userProfile.centerId));
-      const snapshot = await getDocs(q);
-      
       const levels: CurriculumLevel[] = [];
-      snapshot.forEach(docSnap => {
-        levels.push({
-          id: docSnap.id,
-          ...docSnap.data()
-        } as CurriculumLevel);
-      });
+      
+      for (const centerId of supervisorCenterIds) {
+        const curriculumRef = collection(db, 'curriculum');
+        const q = query(curriculumRef, where('centerId', '==', centerId));
+        const snapshot = await getDocs(q);
+        
+        snapshot.forEach(docSnap => {
+          levels.push({
+            id: docSnap.id,
+            ...docSnap.data()
+          } as CurriculumLevel);
+        });
+      }
       
       levels.sort((a, b) => a.order - b.order);
       setCurriculumLevels(levels);
@@ -130,25 +213,20 @@ const PendingRequests = () => {
     }
   };
 
-  useEffect(() => {
-    if (userProfile?.centerId) {
-      fetchPendingStudents();
-      fetchGroups();
-    }
-  }, [userProfile]);
-
   const fetchGroups = async () => {
     try {
-      let groupsQuery;
-      if (userProfile?.centerId) {
-        groupsQuery = query(
+      if (supervisorCenterIds.length === 0) return;
+      
+      // جلب المجموعات لجميع مراكز المشرف
+      let allGroupsDocs: any[] = [];
+      for (const centerId of supervisorCenterIds) {
+        const groupsQuery = query(
           collection(db, 'groups'),
-          where('centerId', '==', userProfile.centerId)
+          where('centerId', '==', centerId)
         );
-      } else {
-        groupsQuery = collection(db, 'groups');
+        const groupsSnap = await getDocs(groupsQuery);
+        allGroupsDocs = [...allGroupsDocs, ...groupsSnap.docs];
       }
-      const groupsSnap = await getDocs(groupsQuery);
       
       // جلب أسماء المعلمين
       const teachersQuery = query(
@@ -160,7 +238,7 @@ const PendingRequests = () => {
         teachersSnap.docs.map(doc => [doc.data().uid, doc.data().name])
       );
 
-      const groupsList = groupsSnap.docs.map(doc => ({
+      const groupsList = allGroupsDocs.map(doc => ({
         id: doc.id,
         name: doc.data().name,
         trackId: doc.data().trackId,
@@ -174,39 +252,38 @@ const PendingRequests = () => {
   };
 
   const fetchPendingStudents = async () => {
-    if (!userProfile?.centerId) return;
+    if (supervisorCenterIds.length === 0) return;
 
     try {
-      // Simplify query to avoid index issues: Fetch all users in the center
-      const q = query(
-        collection(db, 'users'),
-        where('centerId', '==', userProfile.centerId)
-      );
-
-      const querySnapshot = await getDocs(q);
+      // جلب المستخدمين من جميع مراكز المشرف
+      let allDocs: any[] = [];
+      const centerNames: Map<string, string> = new Map();
       
-      // Get center name
-      const centerDoc = await getDoc(doc(db, 'centers', userProfile.centerId));
-      const centerName = centerDoc.exists() ? centerDoc.data().name : 'غير محدد';
+      for (const centerId of supervisorCenterIds) {
+        const q = query(
+          collection(db, 'users'),
+          where('centerId', '==', centerId)
+        );
+        const querySnapshot = await getDocs(q);
+        allDocs = [...allDocs, ...querySnapshot.docs];
+        
+        // Get center name
+        const centerDoc = await getDoc(doc(db, 'centers', centerId));
+        const centerName = centerDoc.exists() ? centerDoc.data().name : 'غير محدد';
+        centerNames.set(centerId, centerName);
+      }
 
-      console.log('Raw Query Snapshot Size:', querySnapshot.size);
-
-      const allUsers = querySnapshot.docs.map(doc => {
-        const data = doc.data();
-        // Log raw data for debugging
-        console.log(`Raw User Data [${doc.id}]:`, data);
+      const allUsers = allDocs.map(docSnap => {
+        const data = docSnap.data();
         return {
-          uid: doc.id, // Ensure uid is captured from doc.id
+          uid: docSnap.id,
           ...data,
-          centerName: centerName
+          centerName: centerNames.get(data.centerId) || 'غير محدد'
         } as PendingStudent;
       });
 
-      console.log('All Users Parsed:', allUsers);
-
       // Filter for Students only
       const allStudents = allUsers.filter(u => u.role === 'student');
-      console.log('All Students Filtered:', allStudents);
 
       // Filter for Registration Requests (pending_registration)
       const registrationRequests = allStudents.filter(s => s.status === 'pending_registration');
@@ -570,12 +647,113 @@ const PendingRequests = () => {
         <p>مراجعة طلبات انضمام الطلاب الجدد</p>
       </header>
 
+      {/* شريط الفلترة والترتيب */}
+      {centers.length > 1 && (
+        <div className="filters-bar" style={{
+          display: 'flex',
+          gap: '15px',
+          flexWrap: 'wrap',
+          marginBottom: '20px',
+          padding: '15px',
+          background: '#f8f9fa',
+          borderRadius: '10px',
+          alignItems: 'center'
+        }}>
+          <div className="filter-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label style={{ fontWeight: '600', color: '#555' }}>🏫 المركز:</label>
+            <select
+              value={filterCenterId}
+              onChange={(e) => setFilterCenterId(e.target.value)}
+              style={{
+                padding: '8px 15px',
+                borderRadius: '8px',
+                border: '1px solid #ddd',
+                fontSize: '0.95rem',
+                minWidth: '180px'
+              }}
+            >
+              <option value="all">جميع المراكز</option>
+              {centers.map(center => (
+                <option key={center.id} value={center.id}>{center.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="filter-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label style={{ fontWeight: '600', color: '#555' }}>🗂️ الترتيب:</label>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'date' | 'name' | 'center')}
+              style={{
+                padding: '8px 15px',
+                borderRadius: '8px',
+                border: '1px solid #ddd',
+                fontSize: '0.95rem'
+              }}
+            >
+              <option value="date">حسب التاريخ</option>
+              <option value="name">حسب الاسم</option>
+              <option value="center">حسب المركز</option>
+            </select>
+          </div>
+
+          <button
+            onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+            style={{
+              padding: '8px 15px',
+              borderRadius: '8px',
+              border: '1px solid #ddd',
+              background: '#fff',
+              cursor: 'pointer',
+              fontSize: '1rem'
+            }}
+            title={sortOrder === 'asc' ? 'تصاعدي' : 'تنازلي'}
+          >
+            {sortOrder === 'asc' ? '⬆️ تصاعدي' : '⬇️ تنازلي'}
+          </button>
+
+          <div style={{ display: 'flex', gap: '5px', marginRight: 'auto' }}>
+            <button
+              onClick={() => setViewMode('cards')}
+              style={{
+                padding: '8px 15px',
+                borderRadius: '8px 0 0 8px',
+                border: '1px solid #ddd',
+                background: viewMode === 'cards' ? '#667eea' : '#fff',
+                color: viewMode === 'cards' ? '#fff' : '#333',
+                cursor: 'pointer',
+                fontSize: '1rem'
+              }}
+              title="عرض بطاقات"
+            >
+              📊 بطاقات
+            </button>
+            <button
+              onClick={() => setViewMode('table')}
+              style={{
+                padding: '8px 15px',
+                borderRadius: '0 8px 8px 0',
+                border: '1px solid #ddd',
+                borderRight: 'none',
+                background: viewMode === 'table' ? '#667eea' : '#fff',
+                color: viewMode === 'table' ? '#fff' : '#333',
+                cursor: 'pointer',
+                fontSize: '1rem'
+              }}
+              title="عرض جدول"
+            >
+              📄 جدول
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="pending-container">
       
       {/* قسم طلبات التسجيل الجديدة - في الأعلى */}
       <div className="requests-section">
         <h2>📝 طلبات التسجيل الجديدة</h2>
-        {pendingStudents.length === 0 ? (
+        {filterAndSortStudents(pendingStudents).length === 0 ? (
           <div className="no-pending">
             <div className="no-pending-icon">✅</div>
             <h2>لا توجد طلبات انتظار</h2>
@@ -584,12 +762,163 @@ const PendingRequests = () => {
         ) : (
           <>
             <div className="pending-count">
-              <span className="count-badge">{pendingStudents.length}</span>
+              <span className="count-badge">{filterAndSortStudents(pendingStudents).length}</span>
               طلب انتظار
+              {filterCenterId !== 'all' && centers.find(c => c.id === filterCenterId) && (
+                <span style={{ marginRight: '10px', color: '#666' }}>
+                  في {centers.find(c => c.id === filterCenterId)?.name}
+                </span>
+              )}
             </div>
 
-            <div className="pending-list">
-              {pendingStudents.map(student => (
+            {/* عرض الجدول */}
+            {viewMode === 'table' ? (
+              <div style={{ overflowX: 'auto', marginTop: '15px' }}>
+                <table style={{
+                  width: '100%',
+                  borderCollapse: 'collapse',
+                  background: '#fff',
+                  borderRadius: '10px',
+                  overflow: 'hidden',
+                  boxShadow: '0 2px 10px rgba(0,0,0,0.08)'
+                }}>
+                  <thead>
+                    <tr style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: '#fff' }}>
+                      <th style={{ padding: '14px 16px', textAlign: 'right', fontWeight: '600' }}>#</th>
+                      <th style={{ padding: '14px 16px', textAlign: 'right', fontWeight: '600' }}>الاسم</th>
+                      <th style={{ padding: '14px 16px', textAlign: 'right', fontWeight: '600' }}>الرقم الشخصي</th>
+                      <th style={{ padding: '14px 16px', textAlign: 'right', fontWeight: '600' }}>الهاتف</th>
+                      <th style={{ padding: '14px 16px', textAlign: 'right', fontWeight: '600' }}>المركز</th>
+                      <th style={{ padding: '14px 16px', textAlign: 'right', fontWeight: '600' }}>تاريخ التسجيل</th>
+                      <th style={{ padding: '14px 16px', textAlign: 'center', fontWeight: '600' }}>الإجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filterAndSortStudents(pendingStudents).map((student, index) => (
+                      <tr key={student.uid} style={{ borderBottom: '1px solid #eee', background: index % 2 === 0 ? '#fff' : '#f9f9f9' }}>
+                        <td style={{ padding: '12px 16px', color: '#888' }}>{index + 1}</td>
+                        <td style={{ padding: '12px 16px', fontWeight: '600' }}>{student.name}</td>
+                        <td style={{ padding: '12px 16px', color: '#666' }}>{student.personalId || '-'}</td>
+                        <td style={{ padding: '12px 16px', direction: 'ltr', textAlign: 'right' }}>{student.phone || '-'}</td>
+                        <td style={{ padding: '12px 16px' }}>{student.centerName}</td>
+                        <td style={{ padding: '12px 16px', color: '#666', whiteSpace: 'nowrap' }}>
+                          {student.createdAt ? (
+                            typeof student.createdAt === 'object' && 'toDate' in student.createdAt
+                              ? (student.createdAt as any).toDate().toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' })
+                              : new Date(student.createdAt as string).toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' })
+                          ) : '-'}
+                        </td>
+                        <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                            <button
+                              onClick={() => handleApprove(student)}
+                              disabled={processing === student.uid}
+                              style={{
+                                padding: '6px 14px',
+                                borderRadius: '6px',
+                                border: 'none',
+                                background: '#28a745',
+                                color: '#fff',
+                                cursor: 'pointer',
+                                fontSize: '0.85rem'
+                              }}
+                            >
+                              {processing === student.uid ? '...' : '✓ قبول'}
+                            </button>
+                            <button
+                              onClick={() => handleReject(student)}
+                              disabled={processing === student.uid}
+                              style={{
+                                padding: '6px 14px',
+                                borderRadius: '6px',
+                                border: 'none',
+                                background: '#dc3545',
+                                color: '#fff',
+                                cursor: 'pointer',
+                                fontSize: '0.85rem'
+                              }}
+                            >
+                              {processing === student.uid ? '...' : '✗ رفض'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              /* عرض البطاقات */
+              <>
+            {/* عرض مجمع حسب المركز إذا كان الترتيب حسب المركز والفلتر على الكل */}
+            {sortBy === 'center' && filterCenterId === 'all' && centers.length > 1 ? (
+              Object.entries(groupByCenter(filterAndSortStudents(pendingStudents))).map(([centerId, { centerName, students }]) => (
+                <div key={centerId} style={{ marginBottom: '25px' }}>
+                  <h3 style={{
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: '#fff',
+                    padding: '12px 20px',
+                    borderRadius: '10px',
+                    marginBottom: '15px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px'
+                  }}>
+                    🏫 {centerName}
+                    <span style={{
+                      background: 'rgba(255,255,255,0.2)',
+                      padding: '4px 12px',
+                      borderRadius: '15px',
+                      fontSize: '0.85rem'
+                    }}>
+                      {students.length} طلب
+                    </span>
+                  </h3>
+                  <div className="pending-list">
+                    {students.map(student => (
+                      <div key={student.uid} className="pending-card">
+                        <div className="pending-card-header">
+                          <div className="student-avatar">
+                            {student.name.charAt(0)}
+                          </div>
+                          <div className="student-info">
+                            <h3>{student.name}</h3>
+                            <span className="student-email">{student.personalId || 'غير محدد'}</span>
+                          </div>
+                          <span className="status-badge pending">قيد المراجعة</span>
+                        </div>
+                        <div className="pending-card-body">
+                          <div className="info-row">
+                            <span className="info-label">📞 الهاتف:</span>
+                            <span className="info-value">{student.phone || 'غير محدد'}</span>
+                          </div>
+                          <div className="info-row">
+                            <span className="info-label">📅 تاريخ التسجيل:</span>
+                            <span className="info-value">
+                              {student.createdAt ? (
+                                typeof student.createdAt === 'object' && 'toDate' in student.createdAt
+                                  ? (student.createdAt as any).toDate().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })
+                                  : new Date(student.createdAt as string).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })
+                              ) : 'غير محدد'}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="pending-card-actions">
+                          <button className="btn btn-approve" onClick={() => handleApprove(student)} disabled={processing === student.uid}>
+                            {processing === student.uid ? '...' : '✓ قبول'}
+                          </button>
+                          <button className="btn btn-reject" onClick={() => handleReject(student)} disabled={processing === student.uid}>
+                            {processing === student.uid ? '...' : '✗ رفض'}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="pending-list">
+                {filterAndSortStudents(pendingStudents).map(student => (
                 <div key={student.uid} className="pending-card">
                   <div className="pending-card-header">
                     <div className="student-avatar">
@@ -649,15 +978,18 @@ const PendingRequests = () => {
                   </div>
                 </div>
               ))}
-            </div>
+              </div>
+            )}
+              </>
+            )}
           </>
         )}
       </div>
-
+      
       {/* قسم المقابلات المحددة */}
       <div className="requests-section" style={{ marginTop: '2rem' }}>
         <h2>📅 المقابلات المحددة</h2>
-        {interviewStudents.length === 0 ? (
+        {filterAndSortStudents(interviewStudents).length === 0 ? (
           <div className="no-pending">
             <div className="no-pending-icon">✅</div>
             <h2>لا توجد مقابلات محددة</h2>
@@ -666,12 +998,86 @@ const PendingRequests = () => {
         ) : (
           <>
             <div className="pending-count">
-              <span className="count-badge">{interviewStudents.length}</span>
+              <span className="count-badge">{filterAndSortStudents(interviewStudents).length}</span>
               مقابلة محددة
             </div>
 
+            {/* عرض الجدول للمقابلات */}
+            {viewMode === 'table' ? (
+              <div style={{ overflowX: 'auto', marginTop: '15px' }}>
+                <table style={{
+                  width: '100%',
+                  borderCollapse: 'collapse',
+                  background: '#fff',
+                  borderRadius: '10px',
+                  overflow: 'hidden',
+                  boxShadow: '0 2px 10px rgba(0,0,0,0.08)'
+                }}>
+                  <thead>
+                    <tr style={{ background: 'linear-gradient(135deg, #2196f3 0%, #1976d2 100%)', color: '#fff' }}>
+                      <th style={{ padding: '14px 16px', textAlign: 'right', fontWeight: '600' }}>#</th>
+                      <th style={{ padding: '14px 16px', textAlign: 'right', fontWeight: '600' }}>الاسم</th>
+                      <th style={{ padding: '14px 16px', textAlign: 'right', fontWeight: '600' }}>الرقم الشخصي</th>
+                      <th style={{ padding: '14px 16px', textAlign: 'right', fontWeight: '600' }}>الهاتف</th>
+                      <th style={{ padding: '14px 16px', textAlign: 'right', fontWeight: '600' }}>المركز</th>
+                      <th style={{ padding: '14px 16px', textAlign: 'right', fontWeight: '600' }}>موعد المقابلة</th>
+                      <th style={{ padding: '14px 16px', textAlign: 'center', fontWeight: '600' }}>الإجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filterAndSortStudents(interviewStudents).map((student, index) => (
+                      <tr key={student.uid} style={{ borderBottom: '1px solid #eee', background: index % 2 === 0 ? '#fff' : '#f9f9f9' }}>
+                        <td style={{ padding: '12px 16px', color: '#888' }}>{index + 1}</td>
+                        <td style={{ padding: '12px 16px', fontWeight: '600' }}>{student.name}</td>
+                        <td style={{ padding: '12px 16px', color: '#666' }}>{student.personalId || '-'}</td>
+                        <td style={{ padding: '12px 16px', direction: 'ltr', textAlign: 'right' }}>{student.phone || student.phoneNumber || '-'}</td>
+                        <td style={{ padding: '12px 16px' }}>{student.centerName}</td>
+                        <td style={{ padding: '12px 16px', color: '#666', whiteSpace: 'nowrap' }}>
+                          {student.interviewDate && new Date(student.interviewDate).toLocaleDateString('ar-EG')} - {student.interviewTime || '-'}
+                        </td>
+                        <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                            <button
+                              onClick={() => handleApproveFromInterview(student)}
+                              disabled={processing === student.uid}
+                              style={{
+                                padding: '6px 14px',
+                                borderRadius: '6px',
+                                border: 'none',
+                                background: '#28a745',
+                                color: '#fff',
+                                cursor: 'pointer',
+                                fontSize: '0.85rem'
+                              }}
+                            >
+                              {processing === student.uid ? '...' : '✓ اجتاز'}
+                            </button>
+                            <button
+                              onClick={() => handleReject(student)}
+                              disabled={processing === student.uid}
+                              style={{
+                                padding: '6px 14px',
+                                borderRadius: '6px',
+                                border: 'none',
+                                background: '#dc3545',
+                                color: '#fff',
+                                cursor: 'pointer',
+                                fontSize: '0.85rem'
+                              }}
+                            >
+                              {processing === student.uid ? '...' : '✗ رفض'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              /* عرض البطاقات للمقابلات */
             <div className="pending-list">
-              {interviewStudents.map(student => (
+              {filterAndSortStudents(interviewStudents).map(student => (
                 <div key={student.uid} className="pending-card">
                   <div className="pending-card-header">
                     <div className="student-avatar">
@@ -720,6 +1126,7 @@ const PendingRequests = () => {
                 </div>
               ))}
             </div>
+            )}
           </>
         )}
       </div>
@@ -862,11 +1269,13 @@ const PendingRequests = () => {
                   required
                 >
                   <option value="">اختر المساق</option>
-                  {tracks.map(track => (
-                    <option key={track.id} value={track.id}>
-                      {track.name}
-                    </option>
-                  ))}
+                  {tracks
+                    .filter(track => track.centerId === selectedStudent.centerId)
+                    .map(track => (
+                      <option key={track.id} value={track.id}>
+                        {track.name}
+                      </option>
+                    ))}
                 </select>
               </div>
               {selectedTrackId && (

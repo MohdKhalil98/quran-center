@@ -210,8 +210,13 @@ const Register = () => {
       return;
     }
 
-    // الرقم الشخصي اختياري مؤقتاً
-    if (formData.personalId.trim() && formData.personalId.length !== 9) {
+    // الرقم الشخصي إجباري
+    if (!formData.personalId.trim()) {
+      setError('الرقم الشخصي مطلوب');
+      return;
+    }
+
+    if (formData.personalId.length !== 9) {
       setError('الرقم الشخصي يجب أن يكون 9 أرقام بالضبط');
       return;
     }
@@ -226,17 +231,15 @@ const Register = () => {
       return;
     }
 
-    // التحقق النهائي من عدم تكرار الرقم الشخصي (فقط إذا تم إدخاله)
-    if (formData.personalId.trim()) {
-      setCheckingPersonalId(true);
-      const personalIdExists = await checkPersonalIdExists(formData.personalId);
-      setCheckingPersonalId(false);
-      
-      if (personalIdExists) {
-        setPersonalIdError('⚠️ هذا الرقم مسجل مسبقاً! استخدم رقماً آخر');
-        setError('❌ الرقم الشخصي ' + formData.personalId + ' موجود بالفعل في النظام. لا يمكن التسجيل بنفس الرقم مرتين.');
-        return;
-      }
+    // التحقق النهائي من عدم تكرار الرقم الشخصي
+    setCheckingPersonalId(true);
+    const personalIdExists = await checkPersonalIdExists(formData.personalId);
+    setCheckingPersonalId(false);
+    
+    if (personalIdExists) {
+      setPersonalIdError('⚠️ هذا الرقم مسجل مسبقاً! استخدم رقماً آخر');
+      setError('❌ الرقم الشخصي ' + formData.personalId + ' موجود بالفعل في النظام. لا يمكن التسجيل بنفس الرقم مرتين.');
+      return;
     }
 
     setSubmitting(true);
@@ -289,7 +292,7 @@ const Register = () => {
         </p>
         <form className="login-form" onSubmit={handleSubmit}>
           <label>
-            الرقم الشخصي <small style={{ fontWeight: 'normal', color: '#666' }}>(اختياري - 9 أرقام)</small>
+            الرقم الشخصي <span style={{ color: '#d32f2f' }}>*</span> <small style={{ fontWeight: 'normal', color: '#666' }}>(9 أرقام)</small>
             <input
               type="text"
               name="personalId"
@@ -298,6 +301,7 @@ const Register = () => {
               placeholder="أدخل الرقم الشخصي (9 أرقام)"
               maxLength={9}
               inputMode="numeric"
+              required
               style={personalIdError ? { borderColor: '#d32f2f' } : {}}
             />
             {formData.personalId && formData.personalId.length < 9 && !personalIdError && (

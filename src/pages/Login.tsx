@@ -37,6 +37,7 @@ const Login = () => {
     
     setSubmitting(true);
     const looksLikePersonalId = /^\d{3,}$/.test(identifier.trim());
+    const looksLikeEmail = identifier.includes('@');
 
     try {
       // 1) جرّب دائماً الدخول كبريد إلكتروني أولاً
@@ -48,6 +49,34 @@ const Login = () => {
       }, 500);
       return;
     } catch (err: any) {
+      console.error('Login error:', err);
+      
+      // التحقق من أن المستخدم مسجل في قائمة الانتظار (البيانات موجودة في Firestore لكن Firebase Auth غير موجود)
+      if (looksLikeEmail && (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found')) {
+        // البحث عن المستخدم في Firestore بالبريد الإلكتروني
+        try {
+          const { collection, query, where, getDocs } = await import('firebase/firestore');
+          const { db } = await import('../firebase');
+          const q = query(collection(db, 'users'), where('email', '==', identifier.toLowerCase()));
+          const snapshot = await getDocs(q);
+          
+          if (!snapshot.empty) {
+            const userData = snapshot.docs[0].data();
+            if (userData.status === 'pending_registration') {
+              setError('⏳ طلبك قيد المراجعة. سيتم تفعيل حسابك بعد اجتياز المقابلة.');
+              setSubmitting(false);
+              return;
+            } else if (userData.status === 'interview_scheduled') {
+              setError(`📅 لديك موعد مقابلة. سيتم تفعيل حسابك بعد اجتياز المقابلة.`);
+              setSubmitting(false);
+              return;
+            }
+          }
+        } catch (checkErr) {
+          console.error('Error checking user in Firestore:', checkErr);
+        }
+      }
+      
       // 2) إذا فشل وكان المُعرّف رقمياً فجرّب الدخول بالرقم الشخصي
       if (looksLikePersonalId) {
         try {
@@ -62,7 +91,7 @@ const Login = () => {
           if (err2.message === 'USER_NOT_FOUND') {
             setError('البيانات غير صحيحة أو الحساب غير موجود');
           } else if (err2.message === 'ACCOUNT_NOT_ACTIVATED') {
-            setError('حسابك لم يُفعّل بعد. يرجى انتظار اجتياز المقابلة.');
+            setError('⏳ حسابك لم يُفعّل بعد. يرجى انتظار اجتياز المقابلة.');
           } else {
             setError('تعذر تسجيل الدخول. يرجى التحقق من البيانات.');
           }
@@ -74,11 +103,12 @@ const Login = () => {
 
       // 3) فشل الدخول بالبريد
       if (err.message === 'ACCOUNT_NOT_ACTIVATED') {
-        setError('حسابك لم يُفعّل بعد. يرجى انتظار اجتياز المقابلة.');
+        setError('⏳ حسابك لم يُفعّل بعد. يرجى انتظار اجتياز المقابلة.');
+      } else if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found') {
+        setError('البريد الإلكتروني أو كلمة المرور غير صحيحة.');
       } else {
         setError('تعذر تسجيل الدخول. يرجى التحقق من البيانات.');
       }
-      console.error(err);
     } finally {
       setSubmitting(false);
     }

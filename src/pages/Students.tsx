@@ -61,6 +61,16 @@ const Students = () => {
   const [selectedLevelId, setSelectedLevelId] = useState('');
   const [currentTrackType, setCurrentTrackType] = useState<'quran' | 'arabic_reading'>('quran');
   const [deleting, setDeleting] = useState(false);
+  // نافذة التعديل
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<StudentUser | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    email: '',
+    phone: '',
+    levelId: '',
+    levelName: ''
+  });
+  const [saving, setSaving] = useState(false);
   // فلاتر جديدة
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterActive, setFilterActive] = useState<string>('');
@@ -204,6 +214,146 @@ const Students = () => {
     } catch (error) {
       console.error('Error updating student:', error);
       alert('حدث خطأ أثناء تحديث حالة الطالب');
+    }
+  };
+
+  const handleOpenEditModal = (student: StudentUser) => {
+    setEditingStudent(student);
+    
+    // تحديد نوع المساق بناءً على الحلقة
+    const studentGroup = groups.find(g => g.id === student.groupId);
+    const trackId = studentGroup?.trackId || '';
+    const track = tracks.find(t => t.id === trackId);
+    const trackName = track?.name || '';
+    
+    const isArabicReading = trackName.includes('تأسيس') || 
+                           trackName.includes('قراءة') ||
+                           trackName.includes('عربية') ||
+                           trackName.toLowerCase().includes('arabic') || 
+                           trackName.toLowerCase().includes('reading');
+    
+    if (isArabicReading) {
+      setCurrentTrackType('arabic_reading');
+      const arabicLevels = arabicReadingCurriculum.map((level) => ({
+        id: level.id,
+        name: level.name
+      }));
+      setLevels(arabicLevels);
+    } else {
+      setCurrentTrackType('quran');
+      const quranLevels = quranCurriculum.map((juz) => ({
+        id: juz.id,
+        name: juz.name
+      }));
+      setLevels(quranLevels);
+    }
+    
+    setEditFormData({
+      email: student.email || '',
+      phone: student.phone || '',
+      levelId: student.levelId || '',
+      levelName: student.levelName || ''
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleCloseEditModal = () => {
+    setEditingStudent(null);
+    setIsEditModalOpen(false);
+    setEditFormData({ email: '', phone: '', levelId: '', levelName: '' });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingStudent) return;
+    
+    setSaving(true);
+    try {
+      const updateData: { [key: string]: string } = {};
+      
+      // المعلم والمشرف يمكنهم تعديل المستوى
+      if (editFormData.levelId && editFormData.levelId !== editingStudent.levelId) {
+        const selectedLevel = levels.find(l => l.id === editFormData.levelId);
+        updateData.levelId = editFormData.levelId;
+        updateData.levelName = selectedLevel?.name || '';
+        
+        // تحديد المرحلة الأولى بناءً على نوع المساق
+        let firstStage: { id: string; name: string };
+        if (currentTrackType === 'arabic_reading') {
+          const levelData = arabicReadingCurriculum.find(level => level.id === editFormData.levelId);
+          if (levelData && levelData.lessons && levelData.lessons.length > 0) {
+            firstStage = { id: levelData.lessons[0].id, name: levelData.lessons[0].name };
+            updateData.stageId = firstStage.id;
+            updateData.stageName = firstStage.name;
+          }
+        } else {
+          const levelData = quranCurriculum.find(juz => juz.id === editFormData.levelId);
+          if (levelData && levelData.surahs && levelData.surahs.length > 0) {
+            firstStage = { id: levelData.surahs[0].id, name: levelData.surahs[0].name };
+            updateData.stageId = firstStage.id;
+            updateData.stageName = firstStage.name;
+          }
+        }
+      }
+      
+      // المشرف فقط يمكنه تعديل البريد الإلكتروني ورقم التواصل
+      let emailChanged = false;
+      if (isSupervisor || isAdmin) {
+        if (editFormData.email !== editingStudent.email) {
+          updateData.email = editFormData.email;
+          emailChanged = true;
+        }
+        if (editFormData.phone !== editingStudent.phone) {
+          updateData.phone = editFormData.phone;
+        }
+      }
+      
+      if (Object.keys(updateData).length === 0) {
+        alert('لم يتم إجراء أي تغييرات');
+        setSaving(false);
+        return;
+      }
+      
+      await updateDoc(doc(db, 'users', editingStudent.uid), updateData);
+      
+      // إذا تم تغيير البريد الإلكتروني، إرسال طلب للمطور لتحديثه في Firebase Auth
+      if (emailChanged) {
+        await addDoc(collection(db, 'admin_requests'), {
+          type: 'update_auth_email',
+          userId: editingStudent.uid,
+          userName: editingStudent.name,
+          oldEmail: editingStudent.email,
+          newEmail: editFormData.email,
+          requestedBy: userProfile?.name || 'Unknown',
+          requestedByRole: userProfile?.role,
+          requestedAt: new Date().toISOString(),
+          status: 'pending',
+          message: `طلب تغيير البريد الإلكتروني للمستخدم ${editingStudent.name} من ${editingStudent.email} إلى ${editFormData.email}`
+        });
+      }
+      
+      // تحديث الـ state مباشرة
+      setStudents(prev => prev.map(s => 
+        s.uid === editingStudent.uid 
+          ? { ...s, ...updateData } as StudentUser
+          : s
+      ));
+      
+      // تحديث selectedStudent إذا كان مفتوحاً
+      if (selectedStudent?.uid === editingStudent.uid) {
+        setSelectedStudent({ ...selectedStudent, ...updateData } as StudentUser);
+      }
+      
+      if (emailChanged) {
+        alert('تم تحديث بيانات الطالب بنجاح.\n\n📧 تم إرسال طلب للمطور لتحديث البريد الإلكتروني في نظام تسجيل الدخول.');
+      } else {
+        alert('تم تحديث بيانات الطالب بنجاح');
+      }
+      handleCloseEditModal();
+    } catch (error) {
+      console.error('Error updating student:', error);
+      alert('حدث خطأ أثناء تحديث بيانات الطالب');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -883,6 +1033,18 @@ const Students = () => {
               </div>
             </div>
             <div className="modal-footer">
+              {/* زر التعديل - للمعلم والمشرف والمسؤول */}
+              {(isTeacher || isSupervisor || isAdmin) && (
+                <button
+                  className="btn btn-primary"
+                  onClick={() => {
+                    handleCloseDetailsModal();
+                    handleOpenEditModal(selectedStudent);
+                  }}
+                >
+                  ✏️ تعديل
+                </button>
+              )}
               {!isTeacher && (
                 <button
                   className={`btn ${selectedStudent.active ? 'btn-warning' : 'btn-success'}`}
@@ -979,6 +1141,105 @@ const Students = () => {
                 ✅ قبول الطالب
               </button>
               <button className="btn btn-secondary" onClick={handleCloseLevelModal}>
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة تعديل بيانات الطالب */}
+      {isEditModalOpen && editingStudent && (
+        <div className="modal-overlay" onClick={handleCloseEditModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>✏️ تعديل بيانات الطالب: {editingStudent.name}</h2>
+              <button className="close-btn" onClick={handleCloseEditModal}>&times;</button>
+            </div>
+            <div className="modal-body">
+              {/* المشرف والمسؤول يمكنهم تعديل البريد الإلكتروني */}
+              {(isSupervisor || isAdmin) && (
+                <div className="form-group">
+                  <label>📧 البريد الإلكتروني:</label>
+                  <input
+                    type="email"
+                    className="form-control"
+                    value={editFormData.email}
+                    onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                    placeholder="أدخل البريد الإلكتروني"
+                    dir="ltr"
+                  />
+                  <small className="help-text" style={{ color: '#ff9800' }}>
+                    ⚠️ ملاحظة: تغيير البريد الإلكتروني هنا يغير البيانات المحفوظة فقط، ولا يغير بيانات تسجيل الدخول
+                  </small>
+                </div>
+              )}
+              
+              {/* المشرف والمسؤول يمكنهم تعديل رقم التواصل */}
+              {(isSupervisor || isAdmin) && (
+                <div className="form-group">
+                  <label>📱 رقم التواصل:</label>
+                  <input
+                    type="tel"
+                    className="form-control"
+                    value={editFormData.phone}
+                    onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                    placeholder="أدخل رقم التواصل"
+                    dir="ltr"
+                  />
+                </div>
+              )}
+              
+              {/* المعلم والمشرف يمكنهم تعديل المستوى */}
+              <div className="form-group">
+                <label>📚 المستوى الحالي:</label>
+                <select
+                  className="form-control"
+                  value={editFormData.levelId}
+                  onChange={(e) => {
+                    const selectedLevel = levels.find(l => l.id === e.target.value);
+                    setEditFormData({ 
+                      ...editFormData, 
+                      levelId: e.target.value,
+                      levelName: selectedLevel?.name || ''
+                    });
+                  }}
+                >
+                  <option value="">-- اختر المستوى --</option>
+                  {levels.map((level) => (
+                    <option key={level.id} value={level.id}>
+                      {level.name}
+                    </option>
+                  ))}
+                </select>
+                <small className="help-text">
+                  💡 عند تغيير المستوى، سيتم البدء من المرحلة الأولى في المستوى الجديد
+                </small>
+              </div>
+              
+              {isTeacher && (
+                <div style={{ 
+                  backgroundColor: '#fff3e0', 
+                  padding: '10px', 
+                  borderRadius: '6px', 
+                  marginTop: '15px',
+                  border: '1px solid #ffcc80'
+                }}>
+                  <small style={{ color: '#e65100' }}>
+                    ℹ️ كمعلم، يمكنك تعديل مستوى الطالب فقط. لتعديل البريد الإلكتروني أو رقم التواصل، يرجى التواصل مع المشرف.
+                  </small>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn btn-success"
+                onClick={handleSaveEdit}
+                disabled={saving}
+              >
+                {saving ? '⏳ جاري الحفظ...' : '💾 حفظ التغييرات'}
+              </button>
+              <button className="btn btn-secondary" onClick={handleCloseEditModal}>
                 إلغاء
               </button>
             </div>

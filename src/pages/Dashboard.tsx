@@ -1,7 +1,20 @@
 import { useEffect, useState } from 'react';
-import { collection, getDocs, query, where, orderBy, limit, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, query, where, orderBy, limit, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
+
+interface AdminRequest {
+  id: string;
+  type: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  requestedBy: string;
+  requestedByRole: string;
+  requestedAt: string;
+  status: string;
+  message: string;
+}
 
 interface Center {
   id: string;
@@ -65,6 +78,53 @@ const Dashboard = () => {
 
   const [lowAttendanceAlerts, setLowAttendanceAlerts] = useState<LowAttendanceAlert[]>([]);
   const [teacherGroups, setTeacherGroups] = useState<string[]>([]);
+  const [adminRequests, setAdminRequests] = useState<AdminRequest[]>([]);
+  const [processingRequest, setProcessingRequest] = useState<string | null>(null);
+
+  // جلب طلبات المطور المعلقة
+  const fetchAdminRequests = async () => {
+    if (!isAdmin) return;
+    
+    try {
+      const requestsQuery = query(
+        collection(db, 'admin_requests'),
+        where('status', '==', 'pending')
+      );
+      const requestsSnapshot = await getDocs(requestsQuery);
+      const requests: AdminRequest[] = requestsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as AdminRequest));
+      
+      // ترتيب حسب التاريخ (الأحدث أولاً)
+      requests.sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime());
+      setAdminRequests(requests);
+    } catch (error) {
+      console.error('Error fetching admin requests:', error);
+    }
+  };
+
+  // تحديث حالة الطلب إلى "تم"
+  const markRequestAsDone = async (requestId: string) => {
+    setProcessingRequest(requestId);
+    try {
+      await updateDoc(doc(db, 'admin_requests', requestId), {
+        status: 'done',
+        completedAt: new Date().toISOString()
+      });
+      setAdminRequests(prev => prev.filter(r => r.id !== requestId));
+    } catch (error) {
+      console.error('Error updating request:', error);
+      alert('حدث خطأ أثناء تحديث الطلب');
+    } finally {
+      setProcessingRequest(null);
+    }
+  };
+
+  // فتح Firebase Auth Console
+  const openFirebaseAuth = () => {
+    window.open('https://console.firebase.google.com/project/halqatmoza/authentication/users', '_blank');
+  };
 
   // جلب مراكز المشرف
   const fetchSupervisorCenters = async () => {
@@ -471,6 +531,13 @@ const Dashboard = () => {
     fetchDashboard();
   }, []);
 
+  // جلب طلبات المطور عند تحديد isAdmin
+  useEffect(() => {
+    if (isAdmin) {
+      fetchAdminRequests();
+    }
+  }, [isAdmin]);
+
   if (stats.loading) {
     return (
       <section className="page">
@@ -559,17 +626,156 @@ const Dashboard = () => {
         ))}
       </div>
 
-      <section className="overview-card">
-        <h2>{isTeacher ? 'آخر أعمالي' : isAdmin ? 'أعمال المطور' : 'آخر التحديثات'}</h2>
-        <ul className="overview-list">
-          {stats.recentUpdates.map((u, i) => (
-            <li key={i}>
-              {u.text}
-              {u.date && <span className="update-date"> - {u.date}</span>}
-            </li>
-          ))}
-        </ul>
-      </section>
+      {/* قسم آخر أعمالي للمعلمين فقط */}
+      {isTeacher && (
+        <section className="overview-card">
+          <h2>آخر أعمالي</h2>
+          <ul className="overview-list">
+            {stats.recentUpdates.map((u, i) => (
+              <li key={i}>
+                {u.text}
+                {u.date && <span className="update-date"> - {u.date}</span>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* طلبات المطور المعلقة */}
+      {isAdmin && adminRequests.length > 0 && (
+        <section className="admin-requests-card" style={{
+          background: '#fff3cd',
+          border: '2px solid #ffc107',
+          borderRadius: '12px',
+          padding: '20px',
+          marginTop: '24px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h2 style={{ margin: 0, color: '#856404', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>⚠️</span>
+              طلبات معلقة ({adminRequests.length})
+            </h2>
+            <button
+              onClick={openFirebaseAuth}
+              style={{
+                padding: '10px 20px',
+                background: '#4285f4',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontWeight: '600',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              🔗 فتح Firebase Auth
+            </button>
+          </div>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {adminRequests.map((request) => (
+              <div key={request.id} style={{
+                background: 'white',
+                borderRadius: '8px',
+                padding: '16px',
+                border: '1px solid #e0e0e0',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                gap: '16px',
+                flexWrap: 'wrap'
+              }}>
+                <div style={{ flex: 1, minWidth: '250px' }}>
+                  <div style={{ 
+                    display: 'inline-block',
+                    background: request.type === 'delete_auth_user' ? '#dc3545' : '#6c757d',
+                    color: 'white',
+                    padding: '4px 12px',
+                    borderRadius: '20px',
+                    fontSize: '0.85rem',
+                    marginBottom: '8px'
+                  }}>
+                    {request.type === 'delete_auth_user' ? '🗑️ حذف مستخدم' : request.type}
+                  </div>
+                  <div style={{ fontWeight: '600', fontSize: '1.1rem', color: '#333', marginBottom: '4px' }}>
+                    {request.userName}
+                  </div>
+                  <div style={{ color: '#666', fontSize: '0.9rem', marginBottom: '4px' }}>
+                    📧 {request.userEmail}
+                  </div>
+                  <div style={{ color: '#888', fontSize: '0.85rem' }}>
+                    👤 طلب بواسطة: {request.requestedBy} ({request.requestedByRole})
+                  </div>
+                  <div style={{ color: '#888', fontSize: '0.85rem' }}>
+                    📅 {new Date(request.requestedAt).toLocaleDateString('ar-SA', { 
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(request.userEmail);
+                      alert('تم نسخ البريد الإلكتروني');
+                    }}
+                    style={{
+                      padding: '8px 16px',
+                      background: '#6c757d',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '0.9rem'
+                    }}
+                  >
+                    📋 نسخ البريد
+                  </button>
+                  <button
+                    onClick={() => markRequestAsDone(request.id)}
+                    disabled={processingRequest === request.id}
+                    style={{
+                      padding: '8px 16px',
+                      background: processingRequest === request.id ? '#ccc' : '#28a745',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: processingRequest === request.id ? 'not-allowed' : 'pointer',
+                      fontSize: '0.9rem',
+                      fontWeight: '600'
+                    }}
+                  >
+                    {processingRequest === request.id ? '⏳ جاري...' : '✅ تم'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* رسالة عند عدم وجود طلبات معلقة */}
+      {isAdmin && adminRequests.length === 0 && (
+        <section style={{
+          background: '#d4edda',
+          border: '2px solid #28a745',
+          borderRadius: '12px',
+          padding: '20px',
+          marginTop: '24px',
+          textAlign: 'center'
+        }}>
+          <h3 style={{ color: '#155724', margin: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+            <span>✅</span>
+            لا توجد طلبات معلقة
+          </h3>
+        </section>
+      )}
 
       {/* إخفاء ملخص الحضور اليومي وتنبيهات الحضور للمطور */}
       {!isAdmin && (

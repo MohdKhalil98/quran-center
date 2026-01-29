@@ -70,6 +70,7 @@
   padding: 20px;
   background: #f8f9fa;
   border-radius: 12px;
+  align-items: flex-end;
 }
 
 .filter-group {
@@ -79,10 +80,39 @@
   min-width: 180px;
 }
 
+.filter-group.search-group {
+  flex: 1;
+  min-width: 250px;
+  max-width: 350px;
+}
+
 .filter-group label {
   font-size: 0.85rem;
   color: #555;
   font-weight: 600;
+}
+
+.filter-input {
+  padding: 10px 15px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  background: #fff;
+  transition: all 0.3s;
+}
+
+.filter-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+}
+
+.filter-input.search-input {
+  padding-right: 15px;
+}
+
+.filter-input::placeholder {
+  color: #adb5bd;
 }
 
 .filter-select {
@@ -752,5 +782,1241 @@
   .action-buttons .btn {
     width: 100%;
     justify-content: center;
+  }
+}
+
+/* Template Management Styles */
+.templates-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.templates-header label {
+  font-weight: 600;
+  color: #333;
+}
+
+.template-modal {
+  max-width: 600px;
+}
+
+.templates-list {
+  margin-bottom: 25px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #eee;
+}
+
+.templates-list h3 {
+  font-size: 1rem;
+  color: #333;
+  margin-bottom: 15px;
+}
+
+.template-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  gap: 15px;
+}
+
+.template-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.template-info strong {
+  display: block;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.template-info p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.template-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.template-form h3 {
+  font-size: 1rem;
+  color: #333;
+  margin-bottom: 15px;
+}
+
+.template-form-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 15px;
+}
+
+.variable-hint {
+  display: block;
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: linear-gradient(135deg, #e8f5e9 0%, #f1f8e9 100%);
+  border-radius: 8px;
+  border-right: 3px solid #4caf50;
+}
+
+.variable-hint code {
+  background: #fff;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: #2e7d32;
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
+}
+
+/* Sending Modal Styles */
+.sending-modal {
+  max-width: 550px;
+}
+
+.sending-progress-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.progress-text {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.progress-bar-container {
+  width: 200px;
+  height: 8px;
+  background: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea, #764ba2);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.current-student-card {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 25px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 16px;
+  margin-bottom: 25px;
+}
+
+.student-avatar {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.student-details h3 {
+  margin: 0 0 8px 0;
+  font-size: 1.3rem;
+  color: #333;
+}
+
+.student-phone-display,
+.student-group-display {
+  margin: 4px 0;
+  font-size: 0.95rem;
+  color: #666;
+}
+
+.sending-instructions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.instruction-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #f0f4ff;
+  border-radius: 10px;
+}
+
+.step-number {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #667eea;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.step-text {
+  color: #444;
+  font-size: 0.95rem;
+}
+
+.no-phone-warning {
+  padding: 15px;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 10px;
+  color: #856404;
+  text-align: center;
+  font-weight: 600;
+}
+
+.sending-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+}
+
+.sending-actions .btn {
+  flex: 1;
+  min-width: 120px;
+}
+
+/* Report Modal Styles */
+.report-modal {
+  max-width: 600px;
+}
+
+.report-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 15px;
+  margin-bottom: 25px;
+}
+
+.summary-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 15px;
+  border-radius: 12px;
+  text-align: center;
+}
+
+.summary-card.sent {
+  background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+}
+
+.summary-card.skipped {
+  background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%);
+}
+
+.summary-card.no-phone {
+  background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+}
+
+.summary-card.remaining {
+  background: linear-gradient(135deg, #e2e3e5 0%, #d6d8db 100%);
+}
+
+.summary-icon {
+  font-size: 1.8rem;
+  margin-bottom: 8px;
+}
+
+.summary-number {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #333;
+}
+
+.summary-label {
+  font-size: 0.85rem;
+  color: #666;
+  margin-top: 4px;
+}
+
+.report-details h3 {
+  font-size: 1.1rem;
+  color: #333;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #eee;
+}
+
+.report-list {
+  max-height: 300px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.report-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 15px;
+  border-radius: 8px;
+  background: #f8f9fa;
+}
+
+.report-item.sent {
+  background: #d4edda;
+}
+
+.report-item.skipped {
+  background: #fff3cd;
+}
+
+.report-item.no-phone {
+  background: #f8d7da;
+}
+
+.report-item.remaining {
+  background: #e9ecef;
+}
+
+.report-index {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #667eea;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.report-name {
+  flex: 1;
+  font-weight: 500;
+  color: #333;
+}
+
+.report-status {
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.report-status.sent { color: #155724; }
+.report-status.skipped { color: #856404; }
+.report-status.no-phone { color: #721c24; }
+.report-status.remaining { color: #6c757d; }
+
+@media (max-width: 480px) {
+  .templates-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .template-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .template-actions {
+    justify-content: flex-end;
+  }
+
+  .report-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .sending-actions {
+    flex-direction: column;
+  }
+
+  .sending-actions .btn {
+    width: 100%;
+  }
+
+  .current-student-card {
+    flex-direction: column;
+    text-align: center;
+  }
+}
+
+/* ======================== NEW SUBSCRIPTION SYSTEM STYLES ======================== */
+
+/* Active Period Card */
+.active-period-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 25px 30px;
+  border-radius: 20px;
+  margin-bottom: 25px;
+  box-shadow: 0 15px 40px rgba(102, 126, 234, 0.35);
+}
+
+.period-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.period-title-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.period-title-section h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.period-status-badge {
+  background: rgba(255, 255, 255, 0.25);
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  backdrop-filter: blur(10px);
+}
+
+.period-actions-inline {
+  display: flex;
+  gap: 8px;
+}
+
+.period-action-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  font-size: 1.1rem;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.period-action-btn.edit {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.period-action-btn.edit:hover {
+  background: rgba(255, 255, 255, 0.35);
+  transform: scale(1.1);
+}
+
+/* Period Info Grid */
+.period-info-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-bottom: 25px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 18px 22px;
+  border-radius: 14px;
+  backdrop-filter: blur(10px);
+}
+
+.period-info-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 200px;
+}
+
+.period-info-item .info-icon {
+  font-size: 1.5rem;
+  opacity: 0.9;
+}
+
+.period-info-item .info-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.period-info-item .info-label {
+  font-size: 0.8rem;
+  opacity: 0.8;
+  font-weight: 500;
+}
+
+.period-info-item .info-value {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/* Period Stats Grid */
+.period-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 15px;
+  margin-bottom: 25px;
+}
+
+.stat-card {
+  background: rgba(255, 255, 255, 0.15);
+  padding: 20px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+  background: rgba(255, 255, 255, 0.22);
+  transform: translateY(-3px);
+}
+
+.stat-card .stat-icon {
+  font-size: 2rem;
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+}
+
+.stat-card.active .stat-icon {
+  background: rgba(40, 167, 69, 0.3);
+}
+
+.stat-card.inactive .stat-icon {
+  background: rgba(255, 193, 7, 0.3);
+}
+
+.stat-card.exempt .stat-icon {
+  background: rgba(23, 162, 184, 0.3);
+}
+
+.stat-card .stat-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-card .stat-number {
+  font-size: 1.8rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.stat-card .stat-label {
+  font-size: 0.85rem;
+  opacity: 0.9;
+  margin-top: 4px;
+}
+
+/* Send Invitations Button */
+.send-invitations-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px 25px;
+  background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+  border: none;
+  border-radius: 14px;
+  color: white;
+  font-size: 1.05rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 6px 20px rgba(37, 211, 102, 0.35);
+}
+
+.send-invitations-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 30px rgba(37, 211, 102, 0.45);
+}
+
+.send-invitations-btn .btn-icon {
+  font-size: 1.4rem;
+}
+
+.send-invitations-btn .btn-text {
+  flex: none;
+}
+
+.send-invitations-btn .btn-count {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+}
+
+.active-period-card h2 {
+  margin: 0 0 15px 0;
+  font-size: 1.4rem;
+}
+
+.period-details-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-bottom: 20px;
+  font-size: 0.95rem;
+  opacity: 0.95;
+}
+
+.active-period-card .period-actions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.active-period-card .btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+}
+
+.active-period-card .btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.period-stats {
+  display: flex;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+
+.stat-item {
+  background: rgba(255, 255, 255, 0.15);
+  padding: 15px 25px;
+  border-radius: 12px;
+  text-align: center;
+  min-width: 100px;
+}
+
+.stat-item .stat-number {
+  display: block;
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 5px;
+}
+
+.stat-item .stat-label {
+  font-size: 0.85rem;
+  opacity: 0.9;
+}
+
+.stat-item.active { background: rgba(40, 167, 69, 0.3); }
+.stat-item.inactive { background: rgba(220, 53, 69, 0.3); }
+.stat-item.exempt { background: rgba(23, 162, 184, 0.3); }
+
+/* No Active Period */
+.no-active-period {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  padding: 30px;
+  border-radius: 12px;
+  text-align: center;
+  margin-bottom: 25px;
+}
+
+.no-active-period p {
+  font-size: 1.1rem;
+  color: #856404;
+  margin: 0 0 15px 0;
+}
+
+/* Status Badge New */
+.status-badge-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.status-badge-new.active {
+  background: rgba(40, 167, 69, 0.15);
+  color: #28a745;
+}
+
+.status-badge-new.inactive {
+  background: rgba(220, 53, 69, 0.15);
+  color: #dc3545;
+}
+
+.status-badge-new.exempt {
+  background: rgba(23, 162, 184, 0.15);
+  color: #17a2b8;
+}
+
+/* Payment Modal */
+.payment-modal {
+  max-width: 550px;
+}
+
+.payment-students-list {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+}
+
+.payment-students-list h3 {
+  margin: 0 0 10px 0;
+  font-size: 0.95rem;
+  color: #555;
+}
+
+.payment-students-list ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.payment-students-list li {
+  padding: 5px 0;
+  color: #333;
+  font-weight: 500;
+}
+
+.payment-students-list li::before {
+  content: '👤 ';
+}
+
+/* Receipt Upload */
+.receipt-upload-area {
+  border: 2px dashed #ddd;
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  transition: border-color 0.3s;
+}
+
+.receipt-upload-area:hover {
+  border-color: #667eea;
+}
+
+.upload-btn {
+  background: transparent;
+  border: 2px solid #667eea;
+  color: #667eea;
+  padding: 12px 25px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.3s;
+}
+
+.upload-btn:hover {
+  background: #667eea;
+  color: white;
+}
+
+.receipt-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.receipt-preview img {
+  max-width: 100%;
+  max-height: 200px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* OCR Progress */
+.ocr-progress {
+  margin-top: 15px;
+  padding: 15px;
+  background: linear-gradient(135deg, #e8f4fd 0%, #f0f7ff 100%);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.ocr-progress .progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #e0e0e0;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.ocr-progress .progress-fill {
+  height: 100%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 10px;
+  transition: width 0.3s ease;
+}
+
+.ocr-progress .progress-text {
+  font-size: 0.9rem;
+  color: #667eea;
+  font-weight: 600;
+}
+
+/* Extracted Data Card */
+.extracted-data-card {
+  margin-top: 15px;
+  padding: 18px;
+  background: linear-gradient(135deg, #f0fff4 0%, #e8faf0 100%);
+  border: 1px solid #c6f6d5;
+  border-radius: 14px;
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.extracted-data-card h4 {
+  margin: 0 0 15px 0;
+  color: #276749;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.extracted-data-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.extracted-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 10px;
+  border: 1px solid rgba(39, 103, 73, 0.15);
+}
+
+.extracted-item .extracted-label {
+  color: #555;
+  font-size: 0.9rem;
+  min-width: 120px;
+}
+
+.extracted-item .extracted-value {
+  color: #276749;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.extracted-item.no-data {
+  background: #fff3cd;
+  border-color: #ffc107;
+  justify-content: center;
+}
+
+.extracted-item.no-data span {
+  color: #856404;
+  font-size: 0.9rem;
+}
+
+/* Receipt Data Section */
+.receipt-data-section {
+  margin-top: 20px;
+  padding: 20px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 14px;
+  border: 1px solid #dee2e6;
+}
+
+.receipt-data-section .section-title {
+  margin: 0 0 18px 0;
+  color: #495057;
+  font-size: 1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.receipt-data-section .form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.receipt-data-section .form-row:last-child {
+  margin-bottom: 0;
+}
+
+.receipt-data-section .form-group {
+  margin-bottom: 0;
+}
+
+.receipt-data-section .form-group label {
+  font-size: 0.85rem;
+  color: #555;
+  margin-bottom: 6px;
+  display: block;
+  font-weight: 500;
+}
+
+.receipt-data-section .form-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #ced4da;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  transition: all 0.3s ease;
+  background: white;
+}
+
+.receipt-data-section .form-input:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+  outline: none;
+}
+
+.receipt-data-section .form-input::placeholder {
+  color: #adb5bd;
+}
+
+@media (max-width: 600px) {
+  .receipt-data-section .form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Payment Students List Enhancement */
+.payment-students-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.payment-students-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #333;
+}
+
+.btn-add-sibling {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-add-sibling:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.payment-students-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.payment-students-list ul li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: white;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.payment-students-list ul li .student-name {
+  font-weight: 500;
+  color: #333;
+}
+
+.btn-remove-student {
+  background: #fee2e2;
+  color: #dc3545;
+  border: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.btn-remove-student:hover {
+  background: #dc3545;
+  color: white;
+}
+
+.siblings-total {
+  margin-top: 12px;
+  padding: 12px;
+  background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+  border-radius: 10px;
+  text-align: center;
+  color: #155724;
+  font-size: 0.95rem;
+}
+
+.siblings-total strong {
+  font-size: 1.1rem;
+}
+
+/* Sibling Selector Modal */
+.sibling-modal {
+  max-width: 500px;
+  max-height: 80vh;
+}
+
+.sibling-search {
+  margin-bottom: 15px;
+}
+
+.sibling-search .search-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid #e9ecef;
+  border-radius: 12px;
+  font-size: 1rem;
+  transition: all 0.3s;
+}
+
+.sibling-search .search-input:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15);
+  outline: none;
+}
+
+.sibling-list {
+  max-height: 350px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sibling-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  border: 1px solid #e9ecef;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sibling-item:hover {
+  background: #e8f4fd;
+  border-color: #667eea;
+  transform: translateX(-5px);
+}
+
+.sibling-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sibling-name {
+  font-weight: 600;
+  color: #333;
+}
+
+.sibling-group {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.no-siblings {
+  text-align: center;
+  padding: 30px;
+  color: #666;
+}
+
+.no-siblings p {
+  margin: 0;
+}
+
+/* Exempt Modal */
+.exempt-modal {
+  max-width: 450px;
+}
+
+.exempt-student-name {
+  background: #e8f4fd;
+  padding: 15px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  text-align: center;
+  color: #0056b3;
+}
+
+/* Button Info */
+.btn-info {
+  background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+  color: white;
+  border: none;
+}
+
+.btn-info:hover {
+  background: linear-gradient(135deg, #138496 0%, #117a8b 100%);
+}
+
+.btn-outline {
+  background: transparent;
+  border: 2px solid #667eea;
+  color: #667eea;
+}
+
+.btn-outline:hover {
+  background: #667eea;
+  color: white;
+}
+
+/* Responsive for new styles */
+@media (max-width: 768px) {
+  .active-period-card {
+    padding: 20px;
+  }
+
+  .period-card-header {
+    flex-direction: column;
+    gap: 15px;
+    align-items: flex-start;
+  }
+
+  .period-title-section {
+    flex-wrap: wrap;
+  }
+
+  .period-info-grid {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .period-info-item {
+    min-width: unset;
+  }
+
+  .period-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .send-invitations-btn {
+    flex-wrap: wrap;
+    padding: 14px 20px;
+  }
+
+  .period-details-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .active-period-card .period-actions {
+    flex-direction: column;
+  }
+
+  .period-stats {
+    justify-content: center;
+  }
+
+  .stat-item {
+    min-width: 80px;
+    padding: 12px 18px;
+  }
+
+  .stat-item .stat-number {
+    font-size: 1.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .active-period-card h2 {
+    font-size: 1.1rem;
+  }
+
+  .period-title-section h2 {
+    font-size: 1.2rem;
+  }
+
+  .stat-card {
+    padding: 15px;
+    gap: 10px;
+  }
+
+  .stat-card .stat-icon {
+    font-size: 1.5rem;
+    width: 40px;
+    height: 40px;
+  }
+
+  .stat-card .stat-number {
+    font-size: 1.4rem;
+  }
+
+  .period-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+
+  .stat-item {
+    min-width: unset;
   }
 }

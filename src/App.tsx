@@ -22,7 +22,7 @@ import Messages from './pages/Messages';
 import Conversation from './pages/Conversation';
 import ChangePassword from './pages/ChangePassword';
 import BatchImport from './pages/BatchImport';
-import Subscriptions from './pages/Subscriptions';
+import Subscriptions from './pages/SubscriptionsNew';
 import { useAuth } from './context/AuthContext';
 
 // Component to handle default redirect based on role

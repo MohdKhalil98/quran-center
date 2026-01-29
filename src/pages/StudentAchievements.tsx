@@ -263,14 +263,18 @@ const StudentAchievements = () => {
           where('groupId', '==', selectedGroupId)
         );
         const studentsSnapshot = await getDocs(studentsQuery);
-        const studentsList = studentsSnapshot.docs.map((doc) => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            name: data.name,
-            ...data
-          };
-        });
+        const studentsList = studentsSnapshot.docs
+          .map((doc) => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              name: data.name,
+              subscriptionStatus: data.subscriptionStatus || 'inactive',
+              ...data
+            };
+          })
+          // تصفية الطلاب غير النشطين - يظهر فقط النشطين والمعفيين
+          .filter((student: any) => student.subscriptionStatus === 'active' || student.subscriptionStatus === 'exempt');
         
         studentsList.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
         setGroupStudents(studentsList);

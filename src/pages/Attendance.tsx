@@ -8,6 +8,7 @@ interface Student {
   id: string;
   name: string;
   groupId?: string;
+  subscriptionStatus?: 'active' | 'inactive' | 'exempt'; // حالة الاشتراك
 }
 
 interface Group {
@@ -92,8 +93,11 @@ const Attendance = () => {
           .map((doc) => ({
             id: doc.id,
             name: doc.data().name,
-            groupId: doc.data().groupId
-          } as Student));
+            groupId: doc.data().groupId,
+            subscriptionStatus: doc.data().subscriptionStatus || 'inactive'
+          } as Student))
+          // تصفية الطلاب غير النشطين - يظهر فقط النشطين والمعفيين
+          .filter((student) => student.subscriptionStatus === 'active' || student.subscriptionStatus === 'exempt');
         
         // Sort by name
         allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));

@@ -71,6 +71,23 @@ const Subscriptions = () => {
   const [bulkMessage, setBulkMessage] = useState<string>('');
   const [showBulkModal, setShowBulkModal] = useState(false);
   
+  // قوالب الرسائل
+  const [messageTemplates, setMessageTemplates] = useState<{id: string; name: string; text: string}[]>([
+    { id: '1', name: 'تذكير بالتجديد', text: 'السلام عليكم ورحمة الله وبركاته\n\nالأخ {اسم_الطالب} الكريم\n\nنذكركم بتجديد اشتراككم في حلقة تحفيظ القرآن الكريم.\n\nجزاكم الله خيراً' },
+    { id: '2', name: 'تأكيد التفعيل', text: 'السلام عليكم ورحمة الله وبركاته\n\nالأخ {اسم_الطالب} الكريم\n\nتم تفعيل اشتراككم بنجاح.\n\nبارك الله فيكم ووفقكم لحفظ كتابه.' },
+    { id: '3', name: 'بدء فترة جديدة', text: 'السلام عليكم ورحمة الله وبركاته\n\nالأخ {اسم_الطالب} الكريم\n\nنود إعلامكم بأن فترة الدراسة الجديدة ستبدأ قريباً.\n\nيرجى تجديد الاشتراك لمواصلة الحضور.\n\nجزاكم الله خيراً' }
+  ]);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<{id: string; name: string; text: string} | null>(null);
+  const [newTemplate, setNewTemplate] = useState({ name: '', text: '' });
+  
+  // نظام إرسال واتساب المتسلسل
+  const [showSendingModal, setShowSendingModal] = useState(false);
+  const [currentSendingIndex, setCurrentSendingIndex] = useState(0);
+  const [sendingQueue, setSendingQueue] = useState<Student[]>([]);
+  const [sendingResults, setSendingResults] = useState<{studentId: string; name: string; status: 'sent' | 'skipped' | 'no-phone'}[]>([]);
+  const [showReportModal, setShowReportModal] = useState(false);
+  
   // فترات الدراسة
   const [studyPeriods, setStudyPeriods] = useState<StudyPeriod[]>([]);
   const [showPeriodModal, setShowPeriodModal] = useState(false);
@@ -376,28 +393,106 @@ const Subscriptions = () => {
     }
 
     const selectedStudentData = students.filter(s => selectedStudents.includes(s.uid));
-    const encodedMessage = encodeURIComponent(bulkMessage);
-
-    // فتح نوافذ واتساب لكل طالب
-    selectedStudentData.forEach((student, index) => {
-      if (student.phone) {
-        // تنظيف رقم الهاتف
-        let phone = student.phone.replace(/\D/g, '');
-        // إضافة رمز الدولة إذا لم يكن موجوداً
-        if (!phone.startsWith('966') && !phone.startsWith('+966')) {
-          phone = '966' + phone.replace(/^0/, '');
-        }
-        
-        // فتح رابط واتساب مع تأخير بسيط بين كل رسالة
-        setTimeout(() => {
-          window.open(`https://wa.me/${phone}?text=${encodedMessage}`, '_blank');
-        }, index * 500);
-      }
-    });
-
+    
+    // تهيئة قائمة الإرسال
+    setSendingQueue(selectedStudentData);
+    setCurrentSendingIndex(0);
+    setSendingResults([]);
     setShowBulkModal(false);
+    setShowSendingModal(true);
+  };
+
+  // فتح واتساب للطالب الحالي
+  const openCurrentStudentWhatsApp = () => {
+    const student = sendingQueue[currentSendingIndex];
+    if (!student) return;
+
+    if (student.phone) {
+      // تنظيف رقم الهاتف
+      let phone = student.phone.replace(/\D/g, '');
+      // إضافة رمز الدولة إذا لم يكن موجوداً (مملكة البحرين)
+      if (!phone.startsWith('973') && !phone.startsWith('+973')) {
+        phone = '973' + phone.replace(/^0/, '');
+      }
+      
+      // استبدال المتغيرات في الرسالة ببيانات الطالب
+      let personalizedMessage = bulkMessage
+        .replace(/\{اسم_الطالب\}/g, student.name || '')
+        .replace(/\{name\}/gi, student.name || '')
+        .replace(/\{الاسم\}/g, student.name || '');
+      
+      const encodedMessage = encodeURIComponent(personalizedMessage);
+      
+      // فتح رابط واتساب
+      window.open(`https://wa.me/${phone}?text=${encodedMessage}`, '_blank');
+    }
+  };
+
+  // تأكيد إرسال الرسالة والانتقال للتالي
+  const confirmSentAndNext = () => {
+    const student = sendingQueue[currentSendingIndex];
+    
+    // إضافة النتيجة
+    setSendingResults(prev => [...prev, {
+      studentId: student.uid,
+      name: student.name,
+      status: student.phone ? 'sent' : 'no-phone'
+    }]);
+
+    // الانتقال للتالي أو إنهاء العملية
+    if (currentSendingIndex < sendingQueue.length - 1) {
+      setCurrentSendingIndex(prev => prev + 1);
+    } else {
+      // انتهاء الإرسال - عرض التقرير
+      finishSending();
+    }
+  };
+
+  // تخطي الطالب الحالي
+  const skipCurrentStudent = () => {
+    const student = sendingQueue[currentSendingIndex];
+    
+    // إضافة النتيجة كتخطي
+    setSendingResults(prev => [...prev, {
+      studentId: student.uid,
+      name: student.name,
+      status: 'skipped'
+    }]);
+
+    // الانتقال للتالي أو إنهاء العملية
+    if (currentSendingIndex < sendingQueue.length - 1) {
+      setCurrentSendingIndex(prev => prev + 1);
+    } else {
+      finishSending();
+    }
+  };
+
+  // إنهاء عملية الإرسال وعرض التقرير
+  const finishSending = () => {
+    setShowSendingModal(false);
+    setShowReportModal(true);
     setBulkMessage('');
     setSelectedStudents([]);
+  };
+
+  // إلغاء عملية الإرسال
+  const cancelSending = () => {
+    if (sendingResults.length > 0) {
+      // إذا تم إرسال بعض الرسائل، اعرض التقرير
+      setShowSendingModal(false);
+      setShowReportModal(true);
+    } else {
+      setShowSendingModal(false);
+    }
+    setBulkMessage('');
+    setSelectedStudents([]);
+  };
+
+  // إغلاق التقرير
+  const closeReport = () => {
+    setShowReportModal(false);
+    setSendingResults([]);
+    setSendingQueue([]);
   };
 
   // Study Periods Functions
@@ -702,7 +797,7 @@ const Subscriptions = () => {
                           </button>
                           {student.phone && (
                             <a
-                              href={`https://wa.me/${student.phone.replace(/\D/g, '').replace(/^0/, '966')}`}
+                              href={`https://wa.me/${student.phone.replace(/\D/g, '').replace(/^0/, '973')}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="btn btn-sm btn-whatsapp-icon"
@@ -839,26 +934,29 @@ const Subscriptions = () => {
               </div>
               
               <div className="message-templates">
-                <label>قوالب سريعة:</label>
+                <div className="templates-header">
+                  <label>قوالب سريعة:</label>
+                  <button 
+                    className="btn btn-sm btn-secondary"
+                    onClick={() => {
+                      setEditingTemplate(null);
+                      setNewTemplate({ name: '', text: '' });
+                      setShowTemplateModal(true);
+                    }}
+                  >
+                    ⚙️ إدارة القوالب
+                  </button>
+                </div>
                 <div className="template-buttons">
-                  <button
-                    className="template-btn"
-                    onClick={() => setBulkMessage('السلام عليكم ورحمة الله وبركاته\n\nنذكركم بتجديد اشتراككم في حلقة تحفيظ القرآن الكريم.\n\nجزاكم الله خيراً')}
-                  >
-                    تذكير بالتجديد
-                  </button>
-                  <button
-                    className="template-btn"
-                    onClick={() => setBulkMessage('السلام عليكم ورحمة الله وبركاته\n\nتم تفعيل اشتراككم بنجاح.\n\nبارك الله فيكم ووفقكم لحفظ كتابه.')}
-                  >
-                    تأكيد التفعيل
-                  </button>
-                  <button
-                    className="template-btn"
-                    onClick={() => setBulkMessage('السلام عليكم ورحمة الله وبركاته\n\nنود إعلامكم بأن فترة الدراسة الجديدة ستبدأ قريباً.\n\nيرجى تجديد الاشتراك لمواصلة الحضور.\n\nجزاكم الله خيراً')}
-                  >
-                    بدء فترة جديدة
-                  </button>
+                  {messageTemplates.map(template => (
+                    <button
+                      key={template.id}
+                      className="template-btn"
+                      onClick={() => setBulkMessage(template.text.replace(/\\n/g, '\n'))}
+                    >
+                      {template.name}
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -964,6 +1062,293 @@ const Subscriptions = () => {
               </button>
               <button className="btn btn-primary" onClick={savePeriod}>
                 {editingPeriod ? 'تحديث' : 'إضافة'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Template Management Modal */}
+      {showTemplateModal && (
+        <div className="modal-overlay" onClick={() => setShowTemplateModal(false)}>
+          <div className="modal-content template-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>⚙️ إدارة قوالب الرسائل</h2>
+              <button className="close-btn" onClick={() => setShowTemplateModal(false)}>×</button>
+            </div>
+            
+            <div className="modal-body">
+              {/* قائمة القوالب الحالية */}
+              <div className="templates-list">
+                <h3>القوالب الحالية:</h3>
+                {messageTemplates.map(template => (
+                  <div key={template.id} className="template-item">
+                    <div className="template-info">
+                      <strong>{template.name}</strong>
+                      <p>{template.text.replace(/\\n/g, '\n').substring(0, 50)}...</p>
+                    </div>
+                    <div className="template-actions">
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => {
+                          setEditingTemplate(template);
+                          setNewTemplate({ name: template.name, text: template.text.replace(/\\n/g, '\n') });
+                        }}
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        className="btn btn-sm btn-danger"
+                        onClick={() => {
+                          if (window.confirm('هل أنت متأكد من حذف هذا القالب؟')) {
+                            setMessageTemplates(prev => prev.filter(t => t.id !== template.id));
+                          }
+                        }}
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* إضافة/تعديل قالب */}
+              <div className="template-form">
+                <h3>{editingTemplate ? '✏️ تعديل القالب' : '➕ إضافة قالب جديد'}</h3>
+                <div className="form-group">
+                  <label>اسم القالب *</label>
+                  <input
+                    type="text"
+                    value={newTemplate.name}
+                    onChange={(e) => setNewTemplate(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="مثال: تذكير بالدفع"
+                    className="form-input"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>نص الرسالة *</label>
+                  <textarea
+                    value={newTemplate.text}
+                    onChange={(e) => setNewTemplate(prev => ({ ...prev, text: e.target.value }))}
+                    placeholder="اكتب نص الرسالة هنا...&#10;&#10;استخدم {اسم_الطالب} لإدراج اسم الطالب تلقائياً"
+                    rows={5}
+                    className="message-textarea"
+                  />
+                  <small className="form-hint variable-hint">
+                    💡 <strong>نصيحة:</strong> استخدم <code>{'{اسم_الطالب}'}</code> في الرسالة ليتم استبداله باسم كل طالب تلقائياً
+                  </small>
+                </div>
+                <div className="template-form-actions">
+                  {editingTemplate && (
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        setEditingTemplate(null);
+                        setNewTemplate({ name: '', text: '' });
+                      }}
+                    >
+                      إلغاء التعديل
+                    </button>
+                  )}
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => {
+                      if (!newTemplate.name.trim() || !newTemplate.text.trim()) {
+                        alert('يرجى تعبئة جميع الحقول');
+                        return;
+                      }
+                      if (editingTemplate) {
+                        // تعديل قالب موجود
+                        setMessageTemplates(prev => prev.map(t => 
+                          t.id === editingTemplate.id 
+                            ? { ...t, name: newTemplate.name, text: newTemplate.text.replace(/\n/g, '\\n') }
+                            : t
+                        ));
+                      } else {
+                        // إضافة قالب جديد
+                        const newId = Date.now().toString();
+                        setMessageTemplates(prev => [...prev, {
+                          id: newId,
+                          name: newTemplate.name,
+                          text: newTemplate.text.replace(/\n/g, '\\n')
+                        }]);
+                      }
+                      setEditingTemplate(null);
+                      setNewTemplate({ name: '', text: '' });
+                    }}
+                  >
+                    {editingTemplate ? '💾 حفظ التعديلات' : '➕ إضافة القالب'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={() => setShowTemplateModal(false)}>
+                ✓ تم
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sending Progress Modal - نافذة تتبع الإرسال */}
+      {showSendingModal && sendingQueue.length > 0 && (
+        <div className="modal-overlay">
+          <div className="modal-content sending-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>📤 إرسال الرسائل</h2>
+              <div className="sending-progress-info">
+                <span className="progress-text">
+                  {currentSendingIndex + 1} من {sendingQueue.length}
+                </span>
+                <div className="progress-bar-container">
+                  <div 
+                    className="progress-bar-fill"
+                    style={{ width: `${((currentSendingIndex + 1) / sendingQueue.length) * 100}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <div className="modal-body">
+              <div className="current-student-card">
+                <div className="student-avatar">
+                  {sendingQueue[currentSendingIndex]?.name?.charAt(0) || '؟'}
+                </div>
+                <div className="student-details">
+                  <h3>{sendingQueue[currentSendingIndex]?.name}</h3>
+                  <p className="student-phone-display">
+                    📱 {sendingQueue[currentSendingIndex]?.phone || 'لا يوجد رقم هاتف'}
+                  </p>
+                  <p className="student-group-display">
+                    📚 {sendingQueue[currentSendingIndex]?.groupName}
+                  </p>
+                </div>
+              </div>
+
+              <div className="sending-instructions">
+                <div className="instruction-step">
+                  <span className="step-number">1</span>
+                  <span className="step-text">اضغط على "فتح واتساب" لفتح المحادثة</span>
+                </div>
+                <div className="instruction-step">
+                  <span className="step-number">2</span>
+                  <span className="step-text">أرسل الرسالة في تطبيق واتساب</span>
+                </div>
+                <div className="instruction-step">
+                  <span className="step-number">3</span>
+                  <span className="step-text">اضغط "تم الإرسال" للانتقال للطالب التالي</span>
+                </div>
+              </div>
+
+              {!sendingQueue[currentSendingIndex]?.phone && (
+                <div className="no-phone-warning">
+                  ⚠️ هذا الطالب ليس لديه رقم هاتف مسجل
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer sending-actions">
+              <button 
+                className="btn btn-whatsapp"
+                onClick={openCurrentStudentWhatsApp}
+                disabled={!sendingQueue[currentSendingIndex]?.phone}
+              >
+                📱 فتح واتساب
+              </button>
+              <button 
+                className="btn btn-success"
+                onClick={confirmSentAndNext}
+              >
+                ✅ تم الإرسال {currentSendingIndex < sendingQueue.length - 1 ? '→ التالي' : '→ إنهاء'}
+              </button>
+              <button 
+                className="btn btn-warning"
+                onClick={skipCurrentStudent}
+              >
+                ⏭️ تخطي
+              </button>
+              <button 
+                className="btn btn-secondary"
+                onClick={cancelSending}
+              >
+                ❌ إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Report Modal - نافذة التقرير */}
+      {showReportModal && (
+        <div className="modal-overlay" onClick={closeReport}>
+          <div className="modal-content report-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>📊 تقرير الإرسال</h2>
+              <button className="close-btn" onClick={closeReport}>×</button>
+            </div>
+            
+            <div className="modal-body">
+              <div className="report-summary">
+                <div className="summary-card sent">
+                  <span className="summary-icon">✅</span>
+                  <span className="summary-number">
+                    {sendingResults.filter(r => r.status === 'sent').length}
+                  </span>
+                  <span className="summary-label">تم الإرسال</span>
+                </div>
+                <div className="summary-card skipped">
+                  <span className="summary-icon">⏭️</span>
+                  <span className="summary-number">
+                    {sendingResults.filter(r => r.status === 'skipped').length}
+                  </span>
+                  <span className="summary-label">تم التخطي</span>
+                </div>
+                <div className="summary-card no-phone">
+                  <span className="summary-icon">📵</span>
+                  <span className="summary-number">
+                    {sendingResults.filter(r => r.status === 'no-phone').length}
+                  </span>
+                  <span className="summary-label">بدون رقم</span>
+                </div>
+                <div className="summary-card remaining">
+                  <span className="summary-icon">⏳</span>
+                  <span className="summary-number">
+                    {sendingQueue.length - sendingResults.length}
+                  </span>
+                  <span className="summary-label">لم يتم الإرسال</span>
+                </div>
+              </div>
+
+              <div className="report-details">
+                <h3>تفاصيل الإرسال:</h3>
+                <div className="report-list">
+                  {sendingResults.map((result, index) => (
+                    <div key={result.studentId} className={`report-item ${result.status}`}>
+                      <span className="report-index">{index + 1}</span>
+                      <span className="report-name">{result.name}</span>
+                      <span className={`report-status ${result.status}`}>
+                        {result.status === 'sent' && '✅ تم الإرسال'}
+                        {result.status === 'skipped' && '⏭️ تم التخطي'}
+                        {result.status === 'no-phone' && '📵 بدون رقم'}
+                      </span>
+                    </div>
+                  ))}
+                  {sendingQueue.slice(sendingResults.length).map((student, index) => (
+                    <div key={student.uid} className="report-item remaining">
+                      <span className="report-index">{sendingResults.length + index + 1}</span>
+                      <span className="report-name">{student.name}</span>
+                      <span className="report-status remaining">⏳ لم يتم</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={closeReport}>
+                ✓ إغلاق التقرير
               </button>
             </div>
           </div>

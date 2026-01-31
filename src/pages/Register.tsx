@@ -290,6 +290,39 @@ const Register = () => {
         <p className="login-card__subtitle">
           تسجيل في قائمة الانتظار للانضمام إلى مركز تحفيظ القرآن الكريم
         </p>
+        
+        {/* زر العودة لصفحة تسجيل الدخول */}
+        <button
+          type="button"
+          onClick={() => navigate('/login')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            width: '100%',
+            padding: '10px 16px',
+            marginBottom: '20px',
+            backgroundColor: '#f5f5f5',
+            color: '#333',
+            border: '1px solid #ddd',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontSize: '0.95rem',
+            fontWeight: '500',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.backgroundColor = '#e8e8e8';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.backgroundColor = '#f5f5f5';
+          }}
+        >
+          <span>→</span>
+          <span>لديك حساب؟ تسجيل الدخول</span>
+        </button>
+        
         <form className="login-form" onSubmit={handleSubmit}>
           <label>
             الرقم الشخصي <span style={{ color: '#d32f2f' }}>*</span> <small style={{ fontWeight: 'normal', color: '#666' }}>(9 أرقام)</small>

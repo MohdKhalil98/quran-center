@@ -48,6 +48,25 @@ const Teachers = () => {
     phone: '',
     centerId: ''
   });
+  // ترتيب الجدول
+  const [sortColumn, setSortColumn] = useState<string>('name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  // دالة الترتيب
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  // دالة للحصول على class الترتيب
+  const getSortClass = (column: string) => {
+    if (sortColumn !== column) return 'sortable';
+    return sortDirection === 'asc' ? 'sort-asc' : 'sort-desc';
+  };
 
   useEffect(() => {
     fetchData();
@@ -361,6 +380,49 @@ const Teachers = () => {
     !filterCenterId || t.centerId === filterCenterId
   );
 
+  // ترتيب المعلمين
+  const sortedTeachers = [...filteredTeachers].sort((a, b) => {
+    let aValue: any = '';
+    let bValue: any = '';
+    
+    switch (sortColumn) {
+      case 'name':
+        aValue = a.name || '';
+        bValue = b.name || '';
+        break;
+      case 'email':
+        aValue = a.email || '';
+        bValue = b.email || '';
+        break;
+      case 'phone':
+        aValue = a.phone || '';
+        bValue = b.phone || '';
+        break;
+      case 'center':
+        aValue = a.centerName || '';
+        bValue = b.centerName || '';
+        break;
+      case 'groups':
+        aValue = a.groupsCount || 0;
+        bValue = b.groupsCount || 0;
+        break;
+      case 'active':
+        aValue = a.active ? 1 : 0;
+        bValue = b.active ? 1 : 0;
+        break;
+      default:
+        aValue = a.name || '';
+        bValue = b.name || '';
+    }
+    
+    if (typeof aValue === 'string') {
+      const comparison = aValue.localeCompare(bValue, 'ar');
+      return sortDirection === 'asc' ? comparison : -comparison;
+    }
+    
+    return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
+  });
+
   if (loading) {
     return (
       <section className="page">
@@ -468,23 +530,23 @@ const Teachers = () => {
         </div>
       ) : (
         <div className="table-card">
-          {filteredTeachers.length === 0 ? (
+          {sortedTeachers.length === 0 ? (
             <p>لا يوجد معلمون حتى الآن</p>
           ) : (
             <table>
               <thead>
                 <tr>
-                  <th>الاسم</th>
-                  <th>البريد الإلكتروني</th>
-                  <th>رقم الهاتف</th>
-                  <th>المركز</th>
-                  <th>الحلقات</th>
-                  <th>الحالة</th>
+                  <th className={getSortClass('name')} onClick={() => handleSort('name')}>الاسم</th>
+                  <th className={getSortClass('email')} onClick={() => handleSort('email')}>البريد الإلكتروني</th>
+                  <th className={getSortClass('phone')} onClick={() => handleSort('phone')}>رقم الهاتف</th>
+                  <th className={getSortClass('center')} onClick={() => handleSort('center')}>المركز</th>
+                  <th className={getSortClass('groups')} onClick={() => handleSort('groups')}>الحلقات</th>
+                  <th className={getSortClass('active')} onClick={() => handleSort('active')}>الحالة</th>
                   <th>الإجراءات</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredTeachers.map((teacher) => (
+                {sortedTeachers.map((teacher) => (
                   <tr key={teacher.uid}>
                     <td>{teacher.name}</td>
                     <td>{teacher.email}</td>

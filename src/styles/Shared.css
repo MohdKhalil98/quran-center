@@ -254,28 +254,71 @@
 }
 
 .table-card thead {
-  background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
+  background: linear-gradient(135deg, #2e7d32 0%, #388e3c 100%);
   color: white;
 }
 
 .table-card th {
-  padding: 14px 10px;
+  padding: 16px 15px;
   text-align: right;
-  font-weight: 700;
+  font-weight: 600;
   color: white;
-  border-bottom: 3px solid #3d8b40;
-  font-size: 0.85rem;
+  border-bottom: none;
+  font-size: 0.9rem;
   letter-spacing: 0.3px;
   white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s ease;
+  position: relative;
+}
+
+.table-card th:first-child {
+  padding-right: 25px;
+  border-radius: 0 8px 0 0;
+}
+
+.table-card th:last-child {
+  padding-left: 25px;
+  border-radius: 8px 0 0 0;
+}
+
+.table-card th:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.table-card th.sortable::after {
+  content: '⇅';
+  margin-right: 6px;
+  opacity: 0.6;
+  font-size: 0.75rem;
+}
+
+.table-card th.sort-asc::after {
+  content: '▲';
+  margin-right: 6px;
+  opacity: 1;
+  font-size: 0.7rem;
+}
+
+.table-card th.sort-desc::after {
+  content: '▼';
+  margin-right: 6px;
+  opacity: 1;
+  font-size: 0.7rem;
+}
+
+.table-card th:not(.sortable) {
+  cursor: default;
 }
 
 .table-card tbody tr {
   transition: all 0.2s ease;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid #eee;
 }
 
 .table-card tbody tr:hover {
-  background: linear-gradient(to right, rgba(76, 175, 80, 0.08), rgba(76, 175, 80, 0.04));
+  background-color: #e8f5e9 !important;
 }
 
 .table-card tbody tr:last-child {
@@ -283,21 +326,21 @@
 }
 
 .table-card td {
-  padding: 12px 10px;
+  padding: 14px 15px;
   text-align: right;
   color: #333;
-  font-size: 0.85rem;
+  font-size: 0.88rem;
   vertical-align: middle;
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 .table-card td:first-child {
-  padding-left: 12px;
+  padding-right: 25px;
 }
 
 .table-card td:last-child {
   text-align: center;
-  padding-right: 10px;
+  padding-left: 25px;
 }
 
 /* Table alternating row colors */

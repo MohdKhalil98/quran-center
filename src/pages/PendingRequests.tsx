@@ -26,6 +26,8 @@ interface PendingStudent extends UserProfile {
   interviewDate?: string;
   interviewTime?: string;
   phoneNumber?: string;
+  trackId?: string;
+  trackName?: string;
 }
 
 interface Group {
@@ -33,6 +35,8 @@ interface Group {
   name: string;
   teacherName?: string;
   trackId?: string;
+  acceptingNewStudents?: boolean;
+  schedule?: string;
 }
 
 interface Track {
@@ -242,7 +246,9 @@ const PendingRequests = () => {
         id: doc.id,
         name: doc.data().name,
         trackId: doc.data().trackId,
-        teacherName: teachersMap.get(doc.data().teacherId) || 'غير محدد'
+        teacherName: teachersMap.get(doc.data().teacherId) || 'غير محدد',
+        acceptingNewStudents: doc.data().acceptingNewStudents ?? true,
+        schedule: doc.data().schedule || ''
       }));
       
       setGroups(groupsList);
@@ -258,6 +264,7 @@ const PendingRequests = () => {
       // جلب المستخدمين من جميع مراكز المشرف
       let allDocs: any[] = [];
       const centerNames: Map<string, string> = new Map();
+      const trackNames: Map<string, string> = new Map();
       
       for (const centerId of supervisorCenterIds) {
         const q = query(
@@ -271,6 +278,13 @@ const PendingRequests = () => {
         const centerDoc = await getDoc(doc(db, 'centers', centerId));
         const centerName = centerDoc.exists() ? centerDoc.data().name : 'غير محدد';
         centerNames.set(centerId, centerName);
+        
+        // Get tracks for this center
+        const tracksQuery = query(collection(db, 'tracks'), where('centerId', '==', centerId));
+        const tracksSnap = await getDocs(tracksQuery);
+        tracksSnap.docs.forEach(trackDoc => {
+          trackNames.set(trackDoc.id, trackDoc.data().name);
+        });
       }
 
       const allUsers = allDocs.map(docSnap => {
@@ -278,7 +292,8 @@ const PendingRequests = () => {
         return {
           uid: docSnap.id,
           ...data,
-          centerName: centerNames.get(data.centerId) || 'غير محدد'
+          centerName: centerNames.get(data.centerId) || 'غير محدد',
+          trackName: data.trackId ? (trackNames.get(data.trackId) || 'غير محدد') : undefined
         } as PendingStudent;
       });
 
@@ -438,7 +453,8 @@ const PendingRequests = () => {
   // دالة لفتح نافذة اختيار المساق والمجموعة (من قسم المقابلات)
   const handleApproveFromInterview = (student: PendingStudent) => {
     setSelectedStudent(student);
-    setSelectedTrackId('');
+    // تعيين المساق المختار من قبل ولي الأمر إن وجد
+    setSelectedTrackId(student.trackId || '');
     setSelectedGroupId('');
     setShowTrackGroupModal(true);
   };
@@ -457,8 +473,17 @@ const PendingRequests = () => {
       return;
     }
 
-    // توليد كلمة مرور مؤقتة تلقائياً
-    const tempPassword = generateTempPassword();
+    // جلب بيانات الطالب الكاملة للحصول على كلمة المرور المحفوظة
+    const studentDocRef = doc(db, 'users', selectedStudent.uid);
+    const studentDocSnap = await getDoc(studentDocRef);
+    const studentData = studentDocSnap.data();
+    
+    // استخدام كلمة المرور التي سجل بها الطالب
+    const userPassword = studentData?.password;
+    if (!userPassword) {
+      showMessage('error', 'خطأ', 'لم يتم العثور على كلمة المرور. يرجى التأكد من أن الطالب سجل بكلمة مرور.');
+      return;
+    }
 
     setProcessing(selectedStudent.uid);
     try {
@@ -466,7 +491,7 @@ const PendingRequests = () => {
       const internalEmail = `${selectedStudent.personalId}@quran-center.local`;
 
       let newUid: string;
-      let passwordToSend = tempPassword;
+      let passwordToSend = userPassword;
 
       // 2. التحقق إذا كان هناك حساب موجود بهذا البريد الإلكتروني في Firestore
       const existingUserQuery = query(collection(db, 'users'), where('email', '==', internalEmail));
@@ -479,8 +504,8 @@ const PendingRequests = () => {
         
         // استخدام كلمة المرور المحفوظة إن وجدت
         const existingData = existingUser.data();
-        if (existingData.tempPassword) {
-          passwordToSend = existingData.tempPassword;
+        if (existingData.password) {
+          passwordToSend = existingData.password;
         }
         
         // تحديث البيانات للمستخدم الموجود
@@ -496,9 +521,9 @@ const PendingRequests = () => {
           await deleteDoc(doc(db, 'users', selectedStudent.uid));
         }
       } else {
-        // لا يوجد حساب - إنشاء حساب جديد
+        // لا يوجد حساب - إنشاء حساب جديد بكلمة المرور التي اختارها الطالب
         try {
-          const userCredential = await createUserWithEmailAndPassword(secondaryAuth, internalEmail, tempPassword);
+          const userCredential = await createUserWithEmailAndPassword(secondaryAuth, internalEmail, userPassword);
           newUid = userCredential.user.uid;
 
           // تسجيل الخروج من التطبيق الثانوي فوراً
@@ -514,12 +539,11 @@ const PendingRequests = () => {
 
           const oldData = oldDocSnap.data();
 
-          // إنشاء document جديد بـ Auth UID
+          // إنشاء document جديد بـ Auth UID (كلمة المرور محفوظة من التسجيل)
           await setDoc(doc(db, 'users', newUid), {
             ...oldData,
             uid: newUid,
             email: internalEmail,
-            tempPassword: tempPassword,
             status: 'waiting_teacher_approval',
             groupId: selectedGroupId,
             trackId: selectedTrackId,
@@ -548,6 +572,7 @@ const PendingRequests = () => {
       const selectedGroup = groups.find(g => g.id === selectedGroupId);
       const groupName = selectedGroup?.name || 'غير محدد';
       const teacherName = selectedGroup?.teacherName || 'غير محدد';
+      const schedule = selectedGroup?.schedule || '';
 
       // إرسال رسالة واتساب مع بيانات الدخول
       const phone = selectedStudent.phone || selectedStudent.phoneNumber;
@@ -561,18 +586,16 @@ const PendingRequests = () => {
 المركز: *${centerName}*
 المساق: *${trackName}*
 الحلقة: *${groupName}*
-المعلم: *${teacherName}*
+المعلم: *${teacherName}*${schedule ? `\nأيام الدراسة: *${schedule}*` : ''}
 ━━━━━━━━━━━━━━━
 
 *بيانات تسجيل الدخول:*
 ━━━━━━━━━━━━━━━
 الرقم الشخصي: *${selectedStudent.personalId}*
-كلمة المرور: *${passwordToSend}*
+كلمة المرور: *كلمة المرور التي اخترتها عند التسجيل*
 ━━━━━━━━━━━━━━━
 
 رابط الموقع: ${window.location.origin}
-
-يرجى تغيير كلمة المرور بعد أول تسجيل دخول.
 
 نتمنى لك التوفيق في رحلتك مع القرآن الكريم!`;
 
@@ -580,7 +603,7 @@ const PendingRequests = () => {
         window.open(whatsappUrl, '_blank');
       }
       
-      showMessage('success', 'تم إنشاء الحساب', `تم إنشاء حساب الطالب ${selectedStudent.name} بنجاح.\n\nكلمة المرور المؤقتة: ${passwordToSend}`);
+      showMessage('success', 'تم إنشاء الحساب', `تم إنشاء حساب الطالب ${selectedStudent.name} بنجاح.\n\nيمكنه تسجيل الدخول بكلمة المرور التي اختارها عند التسجيل.`);
       setShowTrackGroupModal(false);
       setSelectedStudent(null);
       fetchPendingStudents();
@@ -940,6 +963,12 @@ const PendingRequests = () => {
                       <span className="info-label">🏫 المركز:</span>
                       <span className="info-value">{student.centerName}</span>
                     </div>
+                    {student.trackName && (
+                      <div className="info-row">
+                        <span className="info-label">📚 المساق المختار:</span>
+                        <span className="info-value" style={{ color: '#1976d2', fontWeight: '600' }}>{student.trackName}</span>
+                      </div>
+                    )}
                     <div className="info-row">
                       <span className="info-label">📅 تاريخ التسجيل:</span>
                       <span className="info-value">
@@ -1099,6 +1128,12 @@ const PendingRequests = () => {
                       <span className="info-label">🏫 المركز:</span>
                       <span className="info-value">{student.centerName}</span>
                     </div>
+                    {student.trackName && (
+                      <div className="info-row">
+                        <span className="info-label">📚 المساق المختار:</span>
+                        <span className="info-value" style={{ color: '#1976d2', fontWeight: '600' }}>{student.trackName}</span>
+                      </div>
+                    )}
                     <div className="info-row">
                       <span className="info-label">📅 موعد المقابلة:</span>
                       <span className="info-value">
@@ -1290,8 +1325,17 @@ const PendingRequests = () => {
                     {groups
                       .filter(group => group.trackId === selectedTrackId)
                       .map(group => (
-                        <option key={group.id} value={group.id}>
+                        <option 
+                          key={group.id} 
+                          value={group.id}
+                          disabled={group.acceptingNewStudents === false}
+                          style={{ 
+                            color: group.acceptingNewStudents === false ? '#999' : 'inherit',
+                            fontStyle: group.acceptingNewStudents === false ? 'italic' : 'normal'
+                          }}
+                        >
                           {group.name} - المعلم: {group.teacherName}
+                          {group.acceptingNewStudents === false ? ' 🔒 (التسجيل مغلق)' : ''}
                         </option>
                       ))}
                   </select>

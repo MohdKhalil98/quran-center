@@ -23,6 +23,7 @@ interface Group {
   teacherId?: string;
   trackId?: string;
   centerId?: string;
+  acceptingNewStudents?: boolean;
 }
 
 interface Track {
@@ -59,6 +60,7 @@ const Students = () => {
   const [showLevelModal, setShowLevelModal] = useState(false);
   const [selectedNewStudent, setSelectedNewStudent] = useState<StudentUser | null>(null);
   const [selectedLevelId, setSelectedLevelId] = useState('');
+  const [selectedStageId, setSelectedStageId] = useState('');
   const [currentTrackType, setCurrentTrackType] = useState<'quran' | 'arabic_reading'>('quran');
   const [deleting, setDeleting] = useState(false);
   // نافذة التعديل
@@ -68,8 +70,11 @@ const Students = () => {
     email: '',
     phone: '',
     levelId: '',
-    levelName: ''
+    levelName: '',
+    groupId: '',
+    centerId: ''
   });
+  const [editFilteredGroups, setEditFilteredGroups] = useState<Group[]>([]);
   const [saving, setSaving] = useState(false);
   // فلاتر جديدة
   const [filterStatus, setFilterStatus] = useState<string>('');
@@ -78,10 +83,55 @@ const Students = () => {
   // تقسيم الصفحات
   const [currentPage, setCurrentPage] = useState(1);
   const studentsPerPage = 20;
+  // حالة قبول طلاب جدد للحلقات
+  const [togglingAcceptance, setTogglingAcceptance] = useState<string | null>(null);
+  // ترتيب الجدول
+  const [sortColumn, setSortColumn] = useState<string>('name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  // دالة الترتيب
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  // دالة للحصول على class الترتيب
+  const getSortClass = (column: string) => {
+    if (sortColumn !== column) return 'sortable';
+    return sortDirection === 'asc' ? 'sort-asc' : 'sort-desc';
+  };
 
   useEffect(() => {
     fetchData();
   }, [isSupervisor, isTeacher, userProfile]);
+
+  // دالة تغيير حالة قبول طلاب جدد للحلقة
+  const toggleAcceptingNewStudents = async (groupId: string, currentStatus: boolean) => {
+    setTogglingAcceptance(groupId);
+    try {
+      await updateDoc(doc(db, 'groups', groupId), {
+        acceptingNewStudents: !currentStatus
+      });
+      
+      // تحديث الـ state محلياً
+      setGroups(prev => prev.map(g => 
+        g.id === groupId 
+          ? { ...g, acceptingNewStudents: !currentStatus }
+          : g
+      ));
+      
+      alert(!currentStatus ? 'تم فتح باب التسجيل للحلقة' : 'تم إغلاق باب التسجيل للحلقة');
+    } catch (error) {
+      console.error('Error toggling acceptance:', error);
+      alert('حدث خطأ أثناء تحديث حالة الحلقة');
+    } finally {
+      setTogglingAcceptance(null);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -109,7 +159,8 @@ const Students = () => {
         name: doc.data().name,
         teacherId: doc.data().teacherId,
         trackId: doc.data().trackId,
-        centerId: doc.data().centerId
+        centerId: doc.data().centerId,
+        acceptingNewStudents: doc.data().acceptingNewStudents ?? true
       }));
       setGroups(groupsList);
 
@@ -248,11 +299,18 @@ const Students = () => {
       setLevels(quranLevels);
     }
     
+    // فلترة الحلقات حسب مركز الطالب
+    const studentCenterId = student.centerId || '';
+    const filteredGroupsForEdit = groups.filter(g => g.centerId === studentCenterId);
+    setEditFilteredGroups(filteredGroupsForEdit);
+    
     setEditFormData({
       email: student.email || '',
       phone: student.phone || '',
       levelId: student.levelId || '',
-      levelName: student.levelName || ''
+      levelName: student.levelName || '',
+      groupId: student.groupId || '',
+      centerId: studentCenterId
     });
     setIsEditModalOpen(true);
   };
@@ -260,7 +318,19 @@ const Students = () => {
   const handleCloseEditModal = () => {
     setEditingStudent(null);
     setIsEditModalOpen(false);
-    setEditFormData({ email: '', phone: '', levelId: '', levelName: '' });
+    setEditFormData({ email: '', phone: '', levelId: '', levelName: '', groupId: '', centerId: '' });
+    setEditFilteredGroups([]);
+  };
+
+  // تحديث الحلقات عند تغيير المركز في نموذج التعديل
+  const handleEditCenterChange = (centerId: string) => {
+    const filteredGroupsForEdit = groups.filter(g => g.centerId === centerId);
+    setEditFilteredGroups(filteredGroupsForEdit);
+    setEditFormData({ 
+      ...editFormData, 
+      centerId: centerId,
+      groupId: '' // إعادة تعيين الحلقة عند تغيير المركز
+    });
   };
 
   const handleSaveEdit = async () => {
@@ -295,7 +365,7 @@ const Students = () => {
         }
       }
       
-      // المشرف فقط يمكنه تعديل البريد الإلكتروني ورقم التواصل
+      // المشرف فقط يمكنه تعديل البريد الإلكتروني ورقم التواصل والحلقة
       let emailChanged = false;
       if (isSupervisor || isAdmin) {
         if (editFormData.email !== editingStudent.email) {
@@ -304,6 +374,22 @@ const Students = () => {
         }
         if (editFormData.phone !== editingStudent.phone) {
           updateData.phone = editFormData.phone;
+        }
+        // تغيير الحلقة
+        if (editFormData.groupId && editFormData.groupId !== editingStudent.groupId) {
+          updateData.groupId = editFormData.groupId;
+          const selectedGroup = groups.find(g => g.id === editFormData.groupId);
+          if (selectedGroup) {
+            updateData.groupName = selectedGroup.name;
+            // تحديث المركز إذا تغير
+            if (selectedGroup.centerId && selectedGroup.centerId !== editingStudent.centerId) {
+              updateData.centerId = selectedGroup.centerId;
+              const center = centers.find(c => c.id === selectedGroup.centerId);
+              if (center) {
+                updateData.centerName = center.name;
+              }
+            }
+          }
         }
       }
       
@@ -412,6 +498,8 @@ const Students = () => {
     setSelectedNewStudent(null);
     setShowLevelModal(false);
     setSelectedLevelId('');
+    setSelectedStageId('');
+    setStages([]);
   };
 
   const handleDeleteNewStudent = async (student: StudentUser) => {
@@ -436,8 +524,8 @@ const Students = () => {
   };
 
   const handleApproveNewStudent = async () => {
-    if (!selectedNewStudent || !selectedLevelId) {
-      alert('يرجى اختيار المستوى');
+    if (!selectedNewStudent || !selectedLevelId || !selectedStageId) {
+      alert('يرجى اختيار المستوى والمرحلة');
       return;
     }
 
@@ -447,71 +535,52 @@ const Students = () => {
     }
 
     try {
-      let firstStage: { id: string; name: string };
       const selectedLevel = levels.find(l => l.id === selectedLevelId);
-      
-      // تحديد المرحلة الأولى بناءً على نوع المساق
+      let selectedStageName = '';
       if (currentTrackType === 'arabic_reading') {
-        // منهج القراءة العربية
         const selectedLevelData = arabicReadingCurriculum.find(level => level.id === selectedLevelId);
-        
-        if (!selectedLevelData || !selectedLevelData.lessons || selectedLevelData.lessons.length === 0) {
-          alert('لا توجد دروس لهذا المستوى');
+        const stageObj = selectedLevelData?.lessons?.find(lesson => lesson.id === selectedStageId);
+        if (!stageObj) {
+          alert('المرحلة غير موجودة في هذا المستوى');
           return;
         }
-        
-        firstStage = {
-          id: selectedLevelData.lessons[0].id,
-          name: selectedLevelData.lessons[0].name
-        };
+        selectedStageName = stageObj.name;
       } else {
-        // منهج حفظ القرآن
         const selectedLevelData = quranCurriculum.find(juz => juz.id === selectedLevelId);
-        
-        if (!selectedLevelData || !selectedLevelData.surahs || selectedLevelData.surahs.length === 0) {
-          alert('لا توجد مراحل لهذا المستوى');
+        const stageObj = selectedLevelData?.surahs?.find(surah => surah.id === selectedStageId);
+        if (!stageObj) {
+          alert('المرحلة غير موجودة في هذا المستوى');
           return;
         }
-        
-        firstStage = {
-          id: selectedLevelData.surahs[0].id,
-          name: selectedLevelData.surahs[0].name
-        };
+        selectedStageName = stageObj.name;
       }
 
-      // تحديث حالة الطالب وتعيين المستوى الابتدائي
       await updateDoc(doc(db, 'users', selectedNewStudent.uid), {
         status: 'approved',
         levelId: selectedLevelId,
         levelName: selectedLevel?.name || '',
-        stageId: firstStage.id,
-        stageName: firstStage.name,
+        stageId: selectedStageId,
+        stageName: selectedStageName,
         trackType: currentTrackType, // حفظ نوع المساق
         approvedByTeacherAt: new Date().toISOString()
       });
 
-      // تحديث فوري للـ state - إزالة الطالب من قائمة الطلاب الجدد
       setNewStudents(prev => prev.filter(s => s.uid !== selectedNewStudent.uid));
-      
-      // إضافة الطالب إلى قائمة الطلاب الرسميين مع جميع البيانات المطلوبة
-      const groupsList = groups; // جلب الحلقات المحفوظة
-      const centersList = centers; // جلب المراكز المحفوظة
-      
+      const groupsList = groups;
+      const centersList = centers;
       setStudents(prev => [...prev, {
         ...selectedNewStudent,
         status: 'approved',
         levelId: selectedLevelId,
         levelName: selectedLevel?.name || '',
-        stageId: firstStage.id,
-        stageName: firstStage.name,
+        stageId: selectedStageId,
+        stageName: selectedStageName,
         groupName: groupsList.find(g => g.id === selectedNewStudent.groupId)?.name || 'غير محدد',
         centerName: centersList.find(c => c.id === selectedNewStudent.centerId)?.name || ''
       }]);
 
       alert('تم قبول الطالب وتعيين المستوى بنجاح');
       handleCloseLevelModal();
-      
-      // تحديث البيانات من Firebase للتأكد من التزامن
       setTimeout(() => {
         fetchData();
       }, 500);
@@ -532,11 +601,58 @@ const Students = () => {
     return true;
   });
 
+  // ترتيب الطلاب
+  const sortedStudents = [...filteredStudents].sort((a, b) => {
+    let aValue: any = '';
+    let bValue: any = '';
+    
+    switch (sortColumn) {
+      case 'name':
+        aValue = a.name || '';
+        bValue = b.name || '';
+        break;
+      case 'email':
+        aValue = a.email || '';
+        bValue = b.email || '';
+        break;
+      case 'phone':
+        aValue = a.phone || '';
+        bValue = b.phone || '';
+        break;
+      case 'group':
+        aValue = groups.find(g => g.id === a.groupId)?.name || '';
+        bValue = groups.find(g => g.id === b.groupId)?.name || '';
+        break;
+      case 'center':
+        aValue = centers.find(c => c.id === a.centerId)?.name || '';
+        bValue = centers.find(c => c.id === b.centerId)?.name || '';
+        break;
+      case 'status':
+        aValue = a.status || '';
+        bValue = b.status || '';
+        break;
+      case 'active':
+        aValue = a.active ? 1 : 0;
+        bValue = b.active ? 1 : 0;
+        break;
+      default:
+        aValue = a.name || '';
+        bValue = b.name || '';
+    }
+    
+    if (typeof aValue === 'string') {
+      const comparison = aValue.localeCompare(bValue, 'ar');
+      return sortDirection === 'asc' ? comparison : -comparison;
+    }
+    
+    return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
+  });
+
   // حسابات الصفحات
-  const totalPages = Math.ceil(filteredStudents.length / studentsPerPage);
+  const totalPages = Math.ceil(sortedStudents.length / studentsPerPage);
   const indexOfLastStudent = currentPage * studentsPerPage;
   const indexOfFirstStudent = indexOfLastStudent - studentsPerPage;
-  const currentStudents = filteredStudents.slice(indexOfFirstStudent, indexOfLastStudent);
+  const currentStudents = sortedStudents.slice(indexOfFirstStudent, indexOfLastStudent);
 
   // إعادة تعيين الصفحة عند تغيير الفلتر
   useEffect(() => {
@@ -585,6 +701,105 @@ const Students = () => {
           )}
         </h1>
         <p>{isTeacher ? 'عرض طلاب حلقاتي.' : 'عرض بيانات الطلاب المسجلين.'}</p>
+        
+        {/* أزرار التحكم بقبول الطلاب الجدد للمعلم */}
+        {isTeacher && teacherGroupIds.length > 0 && (
+          <div style={{ 
+            marginTop: '12px',
+            padding: '12px 16px',
+            backgroundColor: '#f8f9fa',
+            borderRadius: '10px',
+            border: '1px solid #e9ecef'
+          }}>
+            <div style={{
+              marginBottom: '10px',
+              fontSize: '0.9rem',
+              color: '#555',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}>
+              <span style={{ fontSize: '1.1rem' }}>⚙️</span>
+              <span><strong>التحكم بقبول طلاب جدد:</strong> يمكنك إغلاق التسجيل في حلقتك مؤقتاً لمنع قبول طلاب جدد من قبل المشرف.</span>
+            </div>
+            <div style={{ 
+              display: 'flex', 
+              flexWrap: 'wrap',
+              gap: '16px'
+            }}>
+            {groups.filter(g => teacherGroupIds.includes(g.id)).map(group => {
+              const isAccepting = group.acceptingNewStudents ?? true;
+              const isToggling = togglingAcceptance === group.id;
+              return (
+                <div
+                  key={group.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '8px 12px',
+                    backgroundColor: 'white',
+                    borderRadius: '8px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                  }}
+                >
+                  <span style={{ 
+                    fontSize: '0.95rem', 
+                    fontWeight: '600',
+                    color: '#333'
+                  }}>
+                    {group.name}
+                  </span>
+                  
+                  {/* Toggle Switch */}
+                  <div
+                    onClick={() => !isToggling && toggleAcceptingNewStudents(group.id, isAccepting)}
+                    style={{
+                      position: 'relative',
+                      width: '52px',
+                      height: '28px',
+                      backgroundColor: isToggling ? '#ccc' : (isAccepting ? '#4caf50' : '#e0e0e0'),
+                      borderRadius: '14px',
+                      cursor: isToggling ? 'wait' : 'pointer',
+                      transition: 'background-color 0.3s ease',
+                      boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.2)'
+                    }}
+                  >
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '2px',
+                        right: isAccepting ? '2px' : '24px',
+                        width: '24px',
+                        height: '24px',
+                        backgroundColor: 'white',
+                        borderRadius: '50%',
+                        transition: 'right 0.3s ease',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '12px'
+                      }}
+                    >
+                      {isToggling ? '⏳' : (isAccepting ? '✓' : '✕')}
+                    </div>
+                  </div>
+                  
+                  <span style={{ 
+                    fontSize: '0.8rem',
+                    color: isAccepting ? '#2e7d32' : '#9e9e9e',
+                    fontWeight: '500',
+                    minWidth: '70px'
+                  }}>
+                    {isAccepting ? 'مفتوح' : 'مغلق'}
+                  </span>
+                </div>
+              );
+            })}
+            </div>
+          </div>
+        )}
       </header>
 
       <div className="page-actions-header">
@@ -822,19 +1037,19 @@ const Students = () => {
         </div>
       ) : (
         <div className="table-card">
-          {filteredStudents.length === 0 ? (
+          {sortedStudents.length === 0 ? (
             <p>لا يوجد طلاب حتى الآن</p>
           ) : (
             <table>
               <thead>
                 <tr>
-                  <th style={{width: '130px'}}>الاسم</th>
-                  <th style={{width: '180px'}}>البريد الإلكتروني</th>
-                  <th style={{width: '100px'}}>الهاتف</th>
-                  <th style={{width: '120px'}}>الحلقة</th>
-                  {!isTeacher && <th style={{width: '120px'}}>المركز</th>}
-                  <th style={{width: '80px'}}>التفعيل</th>
-                  <th style={{width: '120px'}}>التسجيل</th>
+                  <th style={{width: '130px'}} className={getSortClass('name')} onClick={() => handleSort('name')}>الاسم</th>
+                  <th style={{width: '180px'}} className={getSortClass('email')} onClick={() => handleSort('email')}>البريد الإلكتروني</th>
+                  <th style={{width: '100px'}} className={getSortClass('phone')} onClick={() => handleSort('phone')}>الهاتف</th>
+                  <th style={{width: '120px'}} className={getSortClass('group')} onClick={() => handleSort('group')}>الحلقة</th>
+                  {!isTeacher && <th style={{width: '120px'}} className={getSortClass('center')} onClick={() => handleSort('center')}>المركز</th>}
+                  <th style={{width: '80px'}} className={getSortClass('active')} onClick={() => handleSort('active')}>التفعيل</th>
+                  <th style={{width: '120px'}} className={getSortClass('status')} onClick={() => handleSort('status')}>التسجيل</th>
                   <th style={{width: '80px'}}>الإجراءات</th>
                 </tr>
               </thead>
@@ -1118,7 +1333,23 @@ const Students = () => {
                 <select
                   className="form-control"
                   value={selectedLevelId}
-                  onChange={(e) => setSelectedLevelId(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedLevelId(e.target.value);
+                    setSelectedStageId('');
+                    // Update stages based on selected level
+                    const levelId = e.target.value;
+                    if (!levelId) {
+                      setStages([]);
+                      return;
+                    }
+                    if (currentTrackType === 'arabic_reading') {
+                      const selectedLevelData = arabicReadingCurriculum.find(level => level.id === levelId);
+                      setStages(selectedLevelData?.lessons || []);
+                    } else {
+                      const selectedLevelData = quranCurriculum.find(juz => juz.id === levelId);
+                      setStages(selectedLevelData?.surahs || []);
+                    }
+                  }}
                 >
                   <option value="">-- اختر المستوى --</option>
                   {levels.map((level) => (
@@ -1128,15 +1359,35 @@ const Students = () => {
                   ))}
                 </select>
                 <small className="help-text">
-                  💡 سيتم البدء من المرحلة الأولى في المستوى المحدد
+                  💡 اختر المستوى ثم المرحلة التي يبدأ منها الطالب
                 </small>
               </div>
+              {stages.length > 0 && (
+                <div className="form-group">
+                  <label>اختر المرحلة (الدرس/السورة):</label>
+                  <select
+                    className="form-control"
+                    value={selectedStageId}
+                    onChange={(e) => setSelectedStageId(e.target.value)}
+                  >
+                    <option value="">-- اختر المرحلة --</option>
+                    {stages.map((stage) => (
+                      <option key={stage.id} value={stage.id}>
+                        {stage.name}
+                      </option>
+                    ))}
+                  </select>
+                  <small className="help-text">
+                    💡 يمكنك اختيار المرحلة التي يبدأ منها الطالب في هذا المستوى
+                  </small>
+                </div>
+              )}
             </div>
             <div className="modal-footer">
               <button
                 className="btn btn-success"
                 onClick={handleApproveNewStudent}
-                disabled={!selectedLevelId}
+                disabled={!selectedLevelId || !selectedStageId}
               >
                 ✅ قبول الطالب
               </button>
@@ -1188,6 +1439,54 @@ const Students = () => {
                     dir="ltr"
                   />
                 </div>
+              )}
+
+              {/* المشرف والمسؤول يمكنهم تغيير المركز والحلقة */}
+              {(isSupervisor || isAdmin) && (
+                <>
+                  <div className="form-group">
+                    <label>🏛️ المركز:</label>
+                    <select
+                      className="form-control"
+                      value={editFormData.centerId}
+                      onChange={(e) => handleEditCenterChange(e.target.value)}
+                    >
+                      <option value="">-- اختر المركز --</option>
+                      {centers.map((center) => (
+                        <option key={center.id} value={center.id}>
+                          {center.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div className="form-group">
+                    <label>👥 الحلقة:</label>
+                    <select
+                      className="form-control"
+                      value={editFormData.groupId}
+                      onChange={(e) => setEditFormData({ ...editFormData, groupId: e.target.value })}
+                      disabled={!editFormData.centerId}
+                    >
+                      <option value="">-- اختر الحلقة --</option>
+                      {editFilteredGroups.map((group) => (
+                        <option key={group.id} value={group.id}>
+                          {group.name}
+                        </option>
+                      ))}
+                    </select>
+                    {!editFormData.centerId && (
+                      <small className="help-text" style={{ color: '#f57c00' }}>
+                        ⚠️ اختر المركز أولاً
+                      </small>
+                    )}
+                    {editFormData.centerId && editFilteredGroups.length === 0 && (
+                      <small className="help-text" style={{ color: '#d32f2f' }}>
+                        ⚠️ لا توجد حلقات في هذا المركز
+                      </small>
+                    )}
+                  </div>
+                </>
               )}
               
               {/* المعلم والمشرف يمكنهم تعديل المستوى */}

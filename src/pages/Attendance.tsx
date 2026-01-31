@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { collection, getDocs, query, orderBy, addDoc, deleteDoc, doc, Timestamp, where } from 'firebase/firestore';
 import { db } from '../firebase';
+import { useAuth } from '../context/AuthContext';
 import '../styles/Attendance.css';
 import '../styles/AttendanceExtended.css';
 
@@ -11,9 +12,15 @@ interface Student {
   subscriptionStatus?: 'active' | 'inactive' | 'exempt'; // حالة الاشتراك
 }
 
+interface Center {
+  id: string;
+  name: string;
+}
+
 interface Group {
   id: string;
   name: string;
+  centerId?: string;
 }
 
 interface AttendanceRecord {
@@ -32,7 +39,11 @@ interface StudentAttendanceStats {
 }
 
 const Attendance = () => {
+  const { userProfile, isTeacher } = useAuth();
+  const [centers, setCenters] = useState<Center[]>([]);
+  const [selectedCenterId, setSelectedCenterId] = useState<string>('');
   const [groups, setGroups] = useState<Group[]>([]);
+  const [filteredGroups, setFilteredGroups] = useState<Group[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -44,32 +55,83 @@ const Attendance = () => {
   const [attendanceStats, setAttendanceStats] = useState<StudentAttendanceStats[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
 
-  // Fetch groups and students
+  // Fetch centers and groups
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch groups
-        const groupsQuery = query(collection(db, 'groups'), orderBy('name'));
-        const groupsSnapshot = await getDocs(groupsQuery);
-        const groupsList = groupsSnapshot.docs.map((doc) => ({
+        // Fetch all centers first
+        const centersSnapshot = await getDocs(collection(db, 'centers'));
+        const allCenters = centersSnapshot.docs.map((doc) => ({
           id: doc.id,
           name: doc.data().name
-        } as Group));
+        }));
+
+        // Fetch groups - for teachers, only fetch their groups
+        let groupsList: Group[] = [];
+        if (isTeacher && userProfile?.uid) {
+          const groupsQuery = query(
+            collection(db, 'groups'),
+            where('teacherId', '==', userProfile.uid)
+          );
+          const groupsSnapshot = await getDocs(groupsQuery);
+          groupsList = groupsSnapshot.docs.map((doc) => ({
+            id: doc.id,
+            name: doc.data().name,
+            centerId: doc.data().centerId
+          } as Group));
+          
+          // Filter centers to only include those that have groups for this teacher
+          const teacherCenterIds = Array.from(new Set(groupsList.map(g => g.centerId).filter(Boolean)));
+          const teacherCenters = allCenters.filter(c => teacherCenterIds.includes(c.id));
+          setCenters(teacherCenters);
+        } else {
+          const groupsQuery = query(collection(db, 'groups'), orderBy('name'));
+          const groupsSnapshot = await getDocs(groupsQuery);
+          groupsList = groupsSnapshot.docs.map((doc) => ({
+            id: doc.id,
+            name: doc.data().name,
+            centerId: doc.data().centerId
+          } as Group));
+          setCenters(allCenters);
+        }
         setGroups(groupsList);
+        setFilteredGroups(groupsList);
         setLoading(false);
 
         // Set first group as default
         if (groupsList.length > 0) {
           setSelectedGroupId(groupsList[0].id);
+          // Set the center of the first group as default
+          if (groupsList[0].centerId) {
+            setSelectedCenterId(groupsList[0].centerId);
+          }
         }
       } catch (error) {
-        console.error('Error fetching groups:', error);
+        console.error('Error fetching data:', error);
         setLoading(false);
       }
     };
 
     fetchData();
-  }, []);
+  }, [isTeacher, userProfile?.uid]);
+
+  // Filter groups when center changes
+  useEffect(() => {
+    if (selectedCenterId) {
+      const filtered = groups.filter(g => g.centerId === selectedCenterId);
+      setFilteredGroups(filtered);
+      // If current group is not in filtered list, reset to first filtered group
+      if (!filtered.find(g => g.id === selectedGroupId)) {
+        if (filtered.length > 0) {
+          setSelectedGroupId(filtered[0].id);
+        } else {
+          setSelectedGroupId('');
+        }
+      }
+    } else {
+      setFilteredGroups(groups);
+    }
+  }, [selectedCenterId, groups]);
 
   // Fetch students for selected group
   useEffect(() => {
@@ -353,6 +415,22 @@ const Attendance = () => {
       <form className="attendance-form" onSubmit={handleSubmit}>
         <div className="form-row">
           <div className="form-group">
+            <label htmlFor="centerSelect">اختر المركز</label>
+            <select
+              id="centerSelect"
+              value={selectedCenterId}
+              onChange={(e) => setSelectedCenterId(e.target.value)}
+            >
+              <option value="">-- كل المراكز --</option>
+              {centers.map((center) => (
+                <option key={center.id} value={center.id}>
+                  {center.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-group">
             <label htmlFor="groupSelect">اختر المجموعة *</label>
             <select
               id="groupSelect"
@@ -361,7 +439,7 @@ const Attendance = () => {
               required
             >
               <option value="">-- اختر مجموعة --</option>
-              {groups.map((group) => (
+              {filteredGroups.map((group) => (
                 <option key={group.id} value={group.id}>
                   {group.name}
                 </option>

@@ -80,6 +80,11 @@ const Dashboard = () => {
   const [teacherGroups, setTeacherGroups] = useState<string[]>([]);
   const [adminRequests, setAdminRequests] = useState<AdminRequest[]>([]);
   const [processingRequest, setProcessingRequest] = useState<string | null>(null);
+  
+  // حالة اختيار التاريخ وتفاصيل الحضور
+  const [attendanceDate, setAttendanceDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [attendanceDetails, setAttendanceDetails] = useState<{studentId: string; studentName: string; status: string; groupName: string}[]>([]);
+  const [loadingAttendance, setLoadingAttendance] = useState(false);
 
   // جلب طلبات المطور المعلقة
   const fetchAdminRequests = async () => {
@@ -101,6 +106,119 @@ const Dashboard = () => {
       setAdminRequests(requests);
     } catch (error) {
       console.error('Error fetching admin requests:', error);
+    }
+  };
+
+  // جلب تفاصيل الحضور لتاريخ محدد
+  const fetchAttendanceDetails = async (dateStr: string) => {
+    if (!isSupervisor) return;
+    
+    setLoadingAttendance(true);
+    try {
+      const filterCenterId = selectedCenterId || null;
+      
+      // جلب المجموعات للمركز المختار
+      let groupIds: string[] = [];
+      let groupsMap = new Map<string, string>();
+      
+      if (filterCenterId) {
+        const groupsQuery = query(
+          collection(db, 'groups'),
+          where('centerId', '==', filterCenterId)
+        );
+        const groupsSnap = await getDocs(groupsQuery);
+        groupsSnap.docs.forEach(doc => {
+          groupIds.push(doc.id);
+          groupsMap.set(doc.id, doc.data().name);
+        });
+      } else {
+        const groupsSnap = await getDocs(collection(db, 'groups'));
+        groupsSnap.docs.forEach(doc => {
+          groupIds.push(doc.id);
+          groupsMap.set(doc.id, doc.data().name);
+        });
+      }
+      
+      // جلب أسماء الطلاب
+      const studentsMap = new Map<string, {name: string; groupId: string}>();
+      let studentsQuery;
+      if (filterCenterId) {
+        studentsQuery = query(
+          collection(db, 'users'),
+          where('role', '==', 'student'),
+          where('centerId', '==', filterCenterId)
+        );
+      } else {
+        studentsQuery = query(
+          collection(db, 'users'),
+          where('role', '==', 'student')
+        );
+      }
+      const studentsSnap = await getDocs(studentsQuery);
+      studentsSnap.docs.forEach(doc => {
+        studentsMap.set(doc.id, {
+          name: doc.data().name,
+          groupId: doc.data().groupId
+        });
+      });
+      
+      // جلب سجلات الحضور لهذا التاريخ
+      const targetDate = new Date(dateStr);
+      targetDate.setHours(0, 0, 0, 0);
+      
+      const attendanceSnap = await getDocs(collection(db, 'attendance'));
+      const details: {studentId: string; studentName: string; status: string; groupName: string}[] = [];
+      
+      attendanceSnap.docs.forEach(doc => {
+        const data = doc.data();
+        
+        // تصفية حسب المجموعات
+        if (!groupIds.includes(data.groupId)) return;
+        
+        // تصفية حسب التاريخ
+        let recordDate: Date | null = null;
+        if (data.date && typeof data.date.toDate === 'function') {
+          recordDate = data.date.toDate();
+        } else if (data.date) {
+          recordDate = new Date(data.date);
+        }
+        
+        if (!recordDate) return;
+        recordDate.setHours(0, 0, 0, 0);
+        
+        if (recordDate.getTime() !== targetDate.getTime()) return;
+        
+        const studentInfo = studentsMap.get(data.studentId);
+        if (studentInfo) {
+          details.push({
+            studentId: data.studentId,
+            studentName: studentInfo.name,
+            status: data.status || 'غير محدد',
+            groupName: groupsMap.get(data.groupId) || 'غير محدد'
+          });
+        }
+      });
+      
+      // ترتيب حسب الاسم
+      details.sort((a, b) => a.studentName.localeCompare(b.studentName, 'ar'));
+      
+      setAttendanceDetails(details);
+      
+      // تحديث الملخص
+      const presentCount = details.filter(d => d.status === 'حاضر' || d.status === 'متأخر').length;
+      const absentCount = details.filter(d => d.status === 'غائب' || d.status === 'غائب بعذر').length;
+      
+      setAttendanceSummary(prev => ({
+        ...prev,
+        present: presentCount,
+        absent: absentCount,
+        total: details.length
+      }));
+      
+    } catch (error) {
+      console.error('Error fetching attendance details:', error);
+    } finally {
+      setLoadingAttendance(false);
     }
   };
 
@@ -260,27 +378,55 @@ const Dashboard = () => {
 
       } else {
         // Admin/Supervisor view
+        // تحديد المركز المستخدم للفلترة
+        const filterCenterId = isSupervisor && selectedCenterId ? selectedCenterId : null;
+        
         // جميع المستخدمين
-        const allUsersSnap = await getDocs(collection(db, 'users'));
-        totalUsers = allUsersSnap.size;
+        if (filterCenterId) {
+          const filteredUsersQuery = query(
+            collection(db, 'users'),
+            where('centerId', '==', filterCenterId)
+          );
+          const filteredUsersSnap = await getDocs(filteredUsersQuery);
+          totalUsers = filteredUsersSnap.size;
+        } else {
+          const allUsersSnap = await getDocs(collection(db, 'users'));
+          totalUsers = allUsersSnap.size;
+        }
 
         // students from users collection
-        const studentsQuery = query(
-          collection(db, 'users'),
-          where('role', '==', 'student'),
-          where('status', '==', 'approved')
-        );
+        let studentsQuery;
+        if (filterCenterId) {
+          studentsQuery = query(
+            collection(db, 'users'),
+            where('role', '==', 'student'),
+            where('status', '==', 'approved'),
+            where('centerId', '==', filterCenterId)
+          );
+        } else {
+          studentsQuery = query(
+            collection(db, 'users'),
+            where('role', '==', 'student'),
+            where('status', '==', 'approved')
+          );
+        }
         const studentsSnap = await getDocs(studentsQuery);
         totalStudents = studentsSnap.size;
+        
+        // Get student IDs for filtering achievements
+        const studentIds = studentsSnap.docs.map(doc => doc.id);
 
         // Count successful students (with achievements and high average ratings)
         try {
           const achievementsSnap = await getDocs(collection(db, 'student_achievements'));
           const studentAchievementsMap = new Map<string, number[]>();
           
-          // Group achievements by student and collect ratings
+          // Group achievements by student and collect ratings (filter by center students if needed)
           achievementsSnap.docs.forEach(doc => {
             const data = doc.data();
+            // Filter by students in the selected center
+            if (filterCenterId && !studentIds.includes(data.studentId)) return;
+            
             if (data.studentId && data.challengePassed && data.rating) {
               if (!studentAchievementsMap.has(data.studentId)) {
                 studentAchievementsMap.set(data.studentId, []);
@@ -304,20 +450,38 @@ const Dashboard = () => {
           completedStudents = 0;
         }
 
-        // groups (active)
+        // groups (active) - filter by center if needed
         try {
-          const groupsSnap = await getDocs(collection(db, 'groups'));
-          activeGroups = groupsSnap.size;
+          if (filterCenterId) {
+            const groupsQuery = query(
+              collection(db, 'groups'),
+              where('centerId', '==', filterCenterId)
+            );
+            const groupsSnap = await getDocs(groupsQuery);
+            activeGroups = groupsSnap.size;
+          } else {
+            const groupsSnap = await getDocs(collection(db, 'groups'));
+            activeGroups = groupsSnap.size;
+          }
         } catch (e) {
           console.error('Error fetching groups:', e);
           activeGroups = 0;
         }
 
-        // teachers from users collection
-        const teachersQuery = query(
-          collection(db, 'users'),
-          where('role', '==', 'teacher')
-        );
+        // teachers from users collection - filter by center if needed
+        let teachersQuery;
+        if (filterCenterId) {
+          teachersQuery = query(
+            collection(db, 'users'),
+            where('role', '==', 'teacher'),
+            where('centerId', '==', filterCenterId)
+          );
+        } else {
+          teachersQuery = query(
+            collection(db, 'users'),
+            where('role', '==', 'teacher')
+          );
+        }
         const teachersSnap = await getDocs(teachersQuery);
         teachers = teachersSnap.size;
 
@@ -528,8 +692,19 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchSupervisorCenters();
-    fetchDashboard();
   }, []);
+
+  // إعادة جلب البيانات عند تغيير المركز المختار
+  useEffect(() => {
+    fetchDashboard();
+  }, [selectedCenterId]);
+
+  // جلب تفاصيل الحضور عند تغيير التاريخ أو المركز
+  useEffect(() => {
+    if (isSupervisor && selectedCenterId) {
+      fetchAttendanceDetails(attendanceDate);
+    }
+  }, [attendanceDate, selectedCenterId, isSupervisor]);
 
   // جلب طلبات المطور عند تحديد isAdmin
   useEffect(() => {
@@ -781,7 +956,27 @@ const Dashboard = () => {
       {!isAdmin && (
         <>
           <section className="attendance-summary-card">
-            <h2>ملخص الحضور اليومي</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+              <h2 style={{ margin: 0 }}>ملخص الحضور</h2>
+              {isSupervisor && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <label style={{ fontSize: '0.9rem', color: '#666' }}>📅 التاريخ:</label>
+                  <input
+                    type="date"
+                    value={attendanceDate}
+                    onChange={(e) => setAttendanceDate(e.target.value)}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid #ddd',
+                      fontSize: '0.9rem',
+                      cursor: 'pointer'
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+            
             <div className="summary-grid">
               <div className="summary-item present">
                 <div className="summary-label">حاضرون</div>
@@ -792,6 +987,75 @@ const Dashboard = () => {
                 <div className="summary-count">{attendanceSummary.absent}</div>
               </div>
             </div>
+            
+            {/* جدول تفاصيل الحضور للمشرف */}
+            {isSupervisor && (
+              <div style={{ marginTop: '20px' }}>
+                <h3 style={{ fontSize: '1rem', color: '#333', marginBottom: '12px', borderBottom: '2px solid #4caf50', paddingBottom: '8px' }}>
+                  📋 تفاصيل الحضور
+                  {attendanceDetails.length > 0 && (
+                    <span style={{ fontSize: '0.85rem', color: '#666', fontWeight: 'normal', marginRight: '10px' }}>
+                      ({attendanceDetails.length} سجل)
+                    </span>
+                  )}
+                </h3>
+                
+                {loadingAttendance ? (
+                  <p style={{ textAlign: 'center', color: '#666' }}>جاري تحميل البيانات...</p>
+                ) : attendanceDetails.length === 0 ? (
+                  <p style={{ textAlign: 'center', color: '#999', padding: '20px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
+                    لا توجد سجلات حضور لهذا التاريخ
+                  </p>
+                ) : (
+                  <div style={{ overflowX: 'auto', maxHeight: '400px', overflowY: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                      <thead style={{ position: 'sticky', top: 0, backgroundColor: '#2e7d32' }}>
+                        <tr>
+                          <th style={{ padding: '12px 15px', textAlign: 'right', color: 'white', fontWeight: '600' }}>اسم الطالب</th>
+                          <th style={{ padding: '12px 15px', textAlign: 'center', color: 'white', fontWeight: '600' }}>الحالة</th>
+                          <th style={{ padding: '12px 15px', textAlign: 'right', color: 'white', fontWeight: '600' }}>الحلقة</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {attendanceDetails.map((item, index) => (
+                          <tr key={item.studentId + index} style={{ 
+                            backgroundColor: index % 2 === 0 ? '#fff' : '#f9f9f9',
+                            borderBottom: '1px solid #eee'
+                          }}>
+                            <td style={{ padding: '10px 15px', fontWeight: '500' }}>{item.studentName}</td>
+                            <td style={{ padding: '10px 15px', textAlign: 'center' }}>
+                              <span style={{
+                                padding: '4px 12px',
+                                borderRadius: '12px',
+                                fontSize: '0.8rem',
+                                fontWeight: '600',
+                                backgroundColor: 
+                                  item.status === 'حاضر' ? '#e8f5e9' :
+                                  item.status === 'متأخر' ? '#fff3e0' :
+                                  item.status === 'غائب' ? '#ffebee' :
+                                  item.status === 'غائب بعذر' ? '#e3f2fd' : '#f5f5f5',
+                                color: 
+                                  item.status === 'حاضر' ? '#2e7d32' :
+                                  item.status === 'متأخر' ? '#e65100' :
+                                  item.status === 'غائب' ? '#c62828' :
+                                  item.status === 'غائب بعذر' ? '#1565c0' : '#666'
+                              }}>
+                                {item.status === 'حاضر' && '✓ '}
+                                {item.status === 'متأخر' && '⏰ '}
+                                {item.status === 'غائب' && '✗ '}
+                                {item.status === 'غائب بعذر' && '📝 '}
+                                {item.status}
+                              </span>
+                            </td>
+                            <td style={{ padding: '10px 15px', color: '#666', fontSize: '0.85rem' }}>{item.groupName}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
           </section>
 
           {/* Low Attendance Alerts */}

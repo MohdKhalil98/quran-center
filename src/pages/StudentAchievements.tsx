@@ -150,8 +150,13 @@ const StudentAchievements = () => {
   const [arabicLevel, setArabicLevel] = useState<ArabicLevel | null>(null);
   const [arabicLesson, setArabicLesson] = useState<ArabicLesson | null>(null);
   
+  // Centers and filtering
+  const [centers, setCenters] = useState<{id: string; name: string}[]>([]);
+  const [selectedCenterId, setSelectedCenterId] = useState<string>('');
+  
   // Teacher groups
   const [teacherGroups, setTeacherGroups] = useState<any[]>([]);
+  const [filteredGroups, setFilteredGroups] = useState<any[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string>('');
   const [groupStudents, setGroupStudents] = useState<any[]>([]);
   
@@ -163,7 +168,7 @@ const StudentAchievements = () => {
   
   // Challenge recording state
   const [selectedChallengeType, setSelectedChallengeType] = useState<ChallengeType | ''>('');
-  const [challengeRating, setChallengeRating] = useState<number>(5);
+  const [challengeRating, setChallengeRating] = useState<number>(0);
   const [challengeNotes, setChallengeNotes] = useState<string>('');
   const [challengePassed, setChallengePassed] = useState<boolean>(true);
   const [recordDate, setRecordDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -185,6 +190,9 @@ const StudentAchievements = () => {
   };
 
   // Curriculum is now loaded from local quranCurriculum.ts - no Firebase fetch needed
+
+  // Centers will be set based on teacher's groups
+  // No need to fetch all centers separately
 
   // Fetch tracks (المساقات) on mount
   useEffect(() => {
@@ -217,8 +225,26 @@ const StudentAchievements = () => {
         const groups = groupsSnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
-        }));
+        })) as any[];
         setTeacherGroups(groups);
+        setFilteredGroups(groups);
+        
+        // Extract unique center IDs from teacher's groups and fetch center names
+        const teacherCenterIds = Array.from(new Set(groups.map(g => g.centerId).filter(Boolean)));
+        if (teacherCenterIds.length > 0) {
+          const centersSnapshot = await getDocs(collection(db, 'centers'));
+          const allCenters = centersSnapshot.docs.map((doc) => ({
+            id: doc.id,
+            name: doc.data().name
+          }));
+          const teacherCenters = allCenters.filter(c => teacherCenterIds.includes(c.id));
+          setCenters(teacherCenters);
+        }
+        
+        // Set the center of the first group as default if available
+        if (groups.length > 0 && groups[0].centerId) {
+          setSelectedCenterId(groups[0].centerId);
+        }
         
         if (groups.length === 1) {
           setSelectedGroupId(groups[0].id);
@@ -230,6 +256,24 @@ const StudentAchievements = () => {
 
     fetchTeacherGroups();
   }, [isTeacher, userProfile?.uid]);
+
+  // Filter groups when center changes
+  useEffect(() => {
+    if (selectedCenterId) {
+      const filtered = teacherGroups.filter((g: any) => g.centerId === selectedCenterId);
+      setFilteredGroups(filtered);
+      // If current group is not in filtered list, reset
+      if (selectedGroupId && !filtered.find((g: any) => g.id === selectedGroupId)) {
+        if (filtered.length > 0) {
+          setSelectedGroupId(filtered[0].id);
+        } else {
+          setSelectedGroupId('');
+        }
+      }
+    } else {
+      setFilteredGroups(teacherGroups);
+    }
+  }, [selectedCenterId, teacherGroups]);
 
   // Fetch students when group is selected
   useEffect(() => {
@@ -646,6 +690,16 @@ const StudentAchievements = () => {
     }
   };
 
+  // Get the surah name for the challenge (for progress indicator)
+  const getChallengeSurahName = (type: ChallengeType): string => {
+    if (!studentStage) return '';
+    const content = getChallengeContent(type);
+    // Extract surah name from content like "سورة الفاتحة" or "سورة سورة الفاتحة (7 آية)"
+    if (content === '-' || content === 'لا يوجد') return studentStage.name;
+    // Return the content as it contains the surah name
+    return content.replace(/\s*\(\d+\s*آية\)/, '').trim();
+  };
+
   // التحقق من اكتمال جميع آيات الحفظ
   const isMemorizationFullyComplete = (): boolean => {
     if (!studentStage || !selectedStudent) return false;
@@ -1007,7 +1061,7 @@ const StudentAchievements = () => {
             
             // Only reset challenge selection, keep student selected to continue
             setSelectedChallengeType('');
-            setChallengeRating(5);
+            setChallengeRating(0);
             setChallengeNotes('');
             setChallengePassed(true);
             return;
@@ -1025,7 +1079,7 @@ const StudentAchievements = () => {
             
             // Only reset challenge selection, keep student selected
             setSelectedChallengeType('');
-            setChallengeRating(5);
+            setChallengeRating(0);
             setChallengeNotes('');
             setChallengePassed(true);
             return;
@@ -1120,7 +1174,7 @@ const StudentAchievements = () => {
 
       // إعادة تعيين الملاحظات
       setChallengeNotes('');
-      setChallengeRating(5);
+      setChallengeRating(0);
 
     } catch (error) {
       console.error('Error recording arabic lesson:', error);
@@ -1135,7 +1189,7 @@ const StudentAchievements = () => {
     setArabicLevel(null);
     setArabicLesson(null);
     setSelectedChallengeType('');
-    setChallengeRating(5);
+    setChallengeRating(0);
     setChallengeNotes('');
     setChallengePassed(true);
     setRecordDate(new Date().toISOString().split('T')[0]);
@@ -1405,6 +1459,26 @@ const StudentAchievements = () => {
       <form className="form-card challenge-form" onSubmit={handleRecordChallenge}>
         <h3>{editingId ? '✏️ تعديل التحدي' : '📝 تسجيل تحدي جديد'}</h3>
         
+        {/* Center Selection for Teachers */}
+        {isTeacher && teacherGroups.length > 0 && centers.length > 0 && (
+          <div className="form-group">
+            <label htmlFor="centerSelect">المركز</label>
+            <select
+              id="centerSelect"
+              name="centerSelect"
+              value={selectedCenterId}
+              onChange={(e) => setSelectedCenterId(e.target.value)}
+            >
+              <option value="">-- كل المراكز --</option>
+              {centers.map((center) => (
+                <option key={center.id} value={center.id}>
+                  {center.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Group Selection for Teachers */}
         {isTeacher && teacherGroups.length > 0 && (
           <div className="form-group">
@@ -1417,7 +1491,7 @@ const StudentAchievements = () => {
               required
             >
               <option value="">اختر الحلقة</option>
-              {teacherGroups.map((group) => (
+              {filteredGroups.map((group) => (
                 <option key={group.id} value={group.id}>
                   {group.name}
                 </option>
@@ -1629,7 +1703,6 @@ const StudentAchievements = () => {
         {selectedChallengeType && (
           <div className="challenge-recording-section">
             <h4>📋 تسجيل نتيجة: {getChallengeLabel(selectedChallengeType)}</h4>
-            <p className="challenge-description">المحتوى: {getChallengeContent(selectedChallengeType)}</p>
             
             {/* Progress Indicator - For All Challenge Types */}
             {studentStage && selectedChallengeType && (
@@ -1640,10 +1713,11 @@ const StudentAchievements = () => {
                   const isComplete = remaining === 0 && hasProgress;
                   const challengeLabel = selectedChallengeType === 'memorization' ? 'الحفظ' : 
                                         selectedChallengeType === 'near_review' ? 'المراجعة القريبة' : 'المراجعة البعيدة';
+                  const surahName = getChallengeSurahName(selectedChallengeType);
                   return (
                     <>
                       <div className="progress-header">
-                        <span className="progress-title">📊 تقدم {challengeLabel} في {studentStage.name}</span>
+                        <span className="progress-title">📊 تقدم {challengeLabel} في {surahName}</span>
                         <span className={`progress-percentage ${isComplete ? 'complete' : ''}`}>
                           {percentage}%
                         </span>
@@ -1723,7 +1797,7 @@ const StudentAchievements = () => {
                   id="challengeRating"
                   min="1"
                   max="10"
-                  value={challengeRating}
+                  value={challengeRating || ''}
                   onChange={(e) => setChallengeRating(Number(e.target.value))}
                   required
                 />

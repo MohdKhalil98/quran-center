@@ -316,9 +316,7 @@ const StudentAchievements = () => {
               subscriptionStatus: data.subscriptionStatus || 'inactive',
               ...data
             };
-          })
-          // تصفية الطلاب غير النشطين - يظهر فقط النشطين والمعفيين
-          .filter((student: any) => student.subscriptionStatus === 'active' || student.subscriptionStatus === 'exempt');
+          });
         
         studentsList.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
         setGroupStudents(studentsList);
@@ -1507,16 +1505,31 @@ const StudentAchievements = () => {
             id="studentId"
             name="studentId"
             value={selectedStudent?.id || ''}
-            onChange={handleStudentSelect}
+            onChange={(e) => {
+              const studentId = e.target.value;
+              const student = (isTeacher ? groupStudents : students).find((s: any) => s.id === studentId);
+              const isInactive = student && student.subscriptionStatus !== 'active' && student.subscriptionStatus !== 'exempt';
+              if (!isInactive) {
+                handleStudentSelect(e);
+              }
+            }}
             required
             disabled={isTeacher && !selectedGroupId}
           >
             <option value="">{isTeacher && !selectedGroupId ? 'اختر الحلقة أولاً' : 'اختر الطالب'}</option>
-            {(isTeacher ? groupStudents : students).map((student) => (
-              <option key={student.id} value={student.id}>
-                {student.name}
-              </option>
-            ))}
+            {(isTeacher ? groupStudents : students).map((student: any) => {
+              const isInactive = student.subscriptionStatus !== 'active' && student.subscriptionStatus !== 'exempt';
+              return (
+                <option 
+                  key={student.id} 
+                  value={student.id}
+                  disabled={isInactive}
+                  className={isInactive ? 'inactive-student-option' : ''}
+                >
+                  {student.name}{isInactive ? ' (غير نشط)' : ''}
+                </option>
+              );
+            })}
           </select>
         </div>
 

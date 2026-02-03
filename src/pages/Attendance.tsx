@@ -157,9 +157,7 @@ const Attendance = () => {
             name: doc.data().name,
             groupId: doc.data().groupId,
             subscriptionStatus: doc.data().subscriptionStatus || 'inactive'
-          } as Student))
-          // تصفية الطلاب غير النشطين - يظهر فقط النشطين والمعفيين
-          .filter((student) => student.subscriptionStatus === 'active' || student.subscriptionStatus === 'exempt');
+          } as Student));
         
         // Sort by name
         allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
@@ -471,15 +469,20 @@ const Attendance = () => {
               {students.map((student) => {
                 const record = attendance.get(student.id);
                 const status = record?.status || 'حاضر';
+                const isInactive = student.subscriptionStatus !== 'active' && student.subscriptionStatus !== 'exempt';
                 return (
-                  <div key={student.id} className="attendance-row">
-                    <div className="student-name">{student.name}</div>
+                  <div key={student.id} className={`attendance-row ${isInactive ? 'inactive-student' : ''}`}>
+                    <div className="student-name">
+                      {student.name}
+                      {isInactive && <span className="inactive-badge">غير نشط</span>}
+                    </div>
                     <button
                       type="button"
-                      className={`status-btn ${getStatusColor(status)}`}
-                      onClick={() => handleStatusChange(student.id)}
+                      className={`status-btn ${isInactive ? 'status-disabled' : getStatusColor(status)}`}
+                      onClick={() => !isInactive && handleStatusChange(student.id)}
+                      disabled={isInactive}
                     >
-                      {status}
+                      {isInactive ? '-' : status}
                     </button>
                   </div>
                 );

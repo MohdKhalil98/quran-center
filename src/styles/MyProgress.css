@@ -1,5 +1,146 @@
 /* MyProgress Page Styles */
 
+/* ========== بطاقة المشاركة في الفترة الدراسية ========== */
+.participation-card {
+  background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);
+  color: white;
+  padding: 1.5rem;
+  border-radius: 16px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 20px rgba(30, 58, 95, 0.3);
+}
+
+.participation-card-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.participation-icon {
+  font-size: 2.5rem;
+}
+
+.participation-card-header h3 {
+  margin: 0;
+  font-size: 1.3rem;
+  color: white;
+}
+
+.participation-period-info {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  opacity: 0.85;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.participation-status-section {
+  margin-top: 1rem;
+}
+
+.participation-question {
+  font-size: 1.1rem;
+  margin-bottom: 1rem;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.participation-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.btn-participate {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 180px;
+  justify-content: center;
+}
+
+.btn-participate.yes {
+  background: rgba(40, 167, 69, 0.9);
+  color: white;
+}
+
+.btn-participate.yes:hover:not(:disabled) {
+  background: rgba(40, 167, 69, 1);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(40, 167, 69, 0.4);
+}
+
+.btn-participate.no {
+  background: rgba(220, 53, 69, 0.8);
+  color: white;
+}
+
+.btn-participate.no:hover:not(:disabled) {
+  background: rgba(220, 53, 69, 1);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(220, 53, 69, 0.4);
+}
+
+.btn-participate:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.participation-current-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.participation-badge {
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.participation-badge.participating {
+  background: rgba(40, 167, 69, 0.2);
+  color: #a3e4b4;
+  border: 1px solid rgba(40, 167, 69, 0.4);
+}
+
+.participation-badge.not_participating {
+  background: rgba(220, 53, 69, 0.2);
+  color: #f0a0a8;
+  border: 1px solid rgba(220, 53, 69, 0.4);
+}
+
+.btn-change-participation {
+  padding: 8px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.3s ease;
+}
+
+.btn-change-participation:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.btn-change-participation:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* Pending Approval Message */
 .pending-approval-message {
   text-align: center;

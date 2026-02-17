@@ -49,6 +49,7 @@ interface StudyPeriod {
   centerId?: string;
   subscriptionFee: number; // مبلغ الاشتراك
   currency: string; // العملة
+  paymentDeadline?: Timestamp; // آخر يوم للدفع
   createdAt: Timestamp;
 }
 
@@ -79,6 +80,7 @@ interface StudentPeriodStatus {
   studentId: string;
   periodId: string;
   status: 'active' | 'inactive' | 'exempt'; // نشط، غير نشط، معفي
+  participation?: 'participating' | 'not_participating' | 'pending'; // مشارك، غير مشارك، معلق
   paymentId?: string; // معرف الدفع إذا تم الدفع
   exemptReason?: string; // سبب الإعفاء
   updatedAt: Timestamp;
@@ -95,6 +97,12 @@ const SUBSCRIPTION_STATUS = {
   active: { label: 'نشط', color: '#28a745', icon: '✅' },
   inactive: { label: 'غير نشط', color: '#dc3545', icon: '❌' },
   exempt: { label: 'معفي', color: '#17a2b8', icon: '🎓' }
+};
+
+const PARTICIPATION_STATUS = {
+  participating: { label: 'مشارك', color: '#28a745', icon: '✅' },
+  not_participating: { label: 'غير مشارك', color: '#dc3545', icon: '❌' },
+  pending: { label: 'لم يحدد', color: '#ffc107', icon: '⏳' }
 };
 
 // ======================== COMPONENT ========================
@@ -122,7 +130,8 @@ const SubscriptionsNew = () => {
     endDate: '',
     centerId: '',
     subscriptionFee: 5,
-    currency: 'دينار بحريني'
+    currency: 'دينار بحريني',
+    paymentDeadline: ''
   });
   
   // ========== المدفوعات ==========
@@ -158,6 +167,7 @@ const SubscriptionsNew = () => {
   const [filterCenterId, setFilterCenterId] = useState<string>('');
   const [filterGroupId, setFilterGroupId] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive' | 'exempt'>('all');
+  const [filterParticipation, setFilterParticipation] = useState<'all' | 'participating' | 'not_participating' | 'pending'>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
   
   // ========== WhatsApp ==========
@@ -190,6 +200,17 @@ const SubscriptionsNew = () => {
   // ========== Processing ==========
   const [processingStudents, setProcessingStudents] = useState<string[]>([]);
 
+  // ========== الفترات السابقة ==========
+  const [expandedPeriodId, setExpandedPeriodId] = useState<string | null>(null);
+
+  // ========== الترتيب ==========
+  const [sortColumn, setSortColumn] = useState<string>('');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [pastSortColumn, setPastSortColumn] = useState<string>('');
+  const [pastSortDirection, setPastSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [pastFilterCenterId, setPastFilterCenterId] = useState<string>('');
+  const [pastSearchTerm, setPastSearchTerm] = useState<string>('');
+
   // ======================== EFFECTS ========================
 
   useEffect(() => {
@@ -198,7 +219,7 @@ const SubscriptionsNew = () => {
 
   useEffect(() => {
     filterStudentsList();
-  }, [students, filterCenterId, filterGroupId, filterStatus, studentPeriodStatuses, activePeriod, searchTerm]);
+  }, [students, filterCenterId, filterGroupId, filterStatus, filterParticipation, studentPeriodStatuses, activePeriod, searchTerm]);
 
   useEffect(() => {
     if (filterCenterId) {
@@ -211,6 +232,44 @@ const SubscriptionsNew = () => {
       setFilteredGroups(groups);
     }
   }, [filterCenterId, groups]);
+
+  // التحقق من انتهاء مهلة الدفع وتعطيل الحسابات غير المدفوعة
+  useEffect(() => {
+    const checkPaymentDeadline = async () => {
+      if (!activePeriod?.paymentDeadline) return;
+      
+      const now = new Date();
+      const deadline = activePeriod.paymentDeadline.toDate();
+      
+      if (now <= deadline) return; // المهلة لم تنتهِ بعد
+      
+      // الطلاب الذين لم يدفعوا ولم يتم تعطيلهم بعد بسبب انتهاء المهلة
+      const unpaidStatuses = studentPeriodStatuses.filter(s => 
+        s.periodId === activePeriod.id && 
+        s.status === 'inactive' && 
+        s.participation === 'participating'
+      );
+
+      // لا نحتاج لتعطيل إضافي - الطلاب غير النشطين أصلاً
+      // لكن نضع المشاركين الذين لم يدفعوا كـ "غير مشاركين" تلقائياً
+      for (const status of unpaidStatuses) {
+        try {
+          await updateDoc(doc(db, 'studentPeriodStatuses', status.id), {
+            participation: 'not_participating',
+            updatedAt: Timestamp.now()
+          });
+        } catch (error) {
+          console.error('Error auto-deactivating student:', error);
+        }
+      }
+
+      if (unpaidStatuses.length > 0) {
+        fetchData(); // إعادة تحميل البيانات
+      }
+    };
+
+    checkPaymentDeadline();
+  }, [activePeriod, studentPeriodStatuses]);
 
   // ======================== DATA FETCHING ========================
 
@@ -345,6 +404,13 @@ const SubscriptionsNew = () => {
       });
     }
 
+    if (filterParticipation !== 'all' && activePeriod) {
+      filtered = filtered.filter(s => {
+        const participation = getStudentParticipation(s.uid);
+        return participation === filterParticipation;
+      });
+    }
+
     setFilteredStudents(filtered);
   };
 
@@ -355,6 +421,41 @@ const SubscriptionsNew = () => {
       s => s.studentId === studentId && s.periodId === activePeriod.id
     );
     return status?.status || 'inactive';
+  };
+
+  // الحصول على حالة المشاركة للطالب في الفترة الحالية
+  const getStudentParticipation = (studentId: string): 'participating' | 'not_participating' | 'pending' => {
+    if (!activePeriod) return 'pending';
+    const status = studentPeriodStatuses.find(
+      s => s.studentId === studentId && s.periodId === activePeriod.id
+    );
+    return status?.participation || 'pending';
+  };
+
+  // الحصول على حالة المشاركة للطالب في فترة محددة
+  const getStudentParticipationForPeriod = (studentId: string, periodId: string): 'participating' | 'not_participating' | 'pending' => {
+    const status = studentPeriodStatuses.find(
+      s => s.studentId === studentId && s.periodId === periodId
+    );
+    return status?.participation || 'pending';
+  };
+
+  // الحصول على حالة الطالب لفترة محددة (للفترات السابقة)
+  const getStudentStatusForPeriod = (studentId: string, periodId: string): 'active' | 'inactive' | 'exempt' => {
+    const status = studentPeriodStatuses.find(
+      s => s.studentId === studentId && s.periodId === periodId
+    );
+    return status?.status || 'inactive';
+  };
+
+  // الحصول على إحصائيات فترة محددة
+  const getPeriodStats = (periodId: string) => {
+    const periodStudents = students.filter(s => !pastFilterCenterId || s.centerId === pastFilterCenterId);
+    const activeCount = periodStudents.filter(s => getStudentStatusForPeriod(s.uid, periodId) === 'active').length;
+    const inactiveCount = periodStudents.filter(s => getStudentStatusForPeriod(s.uid, periodId) === 'inactive').length;
+    const exemptCount = periodStudents.filter(s => getStudentStatusForPeriod(s.uid, periodId) === 'exempt').length;
+    const totalPayments = payments.filter(p => p.periodId === periodId).reduce((sum, p) => sum + (p.amount || 0), 0);
+    return { activeCount, inactiveCount, exemptCount, totalPayments };
   };
 
   // ======================== PERIOD FUNCTIONS ========================
@@ -381,6 +482,11 @@ const SubscriptionsNew = () => {
         currency: newPeriod.currency || 'دينار بحريني',
         createdAt: Timestamp.now()
       };
+
+      // إضافة آخر يوم للدفع إذا كان محدداً
+      if (newPeriod.paymentDeadline) {
+        periodData.paymentDeadline = Timestamp.fromDate(new Date(newPeriod.paymentDeadline));
+      }
 
       // إضافة centerId فقط إذا كان محدداً
       if (newPeriod.centerId) {
@@ -418,6 +524,7 @@ const SubscriptionsNew = () => {
             studentId: student.uid,
             periodId: docRef.id,
             status: 'inactive',
+            participation: 'pending',
             updatedAt: Timestamp.now()
           });
         }
@@ -443,7 +550,8 @@ const SubscriptionsNew = () => {
       endDate: '',
       centerId: '',
       subscriptionFee: 5,
-      currency: 'دينار بحريني'
+      currency: 'دينار بحريني',
+      paymentDeadline: ''
     });
   };
 
@@ -974,6 +1082,81 @@ const SubscriptionsNew = () => {
     );
   };
 
+  // ======================== SORTING ========================
+
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  const handlePastSort = (column: string) => {
+    if (pastSortColumn === column) {
+      setPastSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setPastSortColumn(column);
+      setPastSortDirection('asc');
+    }
+  };
+
+  const getSortIcon = (column: string, currentSort: string, currentDir: 'asc' | 'desc') => {
+    if (currentSort !== column) return ' ⇅';
+    return currentDir === 'asc' ? ' ▲' : ' ▼';
+  };
+
+  const sortStudents = (studentsList: Student[], col: string, dir: 'asc' | 'desc', periodId?: string) => {
+    if (!col) return studentsList;
+    return [...studentsList].sort((a, b) => {
+      let valA = '';
+      let valB = '';
+      switch (col) {
+        case 'name':
+          valA = a.name || '';
+          valB = b.name || '';
+          break;
+        case 'phone':
+          valA = a.phone || a.parentPhone || '';
+          valB = b.phone || b.parentPhone || '';
+          break;
+        case 'center':
+          valA = a.centerName || '';
+          valB = b.centerName || '';
+          break;
+        case 'group':
+          valA = a.groupName || '';
+          valB = b.groupName || '';
+          break;
+        case 'status':
+          const statusOrder = { active: '1', exempt: '2', inactive: '3' };
+          if (periodId) {
+            valA = statusOrder[getStudentStatusForPeriod(a.uid, periodId)] || '3';
+            valB = statusOrder[getStudentStatusForPeriod(b.uid, periodId)] || '3';
+          } else {
+            valA = statusOrder[getStudentPeriodStatus(a.uid)] || '3';
+            valB = statusOrder[getStudentPeriodStatus(b.uid)] || '3';
+          }
+          break;
+        case 'participation':
+          const partOrder = { participating: '1', pending: '2', not_participating: '3' };
+          if (periodId) {
+            valA = partOrder[getStudentParticipationForPeriod(a.uid, periodId)] || '2';
+            valB = partOrder[getStudentParticipationForPeriod(b.uid, periodId)] || '2';
+          } else {
+            valA = partOrder[getStudentParticipation(a.uid)] || '2';
+            valB = partOrder[getStudentParticipation(b.uid)] || '2';
+          }
+          break;
+        default:
+          return 0;
+      }
+      const comparison = valA.localeCompare(valB, 'ar');
+      return dir === 'asc' ? comparison : -comparison;
+    });
+  };
+
   const toggleStudentSelection = (studentId: string) => {
     setSelectedStudents(prev => 
       prev.includes(studentId) 
@@ -1009,6 +1192,202 @@ const SubscriptionsNew = () => {
         </p>
       </div>
 
+      {/* ========== الفترات السابقة ========== */}
+      {studyPeriods.filter(p => !p.isActive).length > 0 && (
+        <div className="past-periods-section">
+          <h3 className="past-periods-title">📋 الفترات السابقة ({studyPeriods.filter(p => !p.isActive).length})</h3>
+          <div className="past-periods-list">
+            {studyPeriods.filter(p => !p.isActive).map(period => {
+              const isExpanded = expandedPeriodId === period.id;
+              const periodStatus = getPeriodStatusLabel(period);
+              const stats = getPeriodStats(period.id);
+              
+              return (
+                <div key={period.id} className={`past-period-card ${isExpanded ? 'expanded' : ''}`}>
+                  <div 
+                    className="past-period-header"
+                    onClick={() => setExpandedPeriodId(isExpanded ? null : period.id)}
+                  >
+                    <div className="past-period-title-section">
+                      <span className="past-period-toggle">{isExpanded ? '▼' : '◀'}</span>
+                      <h4>📅 {period.name}</h4>
+                      <span className={`past-period-status ${periodStatus.class}`}>
+                        {periodStatus.label}
+                      </span>
+                    </div>
+                    <div className="past-period-summary">
+                      <span className="past-period-stat">✅ {stats.activeCount}</span>
+                      <span className="past-period-stat">⏳ {stats.inactiveCount}</span>
+                      <span className="past-period-stat">🎓 {stats.exemptCount}</span>
+                    </div>
+                  </div>
+                  
+                  {isExpanded && (
+                    <div className="past-period-details">
+                      <div className="past-period-info-grid">
+                        <div className="period-info-item">
+                          <span className="info-icon">📆</span>
+                          <div className="info-content">
+                            <span className="info-label">المدة</span>
+                            <span className="info-value">{formatDate(period.startDate)} - {formatDate(period.endDate)}</span>
+                          </div>
+                        </div>
+                        <div className="period-info-item">
+                          <span className="info-icon">💰</span>
+                          <div className="info-content">
+                            <span className="info-label">رسوم الاشتراك</span>
+                            <span className="info-value">{period.subscriptionFee || 0} {period.currency || 'دينار بحريني'}</span>
+                          </div>
+                        </div>
+                        <div className="period-info-item">
+                          <span className="info-icon">💵</span>
+                          <div className="info-content">
+                            <span className="info-label">إجمالي المدفوعات</span>
+                            <span className="info-value">{stats.totalPayments} {period.currency || 'دينار بحريني'}</span>
+                          </div>
+                        </div>
+                        {period.centerId && (
+                          <div className="period-info-item">
+                            <span className="info-icon">🏛️</span>
+                            <div className="info-content">
+                              <span className="info-label">المركز</span>
+                              <span className="info-value">{centers.find(c => c.id === period.centerId)?.name}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="past-period-stats-grid">
+                        <div className="past-stat-card active">
+                          <div className="past-stat-icon">✅</div>
+                          <div className="past-stat-content">
+                            <span className="past-stat-number">{stats.activeCount}</span>
+                            <span className="past-stat-label">مشترك نشط</span>
+                          </div>
+                        </div>
+                        <div className="past-stat-card inactive">
+                          <div className="past-stat-icon">⏳</div>
+                          <div className="past-stat-content">
+                            <span className="past-stat-number">{stats.inactiveCount}</span>
+                            <span className="past-stat-label">بانتظار الدفع</span>
+                          </div>
+                        </div>
+                        <div className="past-stat-card exempt">
+                          <div className="past-stat-icon">🎓</div>
+                          <div className="past-stat-content">
+                            <span className="past-stat-number">{stats.exemptCount}</span>
+                            <span className="past-stat-label">معفي</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* جدول الطلاب للفترة السابقة */}
+                      <div className="past-period-students">
+                        <div className="past-period-students-header">
+                          <h5>👥 حالة الطلاب في هذه الفترة</h5>
+                          <div className="past-period-filters">
+                            <input
+                              type="text"
+                              value={pastSearchTerm}
+                              onChange={(e) => setPastSearchTerm(e.target.value)}
+                              placeholder="🔍 بحث بالاسم..."
+                              className="past-search-input"
+                            />
+                            <select
+                              value={pastFilterCenterId}
+                              onChange={(e) => setPastFilterCenterId(e.target.value)}
+                              className="past-filter-select"
+                            >
+                              <option value="">جميع المراكز</option>
+                              {centers.map(center => (
+                                <option key={center.id} value={center.id}>{center.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="past-period-table-container">
+                          <table className="past-period-table">
+                            <thead>
+                              <tr>
+                                <th className="sortable-header" onClick={() => handlePastSort('name')}>الاسم{getSortIcon('name', pastSortColumn, pastSortDirection)}</th>
+                                <th className="sortable-header" onClick={() => handlePastSort('center')}>المركز{getSortIcon('center', pastSortColumn, pastSortDirection)}</th>
+                                <th className="sortable-header" onClick={() => handlePastSort('group')}>الحلقة{getSortIcon('group', pastSortColumn, pastSortDirection)}</th>
+                                <th className="sortable-header" onClick={() => handlePastSort('participation')}>المشاركة{getSortIcon('participation', pastSortColumn, pastSortDirection)}</th>
+                                <th className="sortable-header" onClick={() => handlePastSort('status')}>حالة الاشتراك{getSortIcon('status', pastSortColumn, pastSortDirection)}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {sortStudents(
+                                students
+                                  .filter(s => !pastFilterCenterId || s.centerId === pastFilterCenterId)
+                                  .filter(s => {
+                                    const st = getStudentStatusForPeriod(s.uid, period.id);
+                                    return st === 'active' || st === 'exempt';
+                                  })
+                                  .filter(s => !pastSearchTerm.trim() || s.name?.toLowerCase().includes(pastSearchTerm.trim().toLowerCase())),
+                                pastSortColumn,
+                                pastSortDirection,
+                                period.id
+                              ).map(student => {
+                                  const status = getStudentStatusForPeriod(student.uid, period.id);
+                                  const statusInfo = SUBSCRIPTION_STATUS[status];
+                                  const participation = getStudentParticipationForPeriod(student.uid, period.id);
+                                  const participationInfo = PARTICIPATION_STATUS[participation];
+                                  return (
+                                    <tr key={student.uid}>
+                                      <td>{student.name}</td>
+                                      <td>{student.centerName}</td>
+                                      <td>{student.groupName}</td>
+                                      <td>
+                                        <span 
+                                          className={`status-badge-new participation-${participation}`}
+                                          style={{ backgroundColor: participationInfo.color + '20', color: participationInfo.color }}
+                                        >
+                                          {participationInfo.icon} {participationInfo.label}
+                                        </span>
+                                      </td>
+                                      <td>
+                                        <span 
+                                          className={`status-badge-new ${status}`}
+                                          style={{ backgroundColor: statusInfo.color + '20', color: statusInfo.color }}
+                                        >
+                                          {statusInfo.icon} {statusInfo.label}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              {students.filter(s => 
+                                (!pastFilterCenterId || s.centerId === pastFilterCenterId) && 
+                                ['active', 'exempt'].includes(getStudentStatusForPeriod(s.uid, period.id)) &&
+                                (!pastSearchTerm.trim() || s.name?.toLowerCase().includes(pastSearchTerm.trim().toLowerCase()))
+                              ).length === 0 && (
+                                <tr>
+                                  <td colSpan={5} className="empty-message">لا يوجد طلاب مسجلين في هذه الفترة</td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      <div className="past-period-actions">
+                        <button
+                          className="btn btn-sm btn-danger"
+                          onClick={() => deletePeriod(period.id)}
+                        >
+                          🗑️ حذف الفترة
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* ========== الفترة النشطة ========== */}
       {activePeriod ? (
         <div className="active-period-card">
@@ -1029,7 +1408,8 @@ const SubscriptionsNew = () => {
                     endDate: activePeriod.endDate.toDate().toISOString().split('T')[0],
                     centerId: activePeriod.centerId || '',
                     subscriptionFee: activePeriod.subscriptionFee || 5,
-                    currency: activePeriod.currency || 'دينار بحريني'
+                    currency: activePeriod.currency || 'دينار بحريني',
+                    paymentDeadline: activePeriod.paymentDeadline ? activePeriod.paymentDeadline.toDate().toISOString().split('T')[0] : ''
                   });
                   setShowPeriodModal(true);
                 }}
@@ -1064,11 +1444,50 @@ const SubscriptionsNew = () => {
                 </div>
               </div>
             )}
+            {activePeriod.paymentDeadline && (
+              <div className="period-info-item">
+                <span className="info-icon">⏰</span>
+                <div className="info-content">
+                  <span className="info-label">آخر يوم للدفع</span>
+                  <span className="info-value" style={{ color: new Date() > activePeriod.paymentDeadline.toDate() ? '#dc3545' : '#28a745' }}>
+                    {formatDate(activePeriod.paymentDeadline)}
+                    {new Date() > activePeriod.paymentDeadline.toDate() && ' (انتهى)'}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="period-stats-grid">
-            <div className="stat-card active">
+            <div className="stat-card participating">
               <div className="stat-icon">✅</div>
+              <div className="stat-content">
+                <span className="stat-number">
+                  {students.filter(s => (!filterCenterId || s.centerId === filterCenterId) && getStudentParticipation(s.uid) === 'participating').length}
+                </span>
+                <span className="stat-label">مشارك</span>
+              </div>
+            </div>
+            <div className="stat-card not-participating">
+              <div className="stat-icon">❌</div>
+              <div className="stat-content">
+                <span className="stat-number">
+                  {students.filter(s => (!filterCenterId || s.centerId === filterCenterId) && getStudentParticipation(s.uid) === 'not_participating').length}
+                </span>
+                <span className="stat-label">غير مشارك</span>
+              </div>
+            </div>
+            <div className="stat-card pending-participation">
+              <div className="stat-icon">⏳</div>
+              <div className="stat-content">
+                <span className="stat-number">
+                  {students.filter(s => (!filterCenterId || s.centerId === filterCenterId) && getStudentParticipation(s.uid) === 'pending').length}
+                </span>
+                <span className="stat-label">لم يحدد</span>
+              </div>
+            </div>
+            <div className="stat-card active">
+              <div className="stat-icon">💰</div>
               <div className="stat-content">
                 <span className="stat-number">
                   {students.filter(s => (!filterCenterId || s.centerId === filterCenterId) && getStudentPeriodStatus(s.uid) === 'active').length}
@@ -1171,6 +1590,20 @@ const SubscriptionsNew = () => {
             <option value="exempt">🎓 معفي</option>
           </select>
         </div>
+
+        <div className="filter-group">
+          <label>المشاركة</label>
+          <select
+            value={filterParticipation}
+            onChange={(e) => setFilterParticipation(e.target.value as any)}
+            className="filter-select"
+          >
+            <option value="all">الكل</option>
+            <option value="participating">✅ مشارك</option>
+            <option value="not_participating">❌ غير مشارك</option>
+            <option value="pending">⏳ لم يحدد</option>
+          </select>
+        </div>
       </div>
 
       {/* ========== شريط الإجراءات ========== */}
@@ -1233,25 +1666,28 @@ const SubscriptionsNew = () => {
                   onChange={() => selectedStudents.length === filteredStudents.length ? deselectAll() : selectAllFiltered()}
                 />
               </th>
-              <th>الاسم</th>
-              <th>الهاتف</th>
-              <th>المركز</th>
-              <th>الحلقة</th>
-              <th>حالة الاشتراك</th>
+              <th className="sortable-header" onClick={() => handleSort('name')}>الاسم{getSortIcon('name', sortColumn, sortDirection)}</th>
+              <th className="sortable-header" onClick={() => handleSort('phone')}>الهاتف{getSortIcon('phone', sortColumn, sortDirection)}</th>
+              <th className="sortable-header" onClick={() => handleSort('center')}>المركز{getSortIcon('center', sortColumn, sortDirection)}</th>
+              <th className="sortable-header" onClick={() => handleSort('group')}>الحلقة{getSortIcon('group', sortColumn, sortDirection)}</th>
+              <th className="sortable-header" onClick={() => handleSort('participation')}>المشاركة{getSortIcon('participation', sortColumn, sortDirection)}</th>
+              <th className="sortable-header" onClick={() => handleSort('status')}>حالة الاشتراك{getSortIcon('status', sortColumn, sortDirection)}</th>
               <th>الإجراءات</th>
             </tr>
           </thead>
           <tbody>
             {filteredStudents.length === 0 ? (
               <tr>
-                <td colSpan={7} className="empty-message">
+                <td colSpan={8} className="empty-message">
                   لا يوجد طلاب مطابقين للفلاتر المحددة
                 </td>
               </tr>
             ) : (
-              filteredStudents.map(student => {
+              sortStudents(filteredStudents, sortColumn, sortDirection).map(student => {
                 const status = getStudentPeriodStatus(student.uid);
                 const statusInfo = SUBSCRIPTION_STATUS[status];
+                const participation = getStudentParticipation(student.uid);
+                const participationInfo = PARTICIPATION_STATUS[participation];
                 const payment = getStudentPayment(student.uid);
                 
                 return (
@@ -1267,6 +1703,14 @@ const SubscriptionsNew = () => {
                     <td className="student-phone">{student.phone || student.parentPhone || '-'}</td>
                     <td>{student.centerName}</td>
                     <td>{student.groupName}</td>
+                    <td>
+                      <span 
+                        className={`status-badge-new participation-${participation}`}
+                        style={{ backgroundColor: participationInfo.color + '20', color: participationInfo.color }}
+                      >
+                        {participationInfo.icon} {participationInfo.label}
+                      </span>
+                    </td>
                     <td>
                       <span 
                         className={`status-badge-new ${status}`}
@@ -1450,6 +1894,17 @@ const SubscriptionsNew = () => {
                   ))}
                 </select>
                 <small className="form-hint">اتركه فارغاً لتطبيق الفترة على جميع المراكز</small>
+              </div>
+
+              <div className="form-group">
+                <label>📅 آخر يوم للدفع</label>
+                <input
+                  type="date"
+                  value={newPeriod.paymentDeadline}
+                  onChange={(e) => setNewPeriod(prev => ({ ...prev, paymentDeadline: e.target.value }))}
+                  className="form-input"
+                />
+                <small className="form-hint">بعد هذا التاريخ، سيتم تعطيل حسابات الطلاب الذين لم يدفعوا</small>
               </div>
             </div>
 

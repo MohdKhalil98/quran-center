@@ -1325,6 +1325,18 @@
   background: rgba(23, 162, 184, 0.3);
 }
 
+.stat-card.participating .stat-icon {
+  background: rgba(40, 167, 69, 0.3);
+}
+
+.stat-card.not-participating .stat-icon {
+  background: rgba(220, 53, 69, 0.3);
+}
+
+.stat-card.pending-participation .stat-icon {
+  background: rgba(255, 193, 7, 0.3);
+}
+
 .stat-card .stat-content {
   display: flex;
   flex-direction: column;
@@ -2018,5 +2030,372 @@
 
   .stat-item {
     min-width: unset;
+  }
+}
+
+/* ======================== PAST PERIODS SECTION ======================== */
+
+.past-periods-section {
+  margin-bottom: 25px;
+}
+
+.past-periods-title {
+  font-size: 1.1rem;
+  color: #555;
+  margin: 0 0 15px 0;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.past-periods-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.past-period-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 14px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.past-period-card:hover {
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.past-period-card.expanded {
+  border-color: #667eea;
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.15);
+}
+
+.past-period-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  user-select: none;
+}
+
+.past-period-header:hover {
+  background: #f8f9ff;
+}
+
+.past-period-title-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.past-period-toggle {
+  font-size: 0.8rem;
+  color: #667eea;
+  transition: transform 0.3s ease;
+  width: 20px;
+  text-align: center;
+}
+
+.past-period-title-section h4 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #333;
+  font-weight: 600;
+}
+
+.past-period-status {
+  padding: 3px 12px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.past-period-status.ended {
+  background: #fce4ec;
+  color: #c62828;
+}
+
+.past-period-status.active {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.past-period-status.upcoming {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+.past-period-summary {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+}
+
+.past-period-stat {
+  font-size: 0.85rem;
+  color: #666;
+  font-weight: 500;
+}
+
+/* Past Period Expanded Details */
+.past-period-details {
+  border-top: 1px solid #eee;
+  padding: 20px;
+  background: #fafbff;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; max-height: 0; }
+  to { opacity: 1; max-height: 2000px; }
+}
+
+.past-period-info-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-bottom: 20px;
+  background: #fff;
+  padding: 15px 18px;
+  border-radius: 12px;
+  border: 1px solid #eee;
+}
+
+.past-period-info-grid .period-info-item {
+  flex: 1;
+  min-width: 180px;
+}
+
+.past-period-info-grid .info-label {
+  color: #888;
+  font-size: 0.78rem;
+}
+
+.past-period-info-grid .info-value {
+  color: #333;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.past-period-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.past-stat-card {
+  background: #fff;
+  padding: 14px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #eee;
+}
+
+.past-stat-card .past-stat-icon {
+  font-size: 1.5rem;
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+}
+
+.past-stat-card.active .past-stat-icon {
+  background: rgba(40, 167, 69, 0.1);
+}
+
+.past-stat-card.inactive .past-stat-icon {
+  background: rgba(255, 193, 7, 0.1);
+}
+
+.past-stat-card.exempt .past-stat-icon {
+  background: rgba(23, 162, 184, 0.1);
+}
+
+.past-stat-card .past-stat-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.past-stat-card .past-stat-number {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #333;
+  line-height: 1;
+}
+
+.past-stat-card .past-stat-label {
+  font-size: 0.78rem;
+  color: #888;
+  margin-top: 3px;
+}
+
+/* Past Period Students Table */
+.past-period-students {
+  margin-bottom: 15px;
+}
+
+.past-period-students-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.past-period-students-header h5 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #555;
+  font-weight: 600;
+}
+
+.past-period-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.past-period-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.past-search-input {
+  padding: 6px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  background: #fff;
+  color: #333;
+  min-width: 180px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.past-search-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.15);
+}
+
+.past-search-input::placeholder {
+  color: #aaa;
+}
+
+.past-filter-select {
+  padding: 6px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  background: #fff;
+  color: #333;
+  cursor: pointer;
+  min-width: 150px;
+}
+
+.past-filter-select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.15);
+}
+
+.past-period-table-container {
+  max-height: 300px;
+  overflow-y: auto;
+  border-radius: 10px;
+  border: 1px solid #eee;
+}
+
+.past-period-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.past-period-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.past-period-table th {
+  background: #f0f2f5;
+  padding: 10px 14px;
+  text-align: right;
+  font-weight: 600;
+  color: #555;
+  border-bottom: 1px solid #ddd;
+}
+
+/* Sortable Headers */
+.sortable-header {
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s ease, color 0.2s ease;
+  white-space: nowrap;
+}
+
+.sortable-header:hover {
+  background: #e4e7f0 !important;
+  color: #667eea !important;
+}
+
+.past-period-table td {
+  padding: 9px 14px;
+  border-bottom: 1px solid #f0f0f0;
+  color: #444;
+}
+
+.past-period-table tr:hover {
+  background: #f8f9ff;
+}
+
+.past-period-table tr:last-child td {
+  border-bottom: none;
+}
+
+.past-period-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #eee;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .past-period-header {
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .past-period-summary {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .past-period-info-grid {
+    flex-direction: column;
+  }
+
+  .past-period-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .past-period-table-container {
+    max-height: 250px;
   }
 }

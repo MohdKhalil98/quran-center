@@ -580,6 +580,62 @@
   text-decoration: underline;
 }
 
+.login-card__forgot {
+  margin-top: 1rem;
+  margin-bottom: 0;
+  text-align: center;
+}
+
+.forgot-password-link {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-decoration: none;
+  padding: 0;
+  font-family: inherit;
+}
+
+.forgot-password-link:hover {
+  text-decoration: underline;
+  color: #15785a;
+}
+
+.reset-password-section {
+  margin-top: 1rem;
+  padding: 1.25rem;
+  background-color: #f0f7f4;
+  border-radius: 1rem;
+  border: 1px solid #d6e4de;
+  text-align: center;
+}
+
+.reset-password-section h3 {
+  font-size: 1.1rem;
+  color: var(--color-text-strong);
+  margin-bottom: 0.5rem;
+}
+
+.reset-password-desc {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+  line-height: 1.5;
+}
+
+.form-success {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  text-align: right;
+  line-height: 1.6;
+}
+
 .register-card {
   width: min(520px, 100%);
 }

@@ -154,6 +154,11 @@ const Login = () => {
             {submitting ? 'جاري الدخول...' : 'دخول'}
           </button>
         </form>
+
+        <p className="login-card__forgot">
+          <Link to="/reset-password" className="forgot-password-link">نسيت كلمة المرور؟</Link>
+        </p>
+
         <p className="login-card__hint">
           طالب جديد؟ <Link to="/register">سجّل في قائمة الانتظار</Link>
         </p>

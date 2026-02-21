@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, getDocs, query, where, doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { Navigate, useNavigate } from 'react-router-dom';
@@ -87,25 +87,10 @@ const MyProgress = () => {
   });
   const [currentRequiredChallenge, setCurrentRequiredChallenge] = useState<string>('');
 
-  // ========== المشاركة في الفترة الدراسية ==========
-  const [activePeriod, setActivePeriod] = useState<{
-    id: string;
-    name: string;
-    startDate: Timestamp;
-    endDate: Timestamp;
-    subscriptionFee: number;
-    currency: string;
-    paymentDeadline?: Timestamp;
-  } | null>(null);
-  const [participationStatus, setParticipationStatus] = useState<'participating' | 'not_participating' | 'pending'>('pending');
-  const [participationStatusId, setParticipationStatusId] = useState<string>('');
-  const [updatingParticipation, setUpdatingParticipation] = useState(false);
-
   useEffect(() => {
     if (userProfile?.uid) {
       fetchCurriculum();
       fetchMyProgress();
-      fetchActivePeriod();
       // جلب اسم المركز
       if (userProfile?.centerId) {
         getDoc(doc(db, 'centers', userProfile.centerId)).then(centerDoc => {
@@ -365,84 +350,6 @@ const MyProgress = () => {
     }
   };
 
-  // جلب الفترة الدراسية النشطة وحالة المشاركة
-  const fetchActivePeriod = async () => {
-    if (!userProfile?.uid) return;
-    try {
-      // جلب الفترات النشطة
-      const periodsQuery = query(
-        collection(db, 'studyPeriods'),
-        where('isActive', '==', true)
-      );
-      const periodsSnap = await getDocs(periodsQuery);
-      
-      if (periodsSnap.empty) {
-        setActivePeriod(null);
-        return;
-      }
-
-      // البحث عن فترة المركز أو الفترة العامة
-      let matchedPeriod: any = null;
-      periodsSnap.forEach(docSnap => {
-        const data = docSnap.data();
-        const period = { id: docSnap.id, ...data };
-        // الفترة الخاصة بالمركز أولاً
-        if (data.centerId && data.centerId === userProfile.centerId) {
-          matchedPeriod = period;
-        }
-        // الفترة العامة إذا لم تكن هناك فترة خاصة
-        if (!matchedPeriod && !data.centerId) {
-          matchedPeriod = period;
-        }
-      });
-
-      if (matchedPeriod) {
-        setActivePeriod({
-          id: matchedPeriod.id,
-          name: matchedPeriod.name,
-          startDate: matchedPeriod.startDate,
-          endDate: matchedPeriod.endDate,
-          subscriptionFee: matchedPeriod.subscriptionFee || 0,
-          currency: matchedPeriod.currency || 'دينار بحريني',
-          paymentDeadline: matchedPeriod.paymentDeadline
-        });
-
-        // جلب حالة مشاركة الطالب
-        const statusQuery = query(
-          collection(db, 'studentPeriodStatuses'),
-          where('studentId', '==', userProfile.uid),
-          where('periodId', '==', matchedPeriod.id)
-        );
-        const statusSnap = await getDocs(statusQuery);
-        if (!statusSnap.empty) {
-          const statusDoc = statusSnap.docs[0];
-          const statusData = statusDoc.data();
-          setParticipationStatus(statusData.participation || 'pending');
-          setParticipationStatusId(statusDoc.id);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching active period:', error);
-    }
-  };
-
-  // تحديث حالة المشاركة
-  const updateParticipation = async (newStatus: 'participating' | 'not_participating') => {
-    if (!participationStatusId) return;
-    setUpdatingParticipation(true);
-    try {
-      await updateDoc(doc(db, 'studentPeriodStatuses', participationStatusId), {
-        participation: newStatus,
-        updatedAt: Timestamp.now()
-      });
-      setParticipationStatus(newStatus);
-    } catch (error) {
-      console.error('Error updating participation:', error);
-      alert('حدث خطأ أثناء تحديث حالة المشاركة');
-    }
-    setUpdatingParticipation(false);
-  };
-
   if (!isStudent && !isParent) {
     return <Navigate to="/dashboard" replace />;
   }
@@ -503,61 +410,6 @@ const MyProgress = () => {
         <h1>تقدمي في الحفظ</h1>
         <p>متابعة تحصيلي وإنجازاتي في حفظ القرآن الكريم</p>
       </header>
-
-      {/* بطاقة المشاركة في الفترة الدراسية */}
-      {activePeriod && (
-        <div className="participation-card">
-          <div className="participation-card-header">
-            <span className="participation-icon">📅</span>
-            <div>
-              <h3>{activePeriod.name}</h3>
-              <p className="participation-period-info">
-                رسوم الاشتراك: {activePeriod.subscriptionFee} {activePeriod.currency}
-                {activePeriod.paymentDeadline && (
-                  <> | آخر يوم للدفع: {activePeriod.paymentDeadline.toDate().toLocaleDateString('ar-BH')}</>
-                )}
-              </p>
-            </div>
-          </div>
-
-          <div className="participation-status-section">
-            {participationStatus === 'pending' ? (
-              <>
-                <p className="participation-question">هل ترغب في المشاركة في هذه الفترة الدراسية؟</p>
-                <div className="participation-buttons">
-                  <button
-                    className="btn-participate yes"
-                    onClick={() => updateParticipation('participating')}
-                    disabled={updatingParticipation}
-                  >
-                    {updatingParticipation ? '⏳' : '✅'} نعم، أريد المشاركة
-                  </button>
-                  <button
-                    className="btn-participate no"
-                    onClick={() => updateParticipation('not_participating')}
-                    disabled={updatingParticipation}
-                  >
-                    {updatingParticipation ? '⏳' : '❌'} لا، لن أشارك
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div className="participation-current-status">
-                <span className={`participation-badge ${participationStatus}`}>
-                  {participationStatus === 'participating' ? '✅ أنت مشارك في هذه الفترة' : '❌ أنت غير مشارك في هذه الفترة'}
-                </span>
-                <button
-                  className="btn-change-participation"
-                  onClick={() => updateParticipation(participationStatus === 'participating' ? 'not_participating' : 'participating')}
-                  disabled={updatingParticipation}
-                >
-                  {updatingParticipation ? '⏳ جاري التحديث...' : '🔄 تغيير'}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* معلومات الحلقة */}
       {groupInfo && (

@@ -436,6 +436,69 @@ const DevTools = () => {
     }
   };
 
+  // ========== مسح تحصيل الطالب ==========
+  const [resetCenterFilter, setResetCenterFilter] = useState('');
+  const [resetGroupFilter, setResetGroupFilter] = useState('');
+  const [resettingStudentId, setResettingStudentId] = useState<string | null>(null);
+  const [resetResult, setResetResult] = useState<string>('');
+
+  const resetFilteredGroups = groups.filter(g => !resetCenterFilter || g.centerId === resetCenterFilter);
+
+  const resetFilteredStudents = allStudents.filter(s => {
+    if (resetCenterFilter && s.centerId !== resetCenterFilter) return false;
+    if (resetGroupFilter && s.groupId !== resetGroupFilter) return false;
+    return true;
+  });
+
+  const handleResetStudent = async (studentId: string) => {
+    const student = allStudents.find(s => s.id === studentId);
+    if (!student) return;
+
+    if (!window.confirm(`هل أنت متأكد من مسح تحصيل الطالب "${student.name}"؟\n\nسيتم:\n- حذف جميع سجلات التحصيل\n- تصفير النقاط\n- تغيير الحالة إلى "في انتظار موافقة المعلم"`)) {
+      return;
+    }
+
+    setResettingStudentId(studentId);
+    setResetResult('');
+    try {
+      // 1. حذف جميع سجلات التحصيل
+      const achievementsQuery = query(
+        collection(db, 'student_achievements'),
+        where('studentId', '==', studentId)
+      );
+      const achievementsSnap = await getDocs(achievementsQuery);
+      let deletedCount = 0;
+      for (const d of achievementsSnap.docs) {
+        await deleteDoc(doc(db, 'student_achievements', d.id));
+        deletedCount++;
+      }
+
+      // 2. تغيير حالة الطالب إلى في انتظار موافقة المعلم + تصفير النقاط + إزالة المستوى والمرحلة
+      await updateDoc(doc(db, 'users', studentId), {
+        status: 'waiting_teacher_approval',
+        points: 0,
+        levelId: '',
+        stageId: '',
+        levelName: '',
+        stageName: ''
+      });
+
+      setResetResult(`✅ تم مسح تحصيل "${student.name}" — حذف ${deletedCount} سجل`);
+
+      // تحديث قائمة الطلاب محلياً
+      setAllStudents(prev => prev.map(s =>
+        s.id === studentId
+          ? { ...s, status: 'waiting_teacher_approval', points: 0, levelId: '', stageId: '', levelName: '', stageName: '' }
+          : s
+      ));
+    } catch (error) {
+      console.error('Error resetting student:', error);
+      setResetResult('❌ حدث خطأ أثناء مسح تحصيل الطالب');
+    } finally {
+      setResettingStudentId(null);
+    }
+  };
+
   return (
     <section className="page">
       {/* جدول المراكز */}
@@ -497,6 +560,90 @@ const DevTools = () => {
         <h1>أدوات المطور</h1>
         <p>أدوات مساعدة لإدارة البيانات والتطوير (زرع، تنظيف، إعادة تحميل).</p>
       </header>
+
+      {/* مسح تحصيل طالب */}
+      <div className="dev-card" style={{marginBottom: 24}}>
+        <div className="dev-card-header">
+          <h3>🧹 مسح تحصيل طالب</h3>
+          <p>حذف جميع سجلات التحصيل وتغيير الحالة إلى "في انتظار موافقة المعلم"</p>
+        </div>
+        <div className="dev-card-body" style={{flexDirection:'column', alignItems:'stretch'}}>
+          <div style={{display:'flex', gap:12, marginBottom:12, flexWrap:'wrap'}}>
+            <div style={{flex:1, minWidth:180}}>
+              <label style={{display:'block', marginBottom:4, fontWeight:'bold', fontSize:'0.9rem'}}>🏫 المركز:</label>
+              <select
+                value={resetCenterFilter}
+                onChange={(e) => { setResetCenterFilter(e.target.value); setResetGroupFilter(''); }}
+                style={{width:'100%', padding:'8px', borderRadius:'6px', border:'1px solid #ddd', fontSize:'0.95rem'}}
+              >
+                <option value="">-- كل المراكز --</option>
+                {centers.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{flex:1, minWidth:180}}>
+              <label style={{display:'block', marginBottom:4, fontWeight:'bold', fontSize:'0.9rem'}}>📖 الحلقة:</label>
+              <select
+                value={resetGroupFilter}
+                onChange={(e) => setResetGroupFilter(e.target.value)}
+                style={{width:'100%', padding:'8px', borderRadius:'6px', border:'1px solid #ddd', fontSize:'0.95rem'}}
+              >
+                <option value="">-- كل الحلقات --</option>
+                {resetFilteredGroups.map(g => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {resetResult && (
+            <div style={{marginBottom:10, padding:'10px', borderRadius:'8px', whiteSpace:'pre-line', background: resetResult.startsWith('✅') ? '#e8f5e9' : '#ffebee', color: resetResult.startsWith('✅') ? '#2e7d32' : '#c62828', fontSize:'0.9rem'}}>
+              {resetResult}
+            </div>
+          )}
+
+          {resetFilteredStudents.length > 0 ? (
+            <table style={{width:'100%', borderCollapse:'collapse'}}>
+              <thead>
+                <tr style={{background:'#f5f5f5'}}>
+                  <th style={{padding:'8px', border:'1px solid #ddd', textAlign:'right'}}>#</th>
+                  <th style={{padding:'8px', border:'1px solid #ddd', textAlign:'right'}}>الطالب</th>
+                  <th style={{padding:'8px', border:'1px solid #ddd', textAlign:'right'}}>الحالة</th>
+                  <th style={{padding:'8px', border:'1px solid #ddd', textAlign:'right'}}>النقاط</th>
+                  <th style={{padding:'8px', border:'1px solid #ddd', textAlign:'center'}}>إجراء</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resetFilteredStudents.map((s, idx) => (
+                  <tr key={s.id} style={{background: idx % 2 === 0 ? '#fff' : '#fafafa'}}>
+                    <td style={{padding:'8px', border:'1px solid #ddd'}}>{idx + 1}</td>
+                    <td style={{padding:'8px', border:'1px solid #ddd', fontWeight:'bold'}}>{s.name || 'بدون اسم'}</td>
+                    <td style={{padding:'8px', border:'1px solid #ddd'}}>
+                      {s.status === 'approved' ? '✅ معتمد' : s.status === 'waiting_teacher_approval' ? '⏳ في انتظار المعلم' : s.status || '-'}
+                    </td>
+                    <td style={{padding:'8px', border:'1px solid #ddd'}}>{s.points || 0}</td>
+                    <td style={{padding:'8px', border:'1px solid #ddd', textAlign:'center'}}>
+                      <button
+                        className="btn btn-danger"
+                        onClick={() => handleResetStudent(s.id)}
+                        disabled={resettingStudentId === s.id}
+                        style={{fontSize:'0.85rem', padding:'4px 12px'}}
+                      >
+                        {resettingStudentId === s.id ? '⏳ جاري...' : '🗑️ مسح وإعادة تعيين'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div style={{textAlign:'center', color:'#888', padding:20}}>
+              {resetCenterFilter || resetGroupFilter ? 'لا يوجد طلاب بهذا الفلتر' : 'اختر مركز أو حلقة لعرض الطلاب'}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Import Students Card */}
       <div className="dev-card" style={{marginBottom: 24}}>

@@ -243,27 +243,34 @@ const SubscriptionsNew = () => {
       
       if (now <= deadline) return; // المهلة لم تنتهِ بعد
       
-      // الطلاب الذين لم يدفعوا ولم يتم تعطيلهم بعد بسبب انتهاء المهلة
-      const unpaidStatuses = studentPeriodStatuses.filter(s => 
+      // الطلاب المشاركين الذين لم يدفعوا بعد انتهاء المهلة
+      // (مشارك وحالة الاشتراك نشطة لكن بدون دفعة مؤكدة)
+      const participatingUnpaid = studentPeriodStatuses.filter(s => 
         s.periodId === activePeriod.id && 
-        s.status === 'inactive' && 
-        s.participation === 'participating'
+        s.participation === 'participating' &&
+        s.status === 'active' &&
+        !s.paymentId // لم يتم الدفع
       );
 
-      // لا نحتاج لتعطيل إضافي - الطلاب غير النشطين أصلاً
-      // لكن نضع المشاركين الذين لم يدفعوا كـ "غير مشاركين" تلقائياً
-      for (const status of unpaidStatuses) {
+      // تغيير حالة الاشتراك إلى غير نشط للمشاركين الذين لم يدفعوا
+      let changed = false;
+      for (const status of participatingUnpaid) {
         try {
           await updateDoc(doc(db, 'studentPeriodStatuses', status.id), {
-            participation: 'not_participating',
+            status: 'inactive',
             updatedAt: Timestamp.now()
           });
+          // تحديث حالة الاشتراك في وثيقة المستخدم
+          await updateDoc(doc(db, 'users', status.studentId), {
+            subscriptionStatus: 'inactive'
+          });
+          changed = true;
         } catch (error) {
           console.error('Error auto-deactivating student:', error);
         }
       }
 
-      if (unpaidStatuses.length > 0) {
+      if (changed) {
         fetchData(); // إعادة تحميل البيانات
       }
     };
@@ -323,6 +330,25 @@ const SubscriptionsNew = () => {
         id: doc.id,
         ...doc.data()
       })) as StudentPeriodStatus[];
+      
+      // إصلاح تلقائي: الطلاب غير المشاركين يجب أن تكون حالتهم غير نشطة
+      for (const status of statusesList) {
+        if (status.participation === 'not_participating' && status.status === 'active') {
+          try {
+            await updateDoc(doc(db, 'studentPeriodStatuses', status.id), {
+              status: 'inactive',
+              updatedAt: Timestamp.now()
+            });
+            await updateDoc(doc(db, 'users', status.studentId), {
+              subscriptionStatus: 'inactive'
+            });
+            status.status = 'inactive';
+          } catch (error) {
+            console.error('Error fixing inconsistent status:', error);
+          }
+        }
+      }
+      
       setStudentPeriodStatuses(statusesList);
 
       // جلب الطلاب
@@ -432,6 +458,43 @@ const SubscriptionsNew = () => {
     return status?.participation || 'pending';
   };
 
+  // تبديل حالة المشاركة للطالب (من قبل المشرف)
+  const toggleParticipation = async (studentId: string) => {
+    if (!activePeriod) return;
+    
+    const statusRecord = studentPeriodStatuses.find(
+      s => s.studentId === studentId && s.periodId === activePeriod.id
+    );
+    if (!statusRecord) return;
+    
+    setProcessingStudents(prev => [...prev, studentId]);
+    
+    const currentParticipation = statusRecord.participation || 'pending';
+    // تبديل: pending/not_participating → participating, participating → not_participating
+    const newParticipation = currentParticipation === 'participating' ? 'not_participating' : 'participating';
+    // حالة الاشتراك تبقى غير نشطة إلى حين دفع الرسوم - لا تتغير بتغيير المشاركة
+    // فقط الطالب الذي يدفع تصبح حالته نشطة
+    
+    try {
+      await updateDoc(doc(db, 'studentPeriodStatuses', statusRecord.id), {
+        participation: newParticipation,
+        updatedAt: Timestamp.now()
+      });
+      
+      // تحديث الحالة المحلية
+      setStudentPeriodStatuses(prev => prev.map(s => 
+        s.id === statusRecord.id 
+          ? { ...s, participation: newParticipation }
+          : s
+      ));
+    } catch (error) {
+      console.error('Error toggling participation:', error);
+      alert('حدث خطأ أثناء تحديث حالة المشاركة');
+    }
+    
+    setProcessingStudents(prev => prev.filter(id => id !== studentId));
+  };
+
   // الحصول على حالة المشاركة للطالب في فترة محددة
   const getStudentParticipationForPeriod = (studentId: string, periodId: string): 'participating' | 'not_participating' | 'pending' => {
     const status = studentPeriodStatuses.find(
@@ -524,8 +587,12 @@ const SubscriptionsNew = () => {
             studentId: student.uid,
             periodId: docRef.id,
             status: 'inactive',
-            participation: 'pending',
+            participation: 'not_participating',
             updatedAt: Timestamp.now()
+          });
+          // تحديث حالة الاشتراك في وثيقة المستخدم
+          await updateDoc(doc(db, 'users', student.uid), {
+            subscriptionStatus: 'inactive'
           });
         }
         
@@ -872,7 +939,8 @@ const SubscriptionsNew = () => {
           const cleanPhone = phone.replace(/[^0-9]/g, '');
           const fullPhone = cleanPhone.startsWith('973') ? cleanPhone : `973${cleanPhone}`;
           const whatsappUrl = `https://wa.me/${fullPhone}?text=${encodeURIComponent(confirmMessage)}`;
-          window.open(whatsappUrl, '_blank');
+          // استخدام location.href بدلاً من window.open لأن المتصفحات على الهاتف تحظر النوافذ المنبثقة بعد العمليات غير المتزامنة
+          window.location.href = whatsappUrl;
         }
       }
 
@@ -1014,7 +1082,7 @@ const SubscriptionsNew = () => {
         .replace(/\{الاسم\}/g, student.name || '');
       
       const encodedMessage = encodeURIComponent(personalizedMessage);
-      window.open(`https://wa.me/${cleanPhone}?text=${encodedMessage}`, '_blank');
+      window.location.href = `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
     }
   };
 
@@ -1477,15 +1545,6 @@ const SubscriptionsNew = () => {
                 <span className="stat-label">غير مشارك</span>
               </div>
             </div>
-            <div className="stat-card pending-participation">
-              <div className="stat-icon">⏳</div>
-              <div className="stat-content">
-                <span className="stat-number">
-                  {students.filter(s => (!filterCenterId || s.centerId === filterCenterId) && getStudentParticipation(s.uid) === 'pending').length}
-                </span>
-                <span className="stat-label">لم يحدد</span>
-              </div>
-            </div>
             <div className="stat-card active">
               <div className="stat-icon">💰</div>
               <div className="stat-content">
@@ -1601,7 +1660,6 @@ const SubscriptionsNew = () => {
             <option value="all">الكل</option>
             <option value="participating">✅ مشارك</option>
             <option value="not_participating">❌ غير مشارك</option>
-            <option value="pending">⏳ لم يحدد</option>
           </select>
         </div>
       </div>
@@ -1704,12 +1762,25 @@ const SubscriptionsNew = () => {
                     <td>{student.centerName}</td>
                     <td>{student.groupName}</td>
                     <td>
-                      <span 
+                      <button 
                         className={`status-badge-new participation-${participation}`}
-                        style={{ backgroundColor: participationInfo.color + '20', color: participationInfo.color }}
+                        style={{ 
+                          backgroundColor: participationInfo.color + '20', 
+                          color: participationInfo.color,
+                          border: `1px solid ${participationInfo.color}40`,
+                          cursor: processingStudents.includes(student.uid) ? 'wait' : 'pointer',
+                          padding: '4px 12px',
+                          borderRadius: '20px',
+                          fontSize: '0.85rem',
+                          fontWeight: '500',
+                          opacity: processingStudents.includes(student.uid) ? 0.6 : 1
+                        }}
+                        onClick={() => toggleParticipation(student.uid)}
+                        disabled={processingStudents.includes(student.uid)}
+                        title={participation === 'participating' ? 'اضغط لإلغاء المشاركة' : 'اضغط لتفعيل المشاركة'}
                       >
-                        {participationInfo.icon} {participationInfo.label}
-                      </span>
+                        {processingStudents.includes(student.uid) ? '⏳' : participationInfo.icon} {participationInfo.label}
+                      </button>
                     </td>
                     <td>
                       <span 

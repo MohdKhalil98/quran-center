@@ -10,6 +10,8 @@ interface Student {
   name: string;
   groupId?: string;
   subscriptionStatus?: 'active' | 'inactive' | 'exempt'; // حالة الاشتراك
+  participation?: 'participating' | 'not_participating' | 'pending'; // حالة المشاركة
+  expiredSubscription?: boolean; // هل انتهت مهلة الدفع بدون تجديد
 }
 
 interface Center {
@@ -151,13 +153,58 @@ const Attendance = () => {
           where('groupId', '==', selectedGroupId)
         );
         const studentsSnapshot = await getDocs(studentsQuery);
-        const allStudents = studentsSnapshot.docs
+        let allStudents = studentsSnapshot.docs
           .map((doc) => ({
             id: doc.id,
             name: doc.data().name,
             groupId: doc.data().groupId,
             subscriptionStatus: doc.data().subscriptionStatus || 'inactive'
           } as Student));
+        
+        // جلب الفترة النشطة وحالات المشاركة لتصفية الطلاب غير المشاركين
+        try {
+          const periodsQuery = query(
+            collection(db, 'studyPeriods'),
+            where('isActive', '==', true)
+          );
+          const periodsSnap = await getDocs(periodsQuery);
+          
+          if (!periodsSnap.empty) {
+            const activePeriodDoc = periodsSnap.docs[0];
+            const activePeriodId = activePeriodDoc.id;
+            const activePeriodData = activePeriodDoc.data();
+            
+            // التحقق من انتهاء مهلة الدفع
+            let deadlinePassed = false;
+            if (activePeriodData.paymentDeadline) {
+              const deadline = activePeriodData.paymentDeadline.toDate();
+              deadlinePassed = new Date() > deadline;
+            }
+            
+            // جلب حالات المشاركة للطلاب
+            const statusesSnap = await getDocs(collection(db, 'studentPeriodStatuses'));
+            const statuses = statusesSnap.docs
+              .filter(d => d.data().periodId === activePeriodId)
+              .map(d => ({ studentId: d.data().studentId, participation: d.data().participation, status: d.data().status, paymentId: d.data().paymentId }));
+            
+            // تحديث حالة المشاركة لكل طالب وتصفية غير المشاركين
+            allStudents = allStudents
+              .map(student => {
+                const statusRecord = statuses.find(s => s.studentId === student.id);
+                const isParticipating = (statusRecord?.participation || 'not_participating') === 'participating';
+                const isPaid = statusRecord?.status === 'active' || statusRecord?.status === 'exempt';
+                return {
+                  ...student,
+                  participation: statusRecord?.participation || 'not_participating',
+                  subscriptionStatus: statusRecord?.status || student.subscriptionStatus,
+                  expiredSubscription: isParticipating && !isPaid && deadlinePassed
+                };
+              })
+              .filter(student => student.participation === 'participating');
+          }
+        } catch (error) {
+          console.error('Error fetching participation statuses:', error);
+        }
         
         // Sort by name
         allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
@@ -469,20 +516,20 @@ const Attendance = () => {
               {students.map((student) => {
                 const record = attendance.get(student.id);
                 const status = record?.status || 'حاضر';
-                const isInactive = student.subscriptionStatus !== 'active' && student.subscriptionStatus !== 'exempt';
+                const isExpired = student.expiredSubscription === true;
                 return (
-                  <div key={student.id} className={`attendance-row ${isInactive ? 'inactive-student' : ''}`}>
+                  <div key={student.id} className={`attendance-row ${isExpired ? 'inactive-student' : ''}`}>
                     <div className="student-name">
                       {student.name}
-                      {isInactive && <span className="inactive-badge">غير نشط</span>}
+                      {isExpired && <span className="inactive-badge" style={{ backgroundColor: '#dc354520', color: '#dc3545', padding: '2px 8px', borderRadius: '10px', fontSize: '0.75rem', marginRight: '8px' }}>لم يجدد الاشتراك</span>}
                     </div>
                     <button
                       type="button"
-                      className={`status-btn ${isInactive ? 'status-disabled' : getStatusColor(status)}`}
-                      onClick={() => !isInactive && handleStatusChange(student.id)}
-                      disabled={isInactive}
+                      className={`status-btn ${isExpired ? 'status-disabled' : getStatusColor(status)}`}
+                      onClick={() => !isExpired && handleStatusChange(student.id)}
+                      disabled={isExpired}
                     >
-                      {isInactive ? '-' : status}
+                      {isExpired ? '-' : status}
                     </button>
                   </div>
                 );

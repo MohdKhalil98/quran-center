@@ -307,7 +307,7 @@ const StudentAchievements = () => {
           where('groupId', '==', selectedGroupId)
         );
         const studentsSnapshot = await getDocs(studentsQuery);
-        const studentsList = studentsSnapshot.docs
+        let studentsList = studentsSnapshot.docs
           .map((doc) => {
             const data = doc.data();
             return {
@@ -317,6 +317,50 @@ const StudentAchievements = () => {
               ...data
             };
           });
+        
+        // تصفية الطلاب غير المشاركين (إظهار المشاركين فقط للمعلم)
+        try {
+          const periodsQuery = query(
+            collection(db, 'studyPeriods'),
+            where('isActive', '==', true)
+          );
+          const periodsSnap = await getDocs(periodsQuery);
+          
+          if (!periodsSnap.empty) {
+            const activePeriodDoc = periodsSnap.docs[0];
+            const activePeriodId = activePeriodDoc.id;
+            const activePeriodData = activePeriodDoc.data();
+            
+            // التحقق من انتهاء مهلة الدفع
+            let deadlinePassed = false;
+            if (activePeriodData.paymentDeadline) {
+              const deadline = activePeriodData.paymentDeadline.toDate();
+              deadlinePassed = new Date() > deadline;
+            }
+            
+            const statusesSnap = await getDocs(collection(db, 'studentPeriodStatuses'));
+            const statuses = statusesSnap.docs
+              .filter(d => d.data().periodId === activePeriodId)
+              .map(d => ({ studentId: d.data().studentId, participation: d.data().participation, status: d.data().status, paymentId: d.data().paymentId }));
+            
+            studentsList = studentsList
+              .map(student => {
+                const statusRecord = statuses.find(s => s.studentId === student.id);
+                const isParticipating = (statusRecord?.participation || 'not_participating') === 'participating';
+                const isPaid = statusRecord?.status === 'active' || statusRecord?.status === 'exempt';
+                return {
+                  ...student,
+                  subscriptionStatus: isParticipating && !isPaid && deadlinePassed ? 'expired' : (statusRecord?.status || student.subscriptionStatus)
+                };
+              })
+              .filter(student => {
+                const statusRecord = statuses.find(s => s.studentId === student.id);
+                return (statusRecord?.participation || 'not_participating') === 'participating';
+              });
+          }
+        } catch (error) {
+          console.error('Error fetching participation statuses:', error);
+        }
         
         studentsList.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
         setGroupStudents(studentsList);
@@ -1508,8 +1552,8 @@ const StudentAchievements = () => {
             onChange={(e) => {
               const studentId = e.target.value;
               const student = (isTeacher ? groupStudents : students).find((s: any) => s.id === studentId);
-              const isInactive = student && student.subscriptionStatus !== 'active' && student.subscriptionStatus !== 'exempt';
-              if (!isInactive) {
+              const isExpired = student && student.subscriptionStatus === 'expired';
+              if (!isExpired) {
                 handleStudentSelect(e);
               }
             }}
@@ -1518,15 +1562,15 @@ const StudentAchievements = () => {
           >
             <option value="">{isTeacher && !selectedGroupId ? 'اختر الحلقة أولاً' : 'اختر الطالب'}</option>
             {(isTeacher ? groupStudents : students).map((student: any) => {
-              const isInactive = student.subscriptionStatus !== 'active' && student.subscriptionStatus !== 'exempt';
+              const isExpired = student.subscriptionStatus === 'expired';
               return (
                 <option 
                   key={student.id} 
                   value={student.id}
-                  disabled={isInactive}
-                  className={isInactive ? 'inactive-student-option' : ''}
+                  disabled={isExpired}
+                  className={isExpired ? 'inactive-student-option' : ''}
                 >
-                  {student.name}{isInactive ? ' (غير نشط)' : ''}
+                  {student.name}{isExpired ? ' (لم يجدد الاشتراك)' : ''}
                 </option>
               );
             })}

@@ -2,9 +2,8 @@ import { useEffect, useState } from 'react';
 import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { quranCurriculum, QuranJuz, QuranSurah } from '../data/quranCurriculum';
-import { useMessaging } from '../hooks/useMessaging';
 import '../styles/MyProgress.css';
 
 // Adapted interfaces for Quran curriculum
@@ -58,13 +57,11 @@ interface GroupInfo {
 
 const MyProgress = () => {
   const { isStudent, isParent, userProfile, isPendingApproval } = useAuth();
-  const { findOrCreateConversation } = useMessaging();
-  const navigate = useNavigate();
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [groupInfo, setGroupInfo] = useState<GroupInfo | null>(null);
   const [centerName, setCenterName] = useState<string>('');
   const [loading, setLoading] = useState(true);
-  const [openingChat, setOpeningChat] = useState(false);
+
   const [stats, setStats] = useState({
     totalAchievements: 0,
     averageRating: 0,
@@ -427,29 +424,7 @@ const MyProgress = () => {
               <span>المعلم: {groupInfo.teacherName}</span>
             </div>
           )}
-          <button 
-            className="btn-group-chat"
-            onClick={async () => {
-              if (!groupInfo.teacherId) return;
-              setOpeningChat(true);
-              try {
-                // فتح محادثة مباشرة مع المعلم
-                const conversationId = await findOrCreateConversation({
-                  type: 'direct',
-                  participantId: groupInfo.teacherId
-                });
-                if (conversationId) {
-                  navigate(`/messages/${conversationId}`);
-                }
-              } catch (error) {
-                console.error('Error opening chat:', error);
-              }
-              setOpeningChat(false);
-            }}
-            disabled={openingChat || !groupInfo.teacherId}
-          >
-            {openingChat ? '⏳ جاري الفتح...' : '💬 مراسلة المعلم'}
-          </button>
+
         </div>
       )}
 

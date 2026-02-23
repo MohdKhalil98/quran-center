@@ -450,6 +450,32 @@ const PendingRequests = () => {
     window.open(whatsappUrl, '_blank');
   };
 
+  // دالة لتخطي المقابلة والانتقال مباشرة لاختيار المساق والمجموعة
+  const handleSkipInterview = async () => {
+    if (!selectedStudent) return;
+
+    setProcessing(selectedStudent.uid);
+    try {
+      // تحديث حالة الطالب إلى interview_scheduled بدون موعد مقابلة
+      await updateDoc(doc(db, 'users', selectedStudent.uid), {
+        status: 'interview_scheduled',
+        interviewDate: null,
+        interviewTime: null,
+        interviewSkipped: true
+      });
+
+      showMessage('success', 'تم التخطي', `تم تخطي المقابلة للطالب ${selectedStudent.name} وتم نقله لقسم المقابلات المحددة`);
+      setShowInterviewModal(false);
+      setSelectedStudent(null);
+      fetchPendingStudents();
+    } catch (error) {
+      console.error('Error skipping interview:', error);
+      showMessage('error', 'خطأ', 'حدث خطأ أثناء تخطي المقابلة.');
+    } finally {
+      setProcessing(null);
+    }
+  };
+
   // دالة لفتح نافذة اختيار المساق والمجموعة (من قسم المقابلات)
   const handleApproveFromInterview = (student: PendingStudent) => {
     setSelectedStudent(student);
@@ -1266,6 +1292,15 @@ const PendingRequests = () => {
                 onClick={() => setShowInterviewModal(false)}
               >
                 إلغاء
+              </button>
+              <button 
+                className="btn btn-skip-interview" 
+                onClick={handleSkipInterview}
+                disabled={processing === selectedStudent.uid}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <span>⏭️</span>
+                {processing === selectedStudent.uid ? 'جاري التخطي...' : 'تخطي المقابلة'}
               </button>
               <button 
                 className="btn btn-approve" 

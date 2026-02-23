@@ -3,7 +3,6 @@ import { collection, getDocs, doc, updateDoc, query, orderBy, where, deleteDoc, 
 import { createUserWithEmailAndPassword, signOut, signInWithEmailAndPassword } from 'firebase/auth';
 import { db, auth } from '../firebase';
 import { useAuth, UserProfile } from '../context/AuthContext';
-import { useMessaging } from '../hooks/useMessaging';
 import { generateTemporaryPassword } from '../utils/passwordGenerator';
 import '../styles/Shared.css';
 import '../styles/Teachers.css';
@@ -28,7 +27,6 @@ interface Group {
 
 const Teachers = () => {
   const { userProfile, isSupervisor, isAdmin, getSupervisorCenterIds, canAccessCenter } = useAuth();
-  const { findOrCreateConversation, sendMessage } = useMessaging();
   const [teachers, setTeachers] = useState<TeacherUser[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [centers, setCenters] = useState<Center[]>([]);
@@ -341,32 +339,7 @@ const Teachers = () => {
       // حذف بيانات المعلم من Firestore
       await deleteDoc(doc(db, 'users', teacher.uid));
 
-      // البحث عن جميع المطورين (admin)
-      const adminsQuery = query(
-        collection(db, 'users'),
-        where('role', '==', 'admin')
-      );
-      const adminsSnapshot = await getDocs(adminsQuery);
-      
-      // إرسال رسالة لكل مطور
-      for (const adminDoc of adminsSnapshot.docs) {
-        const adminId = adminDoc.data().uid;
-        
-        // إنشاء أو البحث عن محادثة مع المطور
-        const conversationId = await findOrCreateConversation({
-          type: 'direct',
-          participantId: adminId
-        });
-
-        if (conversationId) {
-          // إرسال الرسالة
-          const message = `طلب حذف حساب معلم\n\nالمعلم: ${teacher.name}\nالبريد الإلكتروني: ${teacher.email}\nرقم التعريف: ${teacher.uid}\n\nطلب من: ${userProfile?.name || 'مشرف'}\nالتاريخ: ${new Date().toLocaleString('ar-SA')}\n\nيرجى حذف الحساب من Firebase Authentication`;
-          
-          await sendMessage(conversationId, message);
-        }
-      }
-
-      alert(`تم حذف المعلم ${teacher.name} بنجاح\nتم إرسال رسالة للمطور لحذف حساب المعلم من Firebase`);
+      alert(`تم حذف المعلم ${teacher.name} بنجاح`);
       handleCloseDetailsModal();
       fetchData();
     } catch (error) {

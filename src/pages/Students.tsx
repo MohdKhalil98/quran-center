@@ -1043,14 +1043,14 @@ const Students = () => {
             <table>
               <thead>
                 <tr>
-                  <th style={{width: '130px'}} className={getSortClass('name')} onClick={() => handleSort('name')}>الاسم</th>
-                  <th style={{width: '180px'}} className={getSortClass('email')} onClick={() => handleSort('email')}>البريد الإلكتروني</th>
-                  <th style={{width: '100px'}} className={getSortClass('phone')} onClick={() => handleSort('phone')}>الهاتف</th>
-                  <th style={{width: '120px'}} className={getSortClass('group')} onClick={() => handleSort('group')}>الحلقة</th>
-                  {!isTeacher && <th style={{width: '120px'}} className={getSortClass('center')} onClick={() => handleSort('center')}>المركز</th>}
-                  <th style={{width: '80px'}} className={getSortClass('active')} onClick={() => handleSort('active')}>التفعيل</th>
-                  <th style={{width: '120px'}} className={getSortClass('status')} onClick={() => handleSort('status')}>التسجيل</th>
-                  <th style={{width: '80px'}}>الإجراءات</th>
+                  <th className={`col-name ${getSortClass('name')}`} onClick={() => handleSort('name')}>الاسم</th>
+                  <th className={`col-email ${getSortClass('email')}`} onClick={() => handleSort('email')}>البريد الإلكتروني</th>
+                  <th className={`col-phone ${getSortClass('phone')}`} onClick={() => handleSort('phone')}>الهاتف</th>
+                  <th className={`col-group ${getSortClass('group')}`} onClick={() => handleSort('group')}>الحلقة</th>
+                  {!isTeacher && <th className={`col-center ${getSortClass('center')}`} onClick={() => handleSort('center')}>المركز</th>}
+                  <th className={`col-active ${getSortClass('active')}`} onClick={() => handleSort('active')}>التفعيل</th>
+                  <th className={`col-status ${getSortClass('status')}`} onClick={() => handleSort('status')}>التسجيل</th>
+                  <th className="col-actions">الإجراءات</th>
                 </tr>
               </thead>
               <tbody>

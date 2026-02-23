@@ -359,14 +359,14 @@ const SubscriptionsNew = () => {
           studentsQuery = query(
             collection(db, 'users'),
             where('role', '==', 'student'),
-            where('status', '==', 'approved')
+            where('status', 'in', ['approved', 'waiting_teacher_approval'])
           );
         }
       } else if (isAdmin) {
         studentsQuery = query(
           collection(db, 'users'),
           where('role', '==', 'student'),
-          where('status', '==', 'approved')
+          where('status', 'in', ['approved', 'waiting_teacher_approval'])
         );
       }
 
@@ -462,20 +462,38 @@ const SubscriptionsNew = () => {
   const toggleParticipation = async (studentId: string) => {
     if (!activePeriod) return;
     
-    const statusRecord = studentPeriodStatuses.find(
+    let statusRecord = studentPeriodStatuses.find(
       s => s.studentId === studentId && s.periodId === activePeriod.id
     );
-    if (!statusRecord) return;
     
     setProcessingStudents(prev => [...prev, studentId]);
     
-    const currentParticipation = statusRecord.participation || 'pending';
-    // تبديل: pending/not_participating → participating, participating → not_participating
-    const newParticipation = currentParticipation === 'participating' ? 'not_participating' : 'participating';
-    // حالة الاشتراك تبقى غير نشطة إلى حين دفع الرسوم - لا تتغير بتغيير المشاركة
-    // فقط الطالب الذي يدفع تصبح حالته نشطة
-    
     try {
+      // إذا لم يكن هناك سجل حالة للطالب، نقوم بإنشائه تلقائياً
+      if (!statusRecord) {
+        const newStatusData = {
+          studentId: studentId,
+          periodId: activePeriod.id,
+          status: 'inactive' as const,
+          participation: 'participating' as const,
+          updatedAt: Timestamp.now()
+        };
+        const docRef = await addDoc(collection(db, 'studentPeriodStatuses'), newStatusData);
+        const newRecord: StudentPeriodStatus = {
+          id: docRef.id,
+          ...newStatusData
+        };
+        setStudentPeriodStatuses(prev => [...prev, newRecord]);
+        setProcessingStudents(prev => prev.filter(id => id !== studentId));
+        return;
+      }
+    
+      const currentParticipation = statusRecord.participation || 'pending';
+      // تبديل: pending/not_participating → participating, participating → not_participating
+      const newParticipation = currentParticipation === 'participating' ? 'not_participating' : 'participating';
+      // حالة الاشتراك تبقى غير نشطة إلى حين دفع الرسوم - لا تتغير بتغيير المشاركة
+      // فقط الطالب الذي يدفع تصبح حالته نشطة
+    
       await updateDoc(doc(db, 'studentPeriodStatuses', statusRecord.id), {
         participation: newParticipation,
         updatedAt: Timestamp.now()
@@ -483,7 +501,7 @@ const SubscriptionsNew = () => {
       
       // تحديث الحالة المحلية
       setStudentPeriodStatuses(prev => prev.map(s => 
-        s.id === statusRecord.id 
+        s.id === statusRecord!.id 
           ? { ...s, participation: newParticipation }
           : s
       ));

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { collection, query, where, getDocs, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 
@@ -26,15 +26,17 @@ const navItems: NavItem[] = [
   { path: '/groups', label: 'المجموعات', icon: '👥', roles: ['supervisor'] },
   { path: '/teachers', label: 'المعلمون', icon: '👨‍🏫', roles: ['supervisor'] },
   { path: '/students', label: 'الطلاب', icon: '👨‍🎓', roles: ['supervisor'] },
+  { path: '/supervisor-achievements', label: 'تحصيل الطلاب', icon: '📋', roles: ['supervisor'] },
+  { path: '/student-progress', label: 'تقدم الطلاب', icon: '📊', roles: ['supervisor'] },
   // صفحات المعلم
   { path: '/groups', label: 'حلقاتي', icon: '👥', roles: ['teacher'] },
   { path: '/students', label: 'طلابي', icon: '👨‍🎓', roles: ['teacher'] },
   { path: '/attendance', label: 'تسجيل الحضور', icon: '✅', roles: ['teacher'] },
   { path: '/achievements', label: 'تحصيل الطالب', icon: '🏆', roles: ['teacher'] },
+  { path: '/teacher-progress', label: 'تقدم الطلاب', icon: '📊', roles: ['teacher'] },
   // صفحات الطالب
   { path: '/my-progress', label: 'تحصيلي', icon: '📈', roles: ['student'] },
   // صفحات عامة
-  { path: '/messages', label: 'الرسائل', icon: '💬', roles: ['admin', 'supervisor', 'teacher', 'student', 'parent'], showBadge: true },
   { path: '/curriculum', label: 'المنهج', icon: '📚', roles: ['supervisor', 'teacher', 'student'] },
   { path: '/leaderboard', label: 'المتصدرين', icon: '🥇', roles: ['supervisor', 'teacher', 'student'] }
 ];
@@ -42,7 +44,7 @@ const navItems: NavItem[] = [
 const Sidebar = () => {
   const { logout, isAdmin, userProfile, isSupervisor, activeRole, availableRoles, switchRole, hasMultipleRoles, getSupervisorCenterIds } = useAuth();
   const [pendingCount, setPendingCount] = useState(0);
-  const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
+
   const [newStudentsCount, setNewStudentsCount] = useState(0);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
@@ -143,28 +145,7 @@ const Sidebar = () => {
     return () => clearInterval(interval);
   }, [userProfile?.uid, userProfile?.role]);
 
-  // جلب عدد الرسائل غير المقروءة
-  useEffect(() => {
-    if (!userProfile?.uid) return;
 
-    const conversationsQuery = query(
-      collection(db, 'conversations'),
-      where('participants', 'array-contains', userProfile.uid)
-    );
-
-    const unsubscribe = onSnapshot(conversationsQuery, (snapshot) => {
-      let totalUnread = 0;
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        if (data.unreadCount && data.unreadCount[userProfile.uid]) {
-          totalUnread += data.unreadCount[userProfile.uid];
-        }
-      });
-      setUnreadMessagesCount(totalUnread);
-    });
-
-    return () => unsubscribe();
-  }, [userProfile?.uid]);
 
   const handleLogout = async () => {
     try {
@@ -297,9 +278,7 @@ const Sidebar = () => {
               {item.showBadge && item.path === '/pending-requests' && pendingCount > 0 && (
                 <span className="sidebar__badge">{pendingCount}</span>
               )}
-              {item.showBadge && item.path === '/messages' && unreadMessagesCount > 0 && (
-                <span className="sidebar__badge">{unreadMessagesCount}</span>
-              )}
+
               {item.path === '/students' && item.label === 'طلابي' && newStudentsCount > 0 && (
                 <span className="sidebar__badge">{newStudentsCount}</span>
               )}

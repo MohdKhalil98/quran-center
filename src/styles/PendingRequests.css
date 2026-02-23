@@ -174,6 +174,15 @@
   background: #047857;
 }
 
+.btn-skip-interview {
+  background: #f59e0b;
+  color: white;
+}
+
+.btn-skip-interview:hover:not(:disabled) {
+  background: #d97706;
+}
+
 .btn-reject {
   background: #dc2626;
   color: white;

@@ -1173,29 +1173,34 @@ const StudentAchievements = () => {
       const { lesson: nextLesson, levelCompleted } = getNextArabicLesson(arabicLevel.id, arabicLesson.id);
 
       if (levelCompleted) {
-        // انتهى المستوى - التحقق من وجود مستوى تالي
+        // انتهى المستوى - يحتاج موافقة المشرف للانتقال للمستوى التالي
         const nextLevel = getNextArabicLevel(arabicLevel.id);
+        const bonusPoints = (selectedStudent.points || 0) + points + ARABIC_READING_POINTS.LEVEL_COMPLETION;
         
         if (nextLevel) {
-          // الانتقال للمستوى التالي
+          // هناك مستوى تالي - انتظار موافقة المشرف
           await updateDoc(doc(db, 'users', selectedStudent.id), {
-            levelId: nextLevel.id,
-            levelName: nextLevel.name,
-            stageId: nextLevel.lessons[0].id,
-            stageName: nextLevel.lessons[0].name,
-            points: (selectedStudent.points || 0) + points + ARABIC_READING_POINTS.LEVEL_COMPLETION
+            stageStatus: 'pending_supervisor',
+            pendingLevelUp: true,
+            trackType: 'arabic_reading',
+            points: bonusPoints
           });
           
-          showMessage('success', '🎉 مبارك!', `أتم الطالب ${arabicLevel.name} بنجاح! انتقل إلى ${nextLevel.name}`);
-          
           // تحديث الواجهة
-          setArabicLevel(nextLevel);
-          setArabicLesson(nextLevel.lessons[0]);
+          setGroupStudents(prev => prev.map(s => 
+            s.id === selectedStudent.id 
+              ? { ...s, stageStatus: 'pending_supervisor', pendingLevelUp: true, points: bonusPoints }
+              : s
+          ));
+          
+          showMessage('success', '🎉 مبارك!', `أتم الطالب ${arabicLevel.name} بنجاح!\nبانتظار اعتماد المشرف للانتقال إلى ${nextLevel.name}.`);
         } else {
           // انتهى من كل المستويات!
           await updateDoc(doc(db, 'users', selectedStudent.id), {
-            points: (selectedStudent.points || 0) + points + ARABIC_READING_POINTS.LEVEL_COMPLETION,
-            completedCurriculum: true
+            points: bonusPoints,
+            completedCurriculum: true,
+            stageStatus: null,
+            pendingLevelUp: null
           });
           
           showMessage('success', '🏆 تهانينا!', 'أتم الطالب منهج القراءة العربية بالكامل!');

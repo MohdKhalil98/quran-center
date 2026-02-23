@@ -19,11 +19,13 @@ import Centers from './pages/Centers';
 import PendingRequests from './pages/PendingRequests';
 import MyProgress from './pages/MyProgress';
 import Leaderboard from './pages/Leaderboard';
-import Messages from './pages/Messages';
-import Conversation from './pages/Conversation';
+
 import ChangePassword from './pages/ChangePassword';
 import BatchImport from './pages/BatchImport';
 import Subscriptions from './pages/SubscriptionsNew';
+import SupervisorAchievements from './pages/SupervisorAchievements';
+import StudentProgress from './pages/StudentProgress';
+import TeacherProgress from './pages/TeacherProgress';
 import { useAuth } from './context/AuthContext';
 
 // Component to handle default redirect based on role
@@ -60,11 +62,13 @@ function App() {
           <Route path="/pending-requests" element={<PendingRequests />} />
           <Route path="/my-progress" element={<MyProgress />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
-          <Route path="/messages" element={<Messages />} />
-          <Route path="/messages/:conversationId" element={<Conversation />} />
+
           <Route path="/change-password" element={<ChangePassword />} />
           <Route path="/batch-import" element={<BatchImport />} />
           <Route path="/subscriptions" element={<Subscriptions />} />
+          <Route path="/supervisor-achievements" element={<SupervisorAchievements />} />
+          <Route path="/student-progress" element={<StudentProgress />} />
+          <Route path="/teacher-progress" element={<TeacherProgress />} />
         </Route>
       </Route>
       <Route path="*" element={<DefaultRedirect />} />

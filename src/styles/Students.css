@@ -3,20 +3,38 @@
 /* تحسينات جدول الطلاب */
 .table-card {
   overflow-x: auto;
+  overflow-y: visible;
   -webkit-overflow-scrolling: touch;
 }
 
 .table-card table {
-  min-width: 950px;
-  table-layout: auto;
+  min-width: 850px;
+  table-layout: fixed;
+  width: 100%;
 }
 
 /* تنسيق الخلايا */
+.table-card th {
+  padding: 12px 10px;
+}
+
 .table-card td {
-  max-width: 200px;
+  padding: 10px;
+  white-space: normal;
+  word-break: break-word;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* عروض أعمدة مخصصة */
+.col-name { width: 13%; }
+.col-email { width: 20%; }
+.col-phone { width: 10%; }
+.col-group { width: 15%; }
+.col-center { width: 14%; }
+.col-active { width: 8%; }
+.col-status { width: 10%; }
+.col-actions { width: 10%; }
 
 /* تنسيق خاص لخلايا النص الطويل */
 .table-card td[title] {

@@ -93,17 +93,19 @@ const PERIOD_TYPES = [
   { value: 'summer_activity', label: 'النشاط الصيفي' }
 ];
 
-const SUBSCRIPTION_STATUS = {
+const SUBSCRIPTION_STATUS: Record<string, { label: string; color: string; icon: string }> = {
   active: { label: 'نشط', color: '#28a745', icon: '✅' },
   inactive: { label: 'غير نشط', color: '#dc3545', icon: '❌' },
   exempt: { label: 'معفي', color: '#17a2b8', icon: '🎓' }
 };
 
-const PARTICIPATION_STATUS = {
+const PARTICIPATION_STATUS: Record<string, { label: string; color: string; icon: string }> = {
   participating: { label: 'مشارك', color: '#28a745', icon: '✅' },
   not_participating: { label: 'غير مشارك', color: '#dc3545', icon: '❌' },
   pending: { label: 'لم يحدد', color: '#ffc107', icon: '⏳' }
 };
+
+const DEFAULT_STATUS_INFO = { label: 'غير محدد', color: '#999999', icon: '❓' };
 
 // ======================== COMPONENT ========================
 
@@ -1416,9 +1418,9 @@ const SubscriptionsNew = () => {
                                 period.id
                               ).map(student => {
                                   const status = getStudentStatusForPeriod(student.uid, period.id);
-                                  const statusInfo = SUBSCRIPTION_STATUS[status];
+                                  const statusInfo = SUBSCRIPTION_STATUS[status] || DEFAULT_STATUS_INFO;
                                   const participation = getStudentParticipationForPeriod(student.uid, period.id);
-                                  const participationInfo = PARTICIPATION_STATUS[participation];
+                                  const participationInfo = PARTICIPATION_STATUS[participation] || DEFAULT_STATUS_INFO;
                                   return (
                                     <tr key={student.uid}>
                                       <td>{student.name}</td>
@@ -1761,9 +1763,9 @@ const SubscriptionsNew = () => {
             ) : (
               sortStudents(filteredStudents, sortColumn, sortDirection).map(student => {
                 const status = getStudentPeriodStatus(student.uid);
-                const statusInfo = SUBSCRIPTION_STATUS[status];
+                const statusInfo = SUBSCRIPTION_STATUS[status] || DEFAULT_STATUS_INFO;
                 const participation = getStudentParticipation(student.uid);
-                const participationInfo = PARTICIPATION_STATUS[participation];
+                const participationInfo = PARTICIPATION_STATUS[participation] || DEFAULT_STATUS_INFO;
                 const payment = getStudentPayment(student.uid);
                 
                 return (

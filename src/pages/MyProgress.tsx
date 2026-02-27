@@ -3,7 +3,7 @@ import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firesto
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { Navigate } from 'react-router-dom';
-import { quranCurriculum, QuranJuz, QuranSurah } from '../data/quranCurriculum';
+import quranCurriculum, { QuranLevel, getAllSurahsInLevel } from '../data/quranCurriculum';
 import '../styles/MyProgress.css';
 
 // Adapted interfaces for Quran curriculum
@@ -99,13 +99,14 @@ const MyProgress = () => {
     }
   }, [userProfile]);
 
-  // Convert QuranJuz to CurriculumLevel format
-  const convertToCurriculumLevel = (juz: QuranJuz, index: number): CurriculumLevel => {
-    const stages: CurriculumStage[] = juz.surahs.map((surah, surahIndex) => {
+  // Convert QuranLevel to CurriculumLevel format
+  const convertToCurriculumLevel = (level: QuranLevel): CurriculumLevel => {
+    const allSurahs = getAllSurahsInLevel(level);
+    const stages: CurriculumStage[] = allSurahs.map((surah, surahIndex) => {
       // Get previous surah for near review
-      const prevSurah = surahIndex > 0 ? juz.surahs[surahIndex - 1] : null;
+      const prevSurah = surahIndex > 0 ? allSurahs[surahIndex - 1] : null;
       // Get surah 2 positions back for far review  
-      const farSurah = surahIndex > 1 ? juz.surahs[surahIndex - 2] : null;
+      const farSurah = surahIndex > 1 ? allSurahs[surahIndex - 2] : null;
       
       return {
         id: surah.id,
@@ -119,11 +120,11 @@ const MyProgress = () => {
     });
 
     return {
-      id: juz.id,
-      name: juz.name,
-      order: juz.order,
+      id: level.id,
+      name: level.name,
+      order: level.order,
       stages,
-      juzNumber: juz.juzNumber
+      juzNumber: level.levelNumber
     };
   };
 
@@ -131,8 +132,8 @@ const MyProgress = () => {
   const fetchCurriculum = async () => {
     try {
       // Convert quranCurriculum to CurriculumLevel format
-      const levels: CurriculumLevel[] = quranCurriculum.map((juz, index) => 
-        convertToCurriculumLevel(juz, index)
+      const levels: CurriculumLevel[] = quranCurriculum.map((level) => 
+        convertToCurriculumLevel(level)
       );
       
       setCurriculumLevels(levels);

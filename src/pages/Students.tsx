@@ -216,10 +216,8 @@ const Students = () => {
       
       setStudents(studentsList);
 
-      // Fetch new students (waiting for teacher approval) for teachers only
-      if (isTeacher && myGroupIds.length > 0) {
-        // جلب جميع الطلاب الجدد ثم تصفيتهم في الكود (لتجنب الحاجة إلى index معقد)
-        // البحث عن الطلاب المنتظرين موافقة المعلم
+      // جلب الطلاب الجدد للمشرفين فقط (تحديد المستوى صلاحية المشرف)
+      if (isSupervisor && getSupervisorCenterIds().length > 0) {
         const newStudentsQuery = query(
           collection(db, 'users'),
           where('role', '==', 'student'),
@@ -232,19 +230,17 @@ const Students = () => {
             const data = docSnap.data() as StudentUser;
             return {
               ...data,
-              uid: docSnap.id, // استخدام Document ID من Firestore
+              uid: docSnap.id,
               groupName: groupsList.find(g => g.id === data.groupId)?.name || 'غير محدد',
               centerName: centersList.find(c => c.id === data.centerId)?.name || ''
             } as StudentUser;
           })
-          // تصفية الطلاب الذين في حلقات المعلم فقط
-          .filter(student => myGroupIds.includes(student.groupId || ''));
+          .filter(student => student.centerId && getSupervisorCenterIds().includes(student.centerId));
         setNewStudents(newStudentsList);
 
-        // جلب المستويات من منهج القرآن (الأجزاء من 1 إلى 30)
-        const levelsList = quranCurriculum.map((juz) => ({
-          id: juz.id,
-          name: juz.name
+        const levelsList = quranCurriculum.map((level) => ({
+          id: level.id,
+          name: level.name
         }));
         setLevels(levelsList);
       }
@@ -292,9 +288,9 @@ const Students = () => {
       setLevels(arabicLevels);
     } else {
       setCurrentTrackType('quran');
-      const quranLevels = quranCurriculum.map((juz) => ({
-        id: juz.id,
-        name: juz.name
+      const quranLevels = quranCurriculum.map((level) => ({
+        id: level.id,
+        name: level.name
       }));
       setLevels(quranLevels);
     }
@@ -357,10 +353,13 @@ const Students = () => {
           }
         } else {
           const levelData = quranCurriculum.find(juz => juz.id === editFormData.levelId);
-          if (levelData && levelData.surahs && levelData.surahs.length > 0) {
-            firstStage = { id: levelData.surahs[0].id, name: levelData.surahs[0].name };
-            updateData.stageId = firstStage.id;
-            updateData.stageName = firstStage.name;
+          if (levelData && levelData.stages && levelData.stages.length > 0) {
+            const firstSurah = levelData.stages[0].surahs[0];
+            if (firstSurah) {
+              firstStage = { id: levelData.stages[0].id, name: levelData.stages[0].name };
+              updateData.stageId = firstStage.id;
+              updateData.stageName = firstStage.name;
+            }
           }
         }
       }
@@ -484,9 +483,9 @@ const Students = () => {
     } else {
       setCurrentTrackType('quran');
       // جلب مستويات حفظ القرآن
-      const quranLevels = quranCurriculum.map((juz) => ({
-        id: juz.id,
-        name: juz.name
+      const quranLevels = quranCurriculum.map((level) => ({
+        id: level.id,
+        name: level.name
       }));
       setLevels(quranLevels);
     }
@@ -546,8 +545,8 @@ const Students = () => {
         }
         selectedStageName = stageObj.name;
       } else {
-        const selectedLevelData = quranCurriculum.find(juz => juz.id === selectedLevelId);
-        const stageObj = selectedLevelData?.surahs?.find(surah => surah.id === selectedStageId);
+        const selectedLevelData = quranCurriculum.find(level => level.id === selectedLevelId);
+        const stageObj = selectedLevelData?.stages?.find(stage => stage.id === selectedStageId);
         if (!stageObj) {
           alert('المرحلة غير موجودة في هذا المستوى');
           return;
@@ -597,6 +596,14 @@ const Students = () => {
     if (filterStatus && s.status !== filterStatus) return false;
     if (filterActive === 'active' && !s.active) return false;
     if (filterActive === 'inactive' && s.active) return false;
+    if (searchName && !s.name?.toLowerCase().includes(searchName.toLowerCase())) return false;
+    return true;
+  });
+
+  // فلترة الطلاب الجدد (تتفاعل مع الفلاتر)
+  const filteredNewStudents = newStudents.filter(s => {
+    if (filterCenterId && s.centerId !== filterCenterId) return false;
+    if (filterGroupId && s.groupId !== filterGroupId) return false;
     if (searchName && !s.name?.toLowerCase().includes(searchName.toLowerCase())) return false;
     return true;
   });
@@ -682,7 +689,7 @@ const Students = () => {
       <header className="page__header">
         <h1>
           {isTeacher ? 'طلابي' : 'الطلاب'}
-          {isTeacher && newStudents.length > 0 && (
+          {isSupervisor && filteredNewStudents.length > 0 && (
             <span style={{
               backgroundColor: '#4caf50',
               color: 'white',
@@ -696,7 +703,7 @@ const Students = () => {
               marginRight: '10px',
               fontWeight: '700'
             }}>
-              {newStudents.length}
+              {filteredNewStudents.length}
             </span>
           )}
         </h1>
@@ -920,11 +927,11 @@ const Students = () => {
         )}
       </div>
 
-      {/* قسم الطلاب الجدد - للمعلمين فقط */}
-      {isTeacher && newStudents.length > 0 && (
+      {/* قسم الطلاب الجدد - للمشرفين فقط (تحديد المستوى) */}
+      {isSupervisor && filteredNewStudents.length > 0 && (
         <>
           <div className="section-header">
-            <h2>📥 الطلاب الجدد (بانتظار تحديد المستوى)</h2>
+            <h2>📥 الطلاب الجدد (بانتظار تحديد المستوى) <span style={{ fontSize: '0.85rem', color: '#666', fontWeight: 'normal' }}>({filteredNewStudents.length})</span></h2>
           </div>
           <div className="table-card">
             <table>
@@ -932,14 +939,16 @@ const Students = () => {
                 <tr>
                   <th>الاسم</th>
                   <th>رقم الهاتف</th>
+                  <th>الحلقة</th>
                   <th>الإجراءات</th>
                 </tr>
               </thead>
               <tbody>
-                {newStudents.map((student) => (
+                {filteredNewStudents.map((student) => (
                   <tr key={student.uid}>
                     <td>{student.name}</td>
                     <td>{student.phone || '-'}</td>
+                    <td>{student.groupName || '-'}</td>
                     <td>
                       <button
                         className="btn btn-sm btn-success"
@@ -1346,8 +1355,8 @@ const Students = () => {
                       const selectedLevelData = arabicReadingCurriculum.find(level => level.id === levelId);
                       setStages(selectedLevelData?.lessons || []);
                     } else {
-                      const selectedLevelData = quranCurriculum.find(juz => juz.id === levelId);
-                      setStages(selectedLevelData?.surahs || []);
+                      const selectedLevelData = quranCurriculum.find(level => level.id === levelId);
+                      setStages(selectedLevelData?.stages || []);
                     }
                   }}
                 >

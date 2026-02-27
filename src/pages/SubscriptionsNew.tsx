@@ -957,8 +957,8 @@ const SubscriptionsNew = () => {
           const cleanPhone = phone.replace(/[^0-9]/g, '');
           const fullPhone = cleanPhone.startsWith('973') ? cleanPhone : `973${cleanPhone}`;
           const whatsappUrl = `https://wa.me/${fullPhone}?text=${encodeURIComponent(confirmMessage)}`;
-          // استخدام location.href بدلاً من window.open لأن المتصفحات على الهاتف تحظر النوافذ المنبثقة بعد العمليات غير المتزامنة
-          window.location.href = whatsappUrl;
+          // فتح واتساب في نافذة جديدة
+          window.open(whatsappUrl, '_blank');
         }
       }
 
@@ -1100,7 +1100,7 @@ const SubscriptionsNew = () => {
         .replace(/\{الاسم\}/g, student.name || '');
       
       const encodedMessage = encodeURIComponent(personalizedMessage);
-      window.location.href = `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
+      window.open(`https://wa.me/${cleanPhone}?text=${encodedMessage}`, '_blank');
     }
   };
 

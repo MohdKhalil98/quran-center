@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { arabicReadingCurriculum } from '../data/arabicReadingCurriculum';
-import quranCurriculum from '../data/quranCurriculum';
+import quranCurriculum, { getAllSurahsInLevel } from '../data/quranCurriculum';
 import '../styles/StudentProgress.css';
 
 interface Group {
@@ -77,6 +77,30 @@ const TeacherProgress = () => {
       }
 
       // 3. بناء جدول تقدم الطلاب
+      // Fetch all achievements for memorized surahs calculation
+      const achievementsSnap = await getDocs(query(collection(db, 'student_achievements'), orderBy('date', 'desc')));
+      const allAchievements = achievementsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      // Helper: count memorized surahs in a level for a student
+      const countMemorizedSurahs = (studentId: string, levelId: string): number => {
+        const quranLevel = quranCurriculum.find(j => j.id === levelId);
+        if (!quranLevel) return 0;
+        const allSurahs = getAllSurahsInLevel(quranLevel);
+        return allSurahs.filter(surah => {
+          const surahAchievements = allAchievements.filter(
+            (a: any) => a.studentId === studentId && a.stageId === surah.id && a.challengeType === 'memorization' && a.challengePassed
+          );
+          if (surahAchievements.length === 0) return false;
+          const coveredAyahs = new Set<number>();
+          surahAchievements.forEach((a: any) => {
+            const from = parseInt(a.fromAya || '1');
+            const to = parseInt(a.toAya || String(surah.ayahCount));
+            for (let i = from; i <= to; i++) coveredAyahs.add(i);
+          });
+          return coveredAyahs.size >= surah.ayahCount;
+        }).length;
+      };
+
       const progressList: StudentProgressItem[] = [];
       allStudentDocs.forEach(d => {
         const data = d.data();
@@ -101,11 +125,10 @@ const TeacherProgress = () => {
           }
         } else {
           const quranLevel = quranCurriculum.find(j => j.id === data.levelId);
-          if (quranLevel && data.stageId) {
-            const stageIndex = quranLevel.surahs.findIndex(s => s.id === data.stageId);
-            if (stageIndex !== -1) {
-              progressPercent = Math.round((stageIndex / quranLevel.surahs.length) * 100);
-            }
+          if (quranLevel) {
+            const memorizedCount = countMemorizedSurahs(d.id, data.levelId);
+            const totalSurahs = getAllSurahsInLevel(quranLevel).length;
+            progressPercent = Math.round((memorizedCount / totalSurahs) * 100);
           }
         }
 

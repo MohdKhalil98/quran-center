@@ -5,6 +5,7 @@ import { db, secondaryAuth } from '../firebase';
 import { useAuth, UserProfile } from '../context/AuthContext';
 import { Navigate } from 'react-router-dom';
 import MessageBox from '../components/MessageBox';
+import quranCurriculum from '../data/quranCurriculum';
 import '../styles/PendingRequests.css';
 
 // New curriculum interfaces from Firebase
@@ -330,10 +331,10 @@ const PendingRequests = () => {
     setProcessing(student.uid);
     try {
       if (isLevelUp) {
-        // Level advancement - Find next level from Firebase curriculum
-        const currentLevel = curriculumLevels.find(l => l.id === student.levelId);
+        // Level advancement - Find next level from hardcoded curriculum
+        const currentLevel = quranCurriculum.find(l => l.id === student.levelId);
         const currentLevelOrder = currentLevel?.order || 1;
-        const nextLevel = curriculumLevels.find(l => l.order === currentLevelOrder + 1);
+        const nextLevel = quranCurriculum.find(l => l.order === currentLevelOrder + 1);
         
         if (nextLevel && nextLevel.stages && nextLevel.stages.length > 0) {
           const firstStage = nextLevel.stages.sort((a, b) => a.order - b.order)[0];
@@ -349,6 +350,18 @@ const PendingRequests = () => {
             completedLevels: (student.completedLevels || 0) + 1,
             totalPoints: (student.totalPoints || 0) + 200
           });
+          // Also sync to studentPeriodStatuses
+          const statusSnap = await getDocs(query(collection(db, 'studentPeriodStatuses'), where('studentId', '==', student.uid)));
+          if (!statusSnap.empty) {
+            const statusDoc = statusSnap.docs[statusSnap.docs.length - 1];
+            await updateDoc(doc(db, 'studentPeriodStatuses', statusDoc.id), {
+              currentLevelId: nextLevel.id,
+              currentLevelName: nextLevel.name,
+              currentStageId: firstStage.id,
+              currentStageName: firstStage.name,
+              status: 'in-progress',
+            });
+          }
           showMessage('success', 'تم الاعتماد', `تم اعتماد انتقال الطالب ${student.name} للمستوى التالي بنجاح`);
         } else {
           // Finished all levels
@@ -356,10 +369,10 @@ const PendingRequests = () => {
             levelStatus: 'completed',
             stageStatus: null,
             pendingLevelUp: null,
-            completedLevels: curriculumLevels.length,
+            completedLevels: quranCurriculum.length,
             totalPoints: (student.totalPoints || 0) + 500
           });
-          showMessage('success', '🎉 مبارك!', `أتم الطالب ${student.name} جميع المستويات بنجاح!\nهذا إنجاز عظيم!`);
+          showMessage('success', 'مبارك!', `أتم الطالب ${student.name} جميع المستويات بنجاح!\nهذا إنجاز عظيم!`);
         }
       } else {
         // Stage advancement (within same level) - should not happen anymore

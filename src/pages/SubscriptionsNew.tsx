@@ -965,10 +965,6 @@ const SubscriptionsNew = () => {
       }
 
       alert('تم تسجيل الدفع وتفعيل الطالب بنجاح!');
-      setShowPaymentModal(false);
-      setSelectedStudents([]);
-      setExtractedReceiptData(null);
-      fetchData();
     } catch (error: any) {
       console.error('Error saving payment:', error);
       
@@ -983,9 +979,17 @@ const SubscriptionsNew = () => {
       }
       
       alert(errorMessage);
+    } finally {
+      setUploadingReceipt(false);
+      setShowPaymentModal(false);
+      setSelectedStudents([]);
+      setExtractedReceiptData(null);
+      try {
+        fetchData();
+      } catch (e) {
+        console.error('Error refreshing data after payment:', e);
+      }
     }
-
-    setUploadingReceipt(false);
   };
 
   // ======================== EXEMPT FUNCTIONS ========================
@@ -1148,18 +1152,30 @@ const SubscriptionsNew = () => {
 
   // ======================== UTILITY FUNCTIONS ========================
 
-  const formatDate = (timestamp: Timestamp) => {
-    return timestamp.toDate().toLocaleDateString('ar-SA');
+  const formatDate = (timestamp: Timestamp | undefined | null) => {
+    if (!timestamp || typeof timestamp.toDate !== 'function') return '—';
+    try {
+      return timestamp.toDate().toLocaleDateString('ar-SA');
+    } catch {
+      return '—';
+    }
   };
 
   const getPeriodStatusLabel = (period: StudyPeriod) => {
     const now = new Date();
-    const start = period.startDate.toDate();
-    const end = period.endDate.toDate();
+    if (!period.startDate?.toDate || !period.endDate?.toDate) {
+      return { label: 'غير محدد', class: 'unknown' };
+    }
+    try {
+      const start = period.startDate.toDate();
+      const end = period.endDate.toDate();
 
-    if (now < start) return { label: 'لم تبدأ', class: 'upcoming' };
-    if (now > end) return { label: 'انتهت', class: 'ended' };
-    return { label: 'جارية', class: 'active' };
+      if (now < start) return { label: 'لم تبدأ', class: 'upcoming' };
+      if (now > end) return { label: 'انتهت', class: 'ended' };
+      return { label: 'جارية', class: 'active' };
+    } catch {
+      return { label: 'غير محدد', class: 'unknown' };
+    }
   };
 
   const getStudentPayment = (studentId: string) => {
@@ -1537,9 +1553,9 @@ const SubscriptionsNew = () => {
                 <span className="info-icon">⏰</span>
                 <div className="info-content">
                   <span className="info-label">آخر يوم للدفع</span>
-                  <span className="info-value" style={{ color: new Date() > activePeriod.paymentDeadline.toDate() ? '#dc3545' : '#28a745' }}>
+                  <span className="info-value" style={{ color: (activePeriod.paymentDeadline?.toDate && new Date() > activePeriod.paymentDeadline.toDate()) ? '#dc3545' : '#28a745' }}>
                     {formatDate(activePeriod.paymentDeadline)}
-                    {new Date() > activePeriod.paymentDeadline.toDate() && ' (انتهى)'}
+                    {activePeriod.paymentDeadline?.toDate && new Date() > activePeriod.paymentDeadline.toDate() && ' (انتهى)'}
                   </span>
                 </div>
               </div>

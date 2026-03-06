@@ -97,6 +97,11 @@ const StudentAchievements = () => {
   // Delete state
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // Attendance-based filtering state
+  const [todayPresentStudentIds, setTodayPresentStudentIds] = useState<Set<string>>(new Set());
+  const [attendanceChecked, setAttendanceChecked] = useState(false);
+  const [attendanceRegistered, setAttendanceRegistered] = useState(false);
+
   const showMessage = (type: 'success' | 'error' | 'info', message: string) => {
     setMessageBox({ show: true, type, message });
   };
@@ -157,7 +162,45 @@ const StudentAchievements = () => {
           })
           .map(s => ({ id: s.id, ...s.data() }));
         
-        setStudents(studentsList);
+        // Fetch today's attendance to filter students
+        const today = new Date();
+        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+        
+        const allAttendanceSnap = await getDocs(collection(db, 'attendance'));
+        const presentIds = new Set<string>();
+        let hasAnyAttendanceToday = false;
+        
+        allAttendanceSnap.docs.forEach(docSnap => {
+          const data = docSnap.data();
+          if (!teacherGroupIds.includes(data.groupId)) return;
+          
+          let date: Date | null = null;
+          if (data.date && typeof data.date.toDate === 'function') {
+            date = data.date.toDate();
+          } else if (data.date) {
+            date = new Date(data.date);
+          }
+          if (!date) return;
+          
+          if (date >= todayStart && date < todayEnd) {
+            hasAnyAttendanceToday = true;
+            if (data.status === 'حاضر' || data.status === 'متأخر') {
+              presentIds.add(data.studentId);
+            }
+          }
+        });
+        
+        setTodayPresentStudentIds(presentIds);
+        setAttendanceRegistered(hasAnyAttendanceToday);
+        setAttendanceChecked(true);
+        
+        // Show only present students; if no attendance registered, show empty list
+        if (hasAnyAttendanceToday) {
+          setStudents(studentsList.filter(s => presentIds.has(s.id)));
+        } else {
+          setStudents([]);
+        }
       } catch (err) {
         console.error('Error fetching students:', err);
       }
@@ -558,7 +601,7 @@ const StudentAchievements = () => {
 
     const status = studentStatuses[selectedStudent];
     const currentArabicLevelId = status?.currentArabicLevelId || 'level1';
-    const currentArabicLessonId = status?.currentArabicLessonId || 'lesson1';
+    const currentArabicLessonId = status?.currentArabicLessonId || 'l1_1';
     
     const arabicLevel = arabicReadingCurriculum.find((l: ArabicLevel) => l.id === currentArabicLevelId);
     if (!arabicLevel) {
@@ -619,7 +662,7 @@ const StudentAchievements = () => {
             if (statusId) {
               await updateDoc(doc(db, 'studentPeriodStatuses', statusId), {
                 currentArabicLevelId: nextLevel.id,
-                currentArabicLessonId: nextLevel.lessons[0]?.id || 'lesson1',
+                currentArabicLessonId: nextLevel.lessons[0]?.id || 'l1_1',
               });
             }
             // Level completion bonus
@@ -687,7 +730,7 @@ const StudentAchievements = () => {
   // Arabic reading info
   const arabicStatus = selectedStudent ? studentStatuses[selectedStudent] : null;
   const currentArabicLevelId = arabicStatus?.currentArabicLevelId || 'level1';
-  const currentArabicLessonId = arabicStatus?.currentArabicLessonId || 'lesson1';
+  const currentArabicLessonId = arabicStatus?.currentArabicLessonId || 'l1_1';
   const currentArabicLevel = arabicReadingCurriculum.find((l: ArabicLevel) => l.id === currentArabicLevelId);
   const currentArabicLesson = currentArabicLevel?.lessons.find((ls: ArabicLesson) => ls.id === currentArabicLessonId);
 
@@ -728,6 +771,37 @@ const StudentAchievements = () => {
       )}
 
       <h2>تسجيل تحصيل الطلاب</h2>
+
+      {/* Attendance Reminder */}
+      {attendanceChecked && !attendanceRegistered && (
+        <div className="attendance-reminder" style={{
+          background: '#fff3cd',
+          border: '1px solid #ffc107',
+          borderRadius: '8px',
+          padding: '16px',
+          marginBottom: '16px',
+          textAlign: 'center',
+          color: '#856404'
+        }}>
+          <p style={{ margin: '0 0 8px 0', fontWeight: 'bold', fontSize: '1.1em' }}>
+            ⚠️ لم يتم تسجيل الحضور لهذا اليوم
+          </p>
+          <p style={{ margin: '0 0 12px 0' }}>
+            يرجى تسجيل الحضور أولاً حتى تظهر أسماء الطلاب الحاضرين
+          </p>
+          <a href="/attendance" style={{
+            display: 'inline-block',
+            background: '#ffc107',
+            color: '#856404',
+            padding: '8px 24px',
+            borderRadius: '6px',
+            textDecoration: 'none',
+            fontWeight: 'bold'
+          }}>
+            📋 انتقل لتسجيل الحضور
+          </a>
+        </div>
+      )}
 
       {/* Student Selection */}
       <div className="form-section">

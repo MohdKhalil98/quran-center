@@ -1,0 +1,154 @@
+/* Teacher Achievement Records Page */
+
+.achievement-records-page {
+  direction: rtl;
+}
+
+/* Filters Section */
+.records-filters {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.records-filters-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.filter-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.filter-item label {
+  font-size: 0.85rem;
+  color: #555;
+  font-weight: 500;
+}
+
+.filter-item input,
+.filter-item select {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  direction: rtl;
+}
+
+.filter-item input[type="date"] {
+  direction: ltr;
+}
+
+.filter-item input:focus,
+.filter-item select:focus {
+  outline: none;
+  border-color: #4caf50;
+  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.15);
+}
+
+.records-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 12px;
+  border-top: 1px solid #eee;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.btn-clear-filters {
+  background: none;
+  border: 1px solid #ddd;
+  padding: 6px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: #666;
+  transition: all 0.2s;
+}
+
+.btn-clear-filters:hover {
+  background: #f5f5f5;
+  border-color: #ccc;
+}
+
+/* Records Table */
+.records-table-wrapper {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  overflow-x: auto;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.records-table {
+  width: 100%;
+  border-collapse: collapse;
+  direction: rtl;
+}
+
+.records-table thead {
+  background: #4caf50;
+  color: #fff;
+}
+
+.records-table th {
+  padding: 14px 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.records-table td {
+  padding: 12px;
+  font-size: 0.88rem;
+  text-align: center;
+  border-bottom: 1px solid #eee;
+}
+
+.records-table tbody tr:hover {
+  background: #f8f9fa;
+}
+
+.records-table tbody tr.passed {
+  background: #fff;
+}
+
+.records-table tbody tr.failed {
+  background: #fff5f5;
+}
+
+.student-name-cell {
+  font-weight: 500;
+  text-align: right !important;
+  white-space: nowrap;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .records-filters-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .records-table th,
+  .records-table td {
+    padding: 8px 6px;
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .records-filters-row {
+    grid-template-columns: 1fr;
+  }
+}

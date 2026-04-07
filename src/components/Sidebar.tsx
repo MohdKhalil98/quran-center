@@ -31,8 +31,8 @@ const navItems: NavItem[] = [
   // صفحات المعلم
   { path: '/groups', label: 'حلقاتي', icon: '👥', roles: ['teacher'] },
   { path: '/students', label: 'طلابي', icon: '👨‍🎓', roles: ['teacher'] },
-  { path: '/attendance', label: 'تسجيل الحضور', icon: '✅', roles: ['teacher'] },
-  { path: '/achievements', label: 'تحصيل الطالب', icon: '🏆', roles: ['teacher'] },
+  { path: '/daily-record', label: 'حضور و تحصيل الطالب', icon: '📋', roles: ['teacher'] },
+  { path: '/achievement-records', label: 'سجل التحصيل', icon: '🏆', roles: ['teacher'] },
   { path: '/teacher-progress', label: 'تقدم الطلاب', icon: '📊', roles: ['teacher'] },
   // صفحات الطالب
   { path: '/my-progress', label: 'تحصيلي', icon: '📈', roles: ['student'] },

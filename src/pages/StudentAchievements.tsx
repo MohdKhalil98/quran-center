@@ -59,7 +59,15 @@ const POINTS_SYSTEM = {
   RETRY_PENALTY: -5,
 };
 
-const StudentAchievements = () => {
+interface StudentAchievementsProps {
+  embedded?: boolean;
+  externalStudents?: any[];
+  externalSessionDate?: string;
+  externalGroupId?: string;
+  attendanceSaved?: boolean;
+}
+
+const StudentAchievements = ({ embedded, externalStudents, externalSessionDate, externalGroupId, attendanceSaved }: StudentAchievementsProps = {}) => {
   const { userProfile, isTeacher, isSupervisor, getSupervisorCenterIds } = useAuth();
   const [students, setStudents] = useState<any[]>([]);
   const [selectedStudent, setSelectedStudent] = useState('');
@@ -102,6 +110,14 @@ const StudentAchievements = () => {
   const [attendanceChecked, setAttendanceChecked] = useState(false);
   const [attendanceRegistered, setAttendanceRegistered] = useState(false);
 
+  // Helper: get the recording date (use external date in embedded mode, otherwise now)
+  const getRecordingDate = (): string => {
+    if (embedded && externalSessionDate) {
+      return new Date(externalSessionDate + 'T12:00:00').toISOString();
+    }
+    return new Date().toISOString();
+  };
+
   const showMessage = (type: 'success' | 'error' | 'info', message: string) => {
     setMessageBox({ show: true, type, message });
   };
@@ -128,17 +144,34 @@ const StudentAchievements = () => {
     fetchStudyPeriod();
   }, []);
 
-  // Fetch students for teacher
+  // In embedded mode, use external students from parent
   useEffect(() => {
+    if (!embedded) return;
+    if (externalStudents) {
+      setStudents(externalStudents);
+      const ids = new Set<string>(externalStudents.map((s: any) => s.id));
+      setTodayPresentStudentIds(ids);
+      setAttendanceRegistered(!!attendanceSaved);
+      setAttendanceChecked(true);
+    } else {
+      setStudents([]);
+      setAttendanceRegistered(false);
+      setAttendanceChecked(true);
+    }
+  }, [embedded, externalStudents, attendanceSaved]);
+
+  // Fetch students for teacher (standalone mode only)
+  useEffect(() => {
+    if (embedded) return;
     const fetchStudents = async () => {
       if (!userProfile) return;
       try {
         const studentsSnap = await getDocs(collection(db, 'users'));
         const groupsSnap = await getDocs(collection(db, 'groups'));
-        
+
         let teacherGroupIds: string[] = [];
         let supervisorCenterIds: string[] = [];
-        
+
         if (isSupervisor) {
           supervisorCenterIds = getSupervisorCenterIds ? getSupervisorCenterIds() : [];
           groupsSnap.docs.forEach(g => {
@@ -154,27 +187,27 @@ const StudentAchievements = () => {
             }
           });
         }
-        
+
         const studentsList = studentsSnap.docs
           .filter(s => {
             const data = s.data();
             return data.role === 'student' && teacherGroupIds.includes(data.groupId);
           })
           .map(s => ({ id: s.id, ...s.data() }));
-        
+
         // Fetch today's attendance to filter students
         const today = new Date();
         const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
         const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-        
+
         const allAttendanceSnap = await getDocs(collection(db, 'attendance'));
         const presentIds = new Set<string>();
         let hasAnyAttendanceToday = false;
-        
+
         allAttendanceSnap.docs.forEach(docSnap => {
           const data = docSnap.data();
           if (!teacherGroupIds.includes(data.groupId)) return;
-          
+
           let date: Date | null = null;
           if (data.date && typeof data.date.toDate === 'function') {
             date = data.date.toDate();
@@ -182,7 +215,7 @@ const StudentAchievements = () => {
             date = new Date(data.date);
           }
           if (!date) return;
-          
+
           if (date >= todayStart && date < todayEnd) {
             hasAnyAttendanceToday = true;
             if (data.status === 'حاضر' || data.status === 'متأخر') {
@@ -190,11 +223,11 @@ const StudentAchievements = () => {
             }
           }
         });
-        
+
         setTodayPresentStudentIds(presentIds);
         setAttendanceRegistered(hasAnyAttendanceToday);
         setAttendanceChecked(true);
-        
+
         // Show only present students; if no attendance registered, show empty list
         if (hasAnyAttendanceToday) {
           setStudents(studentsList.filter(s => presentIds.has(s.id)));
@@ -206,7 +239,7 @@ const StudentAchievements = () => {
       }
     };
     fetchStudents();
-  }, [userProfile, isSupervisor, getSupervisorCenterIds, isTeacher]);
+  }, [embedded, userProfile, isSupervisor, getSupervisorCenterIds, isTeacher]);
 
   // Fetch achievements and student statuses
   useEffect(() => {
@@ -472,7 +505,7 @@ const StudentAchievements = () => {
         toAya,
         rating,
         notes: studentNotes,
-        date: new Date().toISOString(),
+        date: getRecordingDate(),
         challengeType: selectedRecitationType,
         challengeContent: `${getRecitationTypeLabel(selectedRecitationType)}: سورة ${surah.name}`,
         challengePassed,
@@ -627,7 +660,7 @@ const StudentAchievements = () => {
         studentId: selectedStudent,
         studentName: student.name || student.displayName || '',
         portion: arabicLesson.name,
-        date: new Date().toISOString(),
+        date: getRecordingDate(),
         challengeType: 'arabic_lesson',
         challengeContent: `${arabicLevel.name} - ${arabicLesson.name}`,
         challengePassed: arabicChallengePassed,
@@ -770,10 +803,10 @@ const StudentAchievements = () => {
         />
       )}
 
-      <h2>تسجيل تحصيل الطلاب</h2>
+      {!embedded && <h2>تسجيل تحصيل الطلاب</h2>}
 
-      {/* Attendance Reminder */}
-      {attendanceChecked && !attendanceRegistered && (
+      {/* Attendance Reminder - only in standalone mode */}
+      {!embedded && attendanceChecked && !attendanceRegistered && (
         <div className="attendance-reminder" style={{
           background: '#fff3cd',
           border: '1px solid #ffc107',
@@ -1139,8 +1172,8 @@ const StudentAchievements = () => {
             </div>
           )}
 
-          {/* Achievement History */}
-          <div className="achievements-history">
+          {/* Achievement History - hidden in embedded mode */}
+          {!embedded && <div className="achievements-history">
             <h3>سجل التحصيل ({studentAchievements.length})</h3>
             {studentAchievements.length === 0 ? (
               <p className="no-data">لا توجد سجلات بعد</p>
@@ -1193,7 +1226,7 @@ const StudentAchievements = () => {
                 </table>
               </div>
             )}
-          </div>
+          </div>}
         </>
       )}
     </div>

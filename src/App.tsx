@@ -26,6 +26,8 @@ import Subscriptions from './pages/SubscriptionsNew';
 import SupervisorAchievements from './pages/SupervisorAchievements';
 import StudentProgress from './pages/StudentProgress';
 import TeacherProgress from './pages/TeacherProgress';
+import TeacherDailyRecord from './pages/TeacherDailyRecord';
+import TeacherAchievementRecords from './pages/TeacherAchievementRecords';
 import { useAuth } from './context/AuthContext';
 
 // Component to handle default redirect based on role
@@ -69,6 +71,8 @@ function App() {
           <Route path="/supervisor-achievements" element={<SupervisorAchievements />} />
           <Route path="/student-progress" element={<StudentProgress />} />
           <Route path="/teacher-progress" element={<TeacherProgress />} />
+          <Route path="/daily-record" element={<TeacherDailyRecord />} />
+          <Route path="/achievement-records" element={<TeacherAchievementRecords />} />
         </Route>
       </Route>
       <Route path="*" element={<DefaultRedirect />} />

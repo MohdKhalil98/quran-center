@@ -1,0 +1,171 @@
+/* TeacherDailyRecord - Combined Attendance & Achievements Page */
+
+.teacher-daily-record {
+  direction: rtl;
+}
+
+/* Shared Filters */
+.daily-record-filters {
+  margin-bottom: 20px;
+}
+
+/* Collapsible Section */
+.collapsible-section {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+.collapsible-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  cursor: pointer;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e0e0e0;
+  transition: background 0.2s;
+  user-select: none;
+}
+
+.collapsible-header:hover {
+  background: #e9ecef;
+}
+
+.collapsible-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.collapse-icon {
+  font-size: 0.85rem;
+  color: #666;
+  transition: transform 0.3s;
+  display: inline-block;
+}
+
+/* Collapsible Body */
+.collapsible-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.4s ease, padding 0.3s ease;
+  padding: 0 20px;
+}
+
+.collapsible-body.open {
+  max-height: 3000px;
+  padding: 20px;
+}
+
+/* Attendance Summary (shown when collapsed) */
+.attendance-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.summary-present {
+  color: #4caf50;
+  background: #e8f5e9;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+}
+
+.summary-absent {
+  color: #f44336;
+  background: #ffebee;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+}
+
+.summary-separator {
+  color: #ccc;
+}
+
+/* Achievements Section Wrapper */
+.achievements-section-wrapper {
+  margin-bottom: 20px;
+}
+
+.achievements-section-wrapper .section-title {
+  font-size: 1.2rem;
+  color: #333;
+  margin: 0 0 16px 0;
+  padding: 16px 20px;
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px 10px 0 0;
+}
+
+.achievements-section-wrapper .achievements-container {
+  border: 1px solid #e0e0e0;
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  padding: 20px;
+  background: #fff;
+}
+
+/* No Attendance Message */
+.no-attendance-message {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  color: #856404;
+  font-size: 1rem;
+  margin-bottom: 16px;
+}
+
+.no-attendance-message p {
+  margin: 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .collapsible-header {
+    padding: 12px 16px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .collapsible-header h2 {
+    font-size: 1rem;
+  }
+
+  .attendance-summary {
+    font-size: 0.85rem;
+  }
+
+  .collapsible-body.open {
+    padding: 16px;
+  }
+
+  .achievements-section-wrapper .section-title {
+    font-size: 1rem;
+    padding: 12px 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .collapsible-header {
+    padding: 10px 12px;
+  }
+
+  .summary-present,
+  .summary-absent {
+    padding: 3px 8px;
+    font-size: 0.8rem;
+  }
+}

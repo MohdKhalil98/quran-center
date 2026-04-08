@@ -14,6 +14,14 @@ interface Student {
   subscriptionStatus?: 'active' | 'inactive' | 'exempt';
   participation?: 'participating' | 'not_participating' | 'pending';
   expiredSubscription?: boolean;
+  levelId?: string;
+  levelName?: string;
+  stageId?: string;
+  stageName?: string;
+  trackType?: string;
+  levelStatus?: string;
+  currentArabicLevelId?: string;
+  currentArabicLessonId?: string;
 }
 
 interface Center {
@@ -154,12 +162,23 @@ const TeacherDailyRecord = () => {
         );
         const studentsSnapshot = await getDocs(studentsQuery);
         let allStudents = studentsSnapshot.docs
-          .map((doc) => ({
-            id: doc.id,
-            name: doc.data().name,
-            groupId: doc.data().groupId,
-            subscriptionStatus: doc.data().subscriptionStatus || 'inactive'
-          } as Student));
+          .map((doc) => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              name: data.name,
+              groupId: data.groupId,
+              subscriptionStatus: data.subscriptionStatus || 'inactive',
+              levelId: data.levelId,
+              levelName: data.levelName,
+              stageId: data.stageId,
+              stageName: data.stageName,
+              trackType: data.trackType,
+              levelStatus: data.levelStatus,
+              currentArabicLevelId: data.currentArabicLevelId,
+              currentArabicLessonId: data.currentArabicLessonId,
+            } as Student;
+          });
 
         // Filter by participation status
         try {

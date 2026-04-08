@@ -134,6 +134,16 @@
   white-space: nowrap;
 }
 
+.records-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s;
+}
+
+.records-table th.sortable:hover {
+  background: #43a047;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .records-filters-row {

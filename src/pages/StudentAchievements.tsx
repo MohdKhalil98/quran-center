@@ -105,6 +105,13 @@ const StudentAchievements = ({ embedded, externalStudents, externalSessionDate, 
   // Delete state
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // Sort state for achievement history table
+  const [historySortCol, setHistorySortCol] = useState<string>('date');
+  const [historySortDir, setHistorySortDir] = useState<'asc' | 'desc'>('desc');
+
+  // Edit state
+  const [editingAchievement, setEditingAchievement] = useState<any>(null);
+
   // Attendance-based filtering state
   const [todayPresentStudentIds, setTodayPresentStudentIds] = useState<Set<string>>(new Set());
   const [attendanceChecked, setAttendanceChecked] = useState(false);
@@ -302,17 +309,8 @@ const StudentAchievements = ({ embedded, externalStudents, externalSessionDate, 
   const getStudentLevel = (studentId: string): { level: QuranLevel; stageGroup: QuranStage } => {
     const defaultLevel = quranCurriculum[0];
     const defaultStage = defaultLevel.stages[0];
-    
-    // First try studentPeriodStatuses
-    const status = studentStatuses[studentId];
-    if (status?.currentLevelId) {
-      const level = quranCurriculum.find(l => l.id === status.currentLevelId);
-      if (level) {
-        const stageGroup = level.stages.find(s => s.id === status.currentStageId);
-        return { level, stageGroup: stageGroup || level.stages[0] };
-      }
-    }
-    // Fallback: use levelId/stageId from the student's user document
+
+    // Read from users document only (single source of truth)
     const student = students.find(s => s.id === studentId);
     if (student?.levelId) {
       const level = quranCurriculum.find(l => l.id === student.levelId);
@@ -480,8 +478,23 @@ const StudentAchievements = ({ embedded, externalStudents, externalSessionDate, 
 
     const student = students.find(s => s.id === selectedStudent);
     const { level, stageGroup } = getStudentLevel(selectedStudent);
-    const surah = stageGroup.surahs.find(s => s.id === selectedSurah);
+    const surah = availableSurahs.find(s => s.id === selectedSurah);
     if (!student || !surah) return;
+
+    // Find the actual level/stage location of this surah (for far_review it may differ from student's current)
+    let surahLevel = level;
+    let surahStageGroup = stageGroup;
+    if (selectedRecitationType === 'far_review') {
+      for (const l of quranCurriculum) {
+        for (const sg of l.stages) {
+          if (sg.surahs.some(s => s.id === selectedSurah)) {
+            surahLevel = l;
+            surahStageGroup = sg;
+            break;
+          }
+        }
+      }
+    }
 
     // Calculate points
     let points = 0;
@@ -509,12 +522,12 @@ const StudentAchievements = ({ embedded, externalStudents, externalSessionDate, 
         challengeType: selectedRecitationType,
         challengeContent: `${getRecitationTypeLabel(selectedRecitationType)}: سورة ${surah.name}`,
         challengePassed,
-        levelId: level.id,
-        levelName: level.name,
+        levelId: surahLevel.id,
+        levelName: surahLevel.name,
         stageId: surah.id,
         stageName: surah.name,
-        stageGroupId: stageGroup.id,
-        stageGroupName: stageGroup.name,
+        stageGroupId: surahStageGroup.id,
+        stageGroupName: surahStageGroup.name,
         points,
         teacherId: userProfile?.uid || '',
         studyPeriodId: currentStudyPeriod?.id || '',
@@ -528,84 +541,10 @@ const StudentAchievements = ({ embedded, externalStudents, externalSessionDate, 
         setPendingHomework(null);
       }
 
-      // Check if surah is now fully memorized and handle stage/level advancement
-      if (challengePassed && selectedRecitationType === 'memorization') {
-        const newFrom = parseInt(fromAya);
-        const newTo = parseInt(toAya);
-        let newCovered = new Set<number>();
-        // Existing covered
-        const relevant = achievements.filter(
-          a => a.studentId === selectedStudent && a.stageId === surah.id && a.challengeType === 'memorization' && a.challengePassed
-        );
-        relevant.forEach(a => {
-          const f = parseInt(a.fromAya || '1');
-          const t = parseInt(a.toAya || '1');
-          for (let i = f; i <= t; i++) newCovered.add(i);
-        });
-        for (let i = newFrom; i <= newTo; i++) newCovered.add(i);
+      showMessage('success', challengePassed ? 'تم تسجيل التحصيل بنجاح' : 'تم تسجيل المحاولة - يحتاج إعادة');
 
-        if (newCovered.size >= surah.ayahCount) {
-          // Surah fully memorized! Check if all surahs in the current stage group are done
-          let allSurahsInStageDone = true;
-          for (const s of stageGroup.surahs) {
-            if (s.id === surah.id) continue; // already checked above
-            if (!isSurahFullyMemorized(selectedStudent, s.id)) {
-              allSurahsInStageDone = false;
-              break;
-            }
-          }
-
-          if (allSurahsInStageDone) {
-            // All surahs in current stage group memorized!
-            const nextResult = getNextStage(level.id, stageGroup.id);
-            
-            if (nextResult.stage) {
-              // Move to next stage group within the same level
-              const statusId = studentStatuses[selectedStudent]?.id;
-              if (statusId) {
-                await updateDoc(doc(db, 'studentPeriodStatuses', statusId), {
-                  currentStageId: nextResult.stage.id,
-                  currentStageName: nextResult.stage.name,
-                });
-              }
-              await updateDoc(doc(db, 'users', selectedStudent), {
-                stageId: nextResult.stage.id,
-                stageName: nextResult.stage.name,
-              });
-              showMessage('success', `تم إتمام ${stageGroup.name} والانتقال إلى ${nextResult.stage.name}`);
-            } else {
-              // Last stage in level — check if entire level is done
-              // Level complete!
-              const levelBonusData = {
-                ...achievementData,
-                challengeType: 'level_completion',
-                challengeContent: `إتمام ${level.name}`,
-                points: POINTS_SYSTEM.LEVEL_COMPLETION,
-              };
-              await addDoc(collection(db, 'student_achievements'), levelBonusData);
-              
-              // Set status to pending_supervisor
-              const statusId = studentStatuses[selectedStudent]?.id;
-              if (statusId) {
-                await updateDoc(doc(db, 'studentPeriodStatuses', statusId), {
-                  status: 'pending_supervisor',
-                });
-              }
-              await updateDoc(doc(db, 'users', selectedStudent), {
-                levelStatus: 'pending_supervisor',
-                pendingLevelUp: true,
-              });
-              showMessage('success', `تم إتمام ${level.name} بالكامل! في انتظار موافقة المشرف للانتقال للمستوى التالي`);
-            }
-          } else {
-            showMessage('success', `تم إتمام حفظ سورة ${surah.name}!`);
-          }
-        } else {
-          showMessage('success', 'تم تسجيل التحصيل بنجاح');
-        }
-      } else {
-        showMessage('success', challengePassed ? 'تم تسجيل التحصيل بنجاح' : 'تم تسجيل المحاولة - يحتاج إعادة');
-      }
+      // Update local achievements state so filtered surahs update immediately
+      setAchievements(prev => [...prev, { ...achievementData, id: 'temp_' + Date.now() }]);
 
       // Show homework form option
       setJustRecorded(true);
@@ -632,9 +571,8 @@ const StudentAchievements = ({ embedded, externalStudents, externalSessionDate, 
     const student = students.find(s => s.id === selectedStudent);
     if (!student) return;
 
-    const status = studentStatuses[selectedStudent];
-    const currentArabicLevelId = status?.currentArabicLevelId || 'level1';
-    const currentArabicLessonId = status?.currentArabicLessonId || 'l1_1';
+    const currentArabicLevelId = student.currentArabicLevelId || student.levelId || 'level1';
+    const currentArabicLessonId = student.currentArabicLessonId || student.stageId || 'l1_1';
     
     const arabicLevel = arabicReadingCurriculum.find((l: ArabicLevel) => l.id === currentArabicLevelId);
     if (!arabicLevel) {
@@ -681,23 +619,25 @@ const StudentAchievements = ({ embedded, externalStudents, externalSessionDate, 
       if (arabicChallengePassed) {
         const nextResult = getNextArabicLesson(currentArabicLevelId, currentArabicLessonId);
         if (nextResult.lesson) {
-          const statusId = studentStatuses[selectedStudent]?.id;
-          if (statusId) {
-            await updateDoc(doc(db, 'studentPeriodStatuses', statusId), {
-              currentArabicLessonId: nextResult.lesson.id,
-            });
-          }
+          await updateDoc(doc(db, 'users', selectedStudent), {
+            currentArabicLessonId: nextResult.lesson.id,
+            stageId: nextResult.lesson.id,
+            stageName: nextResult.lesson.name,
+          });
+          setStudents(prev => prev.map(s => s.id === selectedStudent ? { ...s, currentArabicLessonId: nextResult.lesson!.id, stageId: nextResult.lesson!.id, stageName: nextResult.lesson!.name } : s));
           showMessage('success', `تم إتمام الدرس والانتقال إلى ${nextResult.lesson.name}`);
         } else {
           const nextLevel = getNextArabicLevel(currentArabicLevelId);
           if (nextLevel) {
-            const statusId = studentStatuses[selectedStudent]?.id;
-            if (statusId) {
-              await updateDoc(doc(db, 'studentPeriodStatuses', statusId), {
-                currentArabicLevelId: nextLevel.id,
-                currentArabicLessonId: nextLevel.lessons[0]?.id || 'l1_1',
-              });
-            }
+            await updateDoc(doc(db, 'users', selectedStudent), {
+              currentArabicLevelId: nextLevel.id,
+              currentArabicLessonId: nextLevel.lessons[0]?.id || 'l1_1',
+              levelId: nextLevel.id,
+              levelName: nextLevel.name,
+              stageId: nextLevel.lessons[0]?.id || 'l1_1',
+              stageName: nextLevel.lessons[0]?.name || '',
+            });
+            setStudents(prev => prev.map(s => s.id === selectedStudent ? { ...s, currentArabicLevelId: nextLevel.id, currentArabicLessonId: nextLevel.lessons[0]?.id, levelId: nextLevel.id, levelName: nextLevel.name } : s));
             // Level completion bonus
             const bonusData = {
               ...achievementData,
@@ -757,13 +697,39 @@ const StudentAchievements = ({ embedded, externalStudents, externalSessionDate, 
     ? getStudentLevel(selectedStudent)
     : { level: quranCurriculum[0], stageGroup: quranCurriculum[0].stages[0] };
 
-  // Get surahs from current stage group for dropdown
-  const availableSurahs = studentStageGroup?.surahs || [];
+  // Get surahs based on recitation type
+  const availableSurahs = (() => {
+    const currentSurahs = studentStageGroup?.surahs || [];
+    if (!selectedStudent) return currentSurahs;
 
-  // Arabic reading info
-  const arabicStatus = selectedStudent ? studentStatuses[selectedStudent] : null;
-  const currentArabicLevelId = arabicStatus?.currentArabicLevelId || 'level1';
-  const currentArabicLessonId = arabicStatus?.currentArabicLessonId || 'l1_1';
+    if (selectedRecitationType === 'memorization') {
+      // Only show surahs NOT yet fully memorized
+      return currentSurahs.filter(s => !isSurahFullyMemorized(selectedStudent, s.id));
+    }
+
+    if (selectedRecitationType === 'far_review') {
+      // Show ALL memorized surahs from ALL levels/stages
+      const allMemorized: QuranSurah[] = [];
+      for (const level of quranCurriculum) {
+        for (const stage of level.stages) {
+          for (const surah of stage.surahs) {
+            if (isSurahFullyMemorized(selectedStudent, surah.id)) {
+              allMemorized.push(surah);
+            }
+          }
+        }
+      }
+      return allMemorized;
+    }
+
+    // near_review: show current stage surahs (default)
+    return currentSurahs;
+  })();
+
+  // Arabic reading info (from users document)
+  const arabicStudentData = selectedStudent ? students.find(s => s.id === selectedStudent) : null;
+  const currentArabicLevelId = arabicStudentData?.currentArabicLevelId || arabicStudentData?.levelId || 'level1';
+  const currentArabicLessonId = arabicStudentData?.currentArabicLessonId || arabicStudentData?.stageId || 'l1_1';
   const currentArabicLevel = arabicReadingCurriculum.find((l: ArabicLevel) => l.id === currentArabicLevelId);
   const currentArabicLesson = currentArabicLevel?.lessons.find((ls: ArabicLesson) => ls.id === currentArabicLessonId);
 
@@ -779,6 +745,91 @@ const StudentAchievements = ({ embedded, externalStudents, externalSessionDate, 
   const isQuranTrack = studentTrackType === 'quran';
   const isArabicTrack = studentTrackType === 'arabic_reading';
   const isBothTracks = !isQuranTrack && !isArabicTrack;
+
+  // Stage fully memorized check (for nomination button)
+  const stageFullyMemorized = selectedStudent && memorizedCountInStage >= totalSurahsInStage && totalSurahsInStage > 0;
+
+  // Sort history table
+  const toggleHistorySort = (col: string) => {
+    if (historySortCol === col) {
+      setHistorySortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setHistorySortCol(col);
+      setHistorySortDir('desc');
+    }
+  };
+
+  const sortedStudentAchievements = [...studentAchievements].sort((a, b) => {
+    let valA: any, valB: any;
+    switch (historySortCol) {
+      case 'date': valA = new Date(a.date).getTime(); valB = new Date(b.date).getTime(); break;
+      case 'type': valA = a.challengeType || ''; valB = b.challengeType || ''; break;
+      case 'content': valA = a.challengeContent || a.portion || ''; valB = b.challengeContent || b.portion || ''; break;
+      case 'ayahs': valA = parseInt(a.fromAya || '0'); valB = parseInt(b.fromAya || '0'); break;
+      case 'rating': valA = a.rating || 0; valB = b.rating || 0; break;
+      case 'result': valA = a.challengePassed ? 1 : 0; valB = b.challengePassed ? 1 : 0; break;
+      case 'points': valA = (a as any).points || 0; valB = (b as any).points || 0; break;
+      default: valA = new Date(a.date).getTime(); valB = new Date(b.date).getTime();
+    }
+    if (valA < valB) return historySortDir === 'asc' ? -1 : 1;
+    if (valA > valB) return historySortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  // Handle edit achievement
+  const handleEditAchievement = async () => {
+    if (!editingAchievement) return;
+    try {
+      const { id, ...data } = editingAchievement;
+      await updateDoc(doc(db, 'student_achievements', id), {
+        challengeType: data.challengeType,
+        challengeContent: data.challengeContent,
+        fromAya: data.fromAya,
+        toAya: data.toAya,
+        rating: data.rating,
+        challengePassed: data.rating >= 4,
+        points: data.points,
+        date: data.date,
+      });
+      setAchievements(prev => prev.map(a => a.id === id ? { ...a, ...data, challengePassed: data.rating >= 4 } : a));
+      setEditingAchievement(null);
+      showMessage('success', 'تم تعديل السجل بنجاح');
+    } catch (err) {
+      console.error('Error updating achievement:', err);
+      showMessage('error', 'حدث خطأ أثناء التعديل');
+    }
+  };
+
+  // Check if student is already nominated (from users document only)
+  const isStudentNominated = selectedStudent &&
+    students.find(s => s.id === selectedStudent)?.levelStatus === 'pending_supervisor';
+
+  // Nominate student for exam
+  const handleNominateForExam = async () => {
+    if (!selectedStudent) return;
+    try {
+      const { level, stageGroup } = getStudentLevel(selectedStudent);
+      const nextStageResult = getNextStage(level.id, stageGroup.id);
+      const isLevelUp = !nextStageResult.stage;
+
+      // Update users document only (single source of truth)
+      await updateDoc(doc(db, 'users', selectedStudent), {
+        levelStatus: 'pending_supervisor',
+        pendingLevelUp: isLevelUp,
+        pendingStageId: nextStageResult.stage?.id || null,
+        pendingStageName: nextStageResult.stage?.name || null,
+        pendingNextLevelId: isLevelUp ? (nextStageResult.newLevel?.id || null) : null,
+        pendingNextLevelName: isLevelUp ? (nextStageResult.newLevel?.name || null) : null,
+      });
+
+      // Update local students state
+      setStudents(prev => prev.map(s => s.id === selectedStudent ? { ...s, levelStatus: 'pending_supervisor' } : s));
+      showMessage('success', 'تم ترشيح الطالب للامتحان بنجاح');
+    } catch (err) {
+      console.error('Error nominating student:', err);
+      showMessage('error', 'حدث خطأ أثناء ترشيح الطالب');
+    }
+  };
 
   if (loading) {
     return <div className="achievements-container"><div className="loading">جاري التحميل...</div></div>;
@@ -872,6 +923,15 @@ const StudentAchievements = ({ embedded, externalStudents, externalSessionDate, 
                 <span className="sa-memorized-tag">
                   السور المحفوظة (المرحلة): {memorizedCountInStage} / {totalSurahsInStage}
                 </span>
+                {stageFullyMemorized && (
+                  isStudentNominated ? (
+                    <span className="btn-nominated">✅ تم الترشيح</span>
+                  ) : (
+                    <button className="btn-nominate-exam" onClick={handleNominateForExam}>
+                      📝 ترشيح لامتحان
+                    </button>
+                  )
+                )}
                 <span className="sa-memorized-tag">
                   السور المحفوظة (المستوى): {memorizedCountInLevel} / {totalSurahsInLevel}
                 </span>
@@ -939,7 +999,7 @@ const StudentAchievements = ({ embedded, externalStudents, externalSessionDate, 
                 <label>نوع التسميع:</label>
                 <select
                   value={selectedRecitationType}
-                  onChange={(e) => setSelectedRecitationType(e.target.value as RecitationType)}
+                  onChange={(e) => { setSelectedRecitationType(e.target.value as RecitationType); setSelectedSurah(''); }}
                 >
                   <option value="memorization">حفظ</option>
                   <option value="near_review">مراجعة قريبة</option>
@@ -1172,8 +1232,8 @@ const StudentAchievements = ({ embedded, externalStudents, externalSessionDate, 
             </div>
           )}
 
-          {/* Achievement History - hidden in embedded mode */}
-          {!embedded && <div className="achievements-history">
+          {/* Achievement History */}
+          <div className="achievements-history">
             <h3>سجل التحصيل ({studentAchievements.length})</h3>
             {studentAchievements.length === 0 ? (
               <p className="no-data">لا توجد سجلات بعد</p>
@@ -1182,20 +1242,20 @@ const StudentAchievements = ({ embedded, externalStudents, externalSessionDate, 
                 <table className="achievements-table">
                   <thead>
                     <tr>
-                      <th>التاريخ</th>
-                      <th>النوع</th>
-                      <th>المحتوى</th>
-                      <th>الآيات</th>
-                      <th>التقييم</th>
-                      <th>النتيجة</th>
-                      <th>النقاط</th>
+                      <th className="sortable-th" onClick={() => toggleHistorySort('date')}>التاريخ {historySortCol === 'date' ? (historySortDir === 'desc' ? '▼' : '▲') : ''}</th>
+                      <th className="sortable-th" onClick={() => toggleHistorySort('type')}>النوع {historySortCol === 'type' ? (historySortDir === 'desc' ? '▼' : '▲') : ''}</th>
+                      <th className="sortable-th" onClick={() => toggleHistorySort('content')}>المحتوى {historySortCol === 'content' ? (historySortDir === 'desc' ? '▼' : '▲') : ''}</th>
+                      <th className="sortable-th" onClick={() => toggleHistorySort('ayahs')}>الآيات {historySortCol === 'ayahs' ? (historySortDir === 'desc' ? '▼' : '▲') : ''}</th>
+                      <th className="sortable-th" onClick={() => toggleHistorySort('rating')}>التقييم {historySortCol === 'rating' ? (historySortDir === 'desc' ? '▼' : '▲') : ''}</th>
+                      <th className="sortable-th" onClick={() => toggleHistorySort('result')}>النتيجة {historySortCol === 'result' ? (historySortDir === 'desc' ? '▼' : '▲') : ''}</th>
+                      <th className="sortable-th" onClick={() => toggleHistorySort('points')}>النقاط {historySortCol === 'points' ? (historySortDir === 'desc' ? '▼' : '▲') : ''}</th>
                       <th>إجراءات</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {studentAchievements.map(a => (
+                    {sortedStudentAchievements.map(a => (
                       <tr key={a.id} className={a.challengePassed ? 'passed' : 'failed'}>
-                        <td>{new Date(a.date).toLocaleDateString('ar-SA')}</td>
+                        <td>{new Date(a.date).toLocaleDateString('ar-SA')} {new Date(a.date).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}</td>
                         <td>{a.challengeType === 'memorization' ? 'حفظ' :
                              a.challengeType === 'near_review' ? 'مراجعة قريبة' :
                              a.challengeType === 'far_review' ? 'مراجعة بعيدة' :
@@ -1214,6 +1274,12 @@ const StudentAchievements = ({ embedded, externalStudents, externalSessionDate, 
                         <td>{(a as any).points || '-'}</td>
                         <td>
                           <button
+                            className="btn-edit-sm"
+                            onClick={() => setEditingAchievement({ ...a })}
+                          >
+                            تعديل
+                          </button>
+                          <button
                             className="btn-delete-sm"
                             onClick={() => a.id && handleDeleteClick(a.id)}
                           >
@@ -1226,8 +1292,42 @@ const StudentAchievements = ({ embedded, externalStudents, externalSessionDate, 
                 </table>
               </div>
             )}
-          </div>}
+          </div>
         </>
+      )}
+
+      {/* Edit Achievement Modal */}
+      {editingAchievement && (
+        <div className="modal-overlay" onClick={() => setEditingAchievement(null)}>
+          <div className="modal-content edit-modal" onClick={e => e.stopPropagation()}>
+            <h3>تعديل سجل التحصيل</h3>
+            <div className="edit-form">
+              <label>التاريخ:</label>
+              <input type="date" value={editingAchievement.date} onChange={e => setEditingAchievement({...editingAchievement, date: e.target.value})} />
+
+              <label>النوع:</label>
+              <select value={editingAchievement.challengeType} onChange={e => setEditingAchievement({...editingAchievement, challengeType: e.target.value})}>
+                <option value="memorization">حفظ</option>
+                <option value="near_review">مراجعة قريبة</option>
+                <option value="far_review">مراجعة بعيدة</option>
+              </select>
+
+              <label>من الآية:</label>
+              <input type="number" min="1" value={editingAchievement.fromAya || ''} onChange={e => setEditingAchievement({...editingAchievement, fromAya: e.target.value})} />
+
+              <label>إلى الآية:</label>
+              <input type="number" min="1" value={editingAchievement.toAya || ''} onChange={e => setEditingAchievement({...editingAchievement, toAya: e.target.value})} />
+
+              <label>التقييم (1-10):</label>
+              <input type="number" min="1" max="10" value={editingAchievement.rating || 0} onChange={e => setEditingAchievement({...editingAchievement, rating: parseInt(e.target.value) || 0})} />
+
+              <div className="edit-actions">
+                <button className="btn-save" onClick={handleEditAchievement}>حفظ التعديلات</button>
+                <button className="btn-cancel" onClick={() => setEditingAchievement(null)}>إلغاء</button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

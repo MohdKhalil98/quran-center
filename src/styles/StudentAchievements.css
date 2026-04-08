@@ -419,6 +419,127 @@
   color: white;
 }
 
+.btn-edit-sm {
+  padding: 4px 12px;
+  background: #e3f2fd;
+  color: #1565c0;
+  border: 1px solid #90caf9;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+  margin-left: 4px;
+}
+
+.btn-edit-sm:hover {
+  background: #1976d2;
+  color: white;
+}
+
+/* Sortable table headers */
+.sortable-th {
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s;
+}
+
+.sortable-th:hover {
+  background: rgba(255,255,255,0.15) !important;
+}
+
+/* Nominate button */
+.btn-nominate-exam {
+  padding: 6px 16px;
+  background: #fff3e0;
+  color: #e65100;
+  border: 1px solid #ffcc80;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: bold;
+  transition: all 0.2s;
+}
+
+.btn-nominate-exam:hover {
+  background: #ff9800;
+  color: white;
+}
+
+.btn-nominated {
+  padding: 6px 16px;
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #a5d6a7;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: bold;
+  display: inline-block;
+}
+
+/* Edit Modal */
+.edit-modal {
+  max-width: 450px;
+  width: 90%;
+}
+
+.edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.edit-form label {
+  font-weight: bold;
+  margin-top: 4px;
+}
+
+.edit-form input,
+.edit-form select {
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-family: inherit;
+}
+
+.edit-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  justify-content: flex-end;
+}
+
+.btn-save {
+  padding: 8px 24px;
+  background: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: bold;
+}
+
+.btn-save:hover {
+  background: #388e3c;
+}
+
+.btn-cancel {
+  padding: 8px 24px;
+  background: #9e9e9e;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.btn-cancel:hover {
+  background: #757575;
+}
+
 /* Auto Result (Pass/Retry) */
 .auto-result {
   font-size: 1.1rem;

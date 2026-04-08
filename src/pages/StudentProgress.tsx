@@ -3,7 +3,7 @@ import { collection, getDocs, query, where, updateDoc, doc, orderBy } from 'fire
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { arabicReadingCurriculum, getNextLevel as getNextArabicLevel } from '../data/arabicReadingCurriculum';
-import quranCurriculum, { getAllSurahsInLevel } from '../data/quranCurriculum';
+import quranCurriculum, { getAllSurahsInLevel, getNextStage } from '../data/quranCurriculum';
 import '../styles/StudentProgress.css';
 
 interface Group {
@@ -38,8 +38,13 @@ interface PendingStudent {
   name: string;
   levelId?: string;
   levelName?: string;
+  stageId?: string;
   stageName?: string;
   pendingLevelUp?: boolean;
+  pendingStageId?: string;
+  pendingStageName?: string;
+  pendingNextLevelId?: string;
+  pendingNextLevelName?: string;
   totalPoints?: number;
   completedLevels?: number;
   groupName: string;
@@ -72,6 +77,8 @@ const StudentProgress = () => {
   const [pendingLevelStudents, setPendingLevelStudents] = useState<PendingStudent[]>([]);
   const [curriculumLevels, setCurriculumLevels] = useState<CurriculumLevel[]>([]);
   const [processingUid, setProcessingUid] = useState<string | null>(null);
+  const [confirmStudent, setConfirmStudent] = useState<PendingStudent | null>(null);
+  const [approvalMessage, setApprovalMessage] = useState<string | null>(null);
   const [studentProgressList, setStudentProgressList] = useState<StudentProgressItem[]>([]);
   const [progressSearchTerm, setProgressSearchTerm] = useState<string>('');
   const [progressFilterCenter, setProgressFilterCenter] = useState<string>('all');
@@ -145,8 +152,13 @@ const StudentProgress = () => {
             name: data.name || 'غير محدد',
             levelId: data.levelId,
             levelName: data.levelName,
+            stageId: data.stageId,
             stageName: data.stageName,
             pendingLevelUp: data.pendingLevelUp,
+            pendingStageId: data.pendingStageId,
+            pendingStageName: data.pendingStageName,
+            pendingNextLevelId: data.pendingNextLevelId,
+            pendingNextLevelName: data.pendingNextLevelName,
             totalPoints: data.totalPoints,
             completedLevels: data.completedLevels,
             groupName: group?.name || '-',
@@ -243,72 +255,140 @@ const StudentProgress = () => {
     setLoading(false);
   };
 
-  // اعتماد الانتقال للمستوى التالي
+  // اعتماد الانتقال
   const handleLevelApprove = async (student: PendingStudent) => {
-    const message = 'هل أنت متأكد من اعتماد انتقال الطالب للمستوى التالي؟';
-    if (!window.confirm(message)) return;
+    setConfirmStudent(student);
+  };
+
+  const executeApproval = async () => {
+    const student = confirmStudent;
+    if (!student) return;
+    setConfirmStudent(null);
 
     setProcessingUid(student.uid);
     try {
+      // Common fields to clear after approval (users document is the single source of truth)
+      const clearPendingFields = {
+        levelStatus: 'in-progress',
+        pendingLevelUp: null,
+        pendingStageId: null,
+        pendingStageName: null,
+        pendingNextLevelId: null,
+        pendingNextLevelName: null,
+      };
+
       if (student.trackType === 'arabic_reading') {
         const nextLevel = student.levelId ? getNextArabicLevel(student.levelId) : null;
         if (nextLevel) {
           await updateDoc(doc(db, 'users', student.uid), {
+            ...clearPendingFields,
             levelId: nextLevel.id,
             levelName: nextLevel.name,
             stageId: nextLevel.lessons[0].id,
             stageName: nextLevel.lessons[0].name,
-            stageStatus: null,
-            pendingLevelUp: null,
+            currentArabicLevelId: nextLevel.id,
+            currentArabicLessonId: nextLevel.lessons[0].id,
             completedLevels: (student.completedLevels || 0) + 1,
             totalPoints: (student.totalPoints || 0) + 200
           });
+          setApprovalMessage(`تم اعتماد انتقال الطالب ${student.name} إلى ${nextLevel.name}`);
         } else {
           await updateDoc(doc(db, 'users', student.uid), {
-            stageStatus: null,
-            pendingLevelUp: null,
+            ...clearPendingFields,
+            levelStatus: 'completed',
             completedCurriculum: true,
             completedLevels: arabicReadingCurriculum.length,
             totalPoints: (student.totalPoints || 0) + 500
           });
+          setApprovalMessage(`تم اعتماد إتمام الطالب ${student.name} لجميع المستويات!`);
         }
       } else {
-        const currentLevel = curriculumLevels.find(l => l.id === student.levelId);
-        const currentLevelOrder = currentLevel?.order || 1;
-        const nextLevel = curriculumLevels.find(l => l.order === currentLevelOrder + 1);
+        // Quran track
+        if (student.pendingStageId) {
+          // === انتقال مرحلة (داخل نفس المستوى) ===
+          await updateDoc(doc(db, 'users', student.uid), {
+            ...clearPendingFields,
+            stageId: student.pendingStageId,
+            stageName: student.pendingStageName,
+            totalPoints: (student.totalPoints || 0) + 100
+          });
+          setApprovalMessage(`تم اعتماد انتقال الطالب ${student.name} إلى ${student.pendingStageName}`);
 
-        if (nextLevel && nextLevel.stages && nextLevel.stages.length > 0) {
-          const firstStage = nextLevel.stages.sort((a, b) => a.order - b.order)[0];
-          await updateDoc(doc(db, 'users', student.uid), {
-            levelId: nextLevel.id,
-            levelName: nextLevel.name,
-            stageId: firstStage.id,
-            stageName: firstStage.name,
-            levelStatus: 'in-progress',
-            stageStatus: null,
-            pendingLevelUp: null,
-            currentChallenge: 'memorization',
-            completedLevels: (student.completedLevels || 0) + 1,
-            totalPoints: (student.totalPoints || 0) + 200
-          });
+        } else if (student.pendingLevelUp && student.pendingNextLevelId) {
+          // === انتقال مستوى (المستوى التالي محدد من الترشيح) ===
+          const nextLevel = quranCurriculum.find(l => l.id === student.pendingNextLevelId);
+          const firstStage = nextLevel?.stages[0];
+          if (nextLevel && firstStage) {
+            await updateDoc(doc(db, 'users', student.uid), {
+              ...clearPendingFields,
+              levelId: nextLevel.id,
+              levelName: nextLevel.name,
+              stageId: firstStage.id,
+              stageName: firstStage.name,
+              completedLevels: (student.completedLevels || 0) + 1,
+              totalPoints: (student.totalPoints || 0) + 200
+            });
+            setApprovalMessage(`تم اعتماد انتقال الطالب ${student.name} إلى ${nextLevel.name}`);
+          }
+        } else if (student.pendingLevelUp) {
+          // === انتقال مستوى (بحث تلقائي) ===
+          const nextResult = getNextStage(student.levelId || 'level1', student.stageId || '');
+          if (nextResult.newLevel) {
+            const firstStage = nextResult.newLevel.stages[0];
+            await updateDoc(doc(db, 'users', student.uid), {
+              ...clearPendingFields,
+              levelId: nextResult.newLevel.id,
+              levelName: nextResult.newLevel.name,
+              stageId: firstStage.id,
+              stageName: firstStage.name,
+              completedLevels: (student.completedLevels || 0) + 1,
+              totalPoints: (student.totalPoints || 0) + 200
+            });
+            setApprovalMessage(`تم اعتماد انتقال الطالب ${student.name} إلى ${nextResult.newLevel.name}`);
+          } else {
+            await updateDoc(doc(db, 'users', student.uid), {
+              ...clearPendingFields,
+              levelStatus: 'completed',
+              completedCurriculum: true,
+              completedLevels: quranCurriculum.length,
+              totalPoints: (student.totalPoints || 0) + 500
+            });
+            setApprovalMessage(`تم اعتماد إتمام الطالب ${student.name} لجميع المستويات!`);
+          }
         } else {
-          await updateDoc(doc(db, 'users', student.uid), {
-            levelStatus: 'completed',
-            stageStatus: null,
-            pendingLevelUp: null,
-            completedLevels: curriculumLevels.length,
-            totalPoints: (student.totalPoints || 0) + 500
-          });
+          // === Fallback ===
+          const nextResult = getNextStage(student.levelId || 'level1', student.stageId || '');
+          if (nextResult.stage) {
+            await updateDoc(doc(db, 'users', student.uid), {
+              ...clearPendingFields,
+              stageId: nextResult.stage.id,
+              stageName: nextResult.stage.name,
+              totalPoints: (student.totalPoints || 0) + 100
+            });
+            setApprovalMessage(`تم اعتماد انتقال الطالب ${student.name} إلى ${nextResult.stage.name}`);
+          } else if (nextResult.newLevel) {
+            const firstStage = nextResult.newLevel.stages[0];
+            await updateDoc(doc(db, 'users', student.uid), {
+              ...clearPendingFields,
+              levelId: nextResult.newLevel.id,
+              levelName: nextResult.newLevel.name,
+              stageId: firstStage.id,
+              stageName: firstStage.name,
+              completedLevels: (student.completedLevels || 0) + 1,
+              totalPoints: (student.totalPoints || 0) + 200
+            });
+            setApprovalMessage(`تم اعتماد انتقال الطالب ${student.name} إلى ${nextResult.newLevel.name}`);
+          }
         }
       }
 
       setPendingLevelStudents(prev => prev.filter(s => s.uid !== student.uid));
       setStudentProgressList(prev => prev.map(s =>
-        s.uid === student.uid ? { ...s, isPending: false, progressPercent: 0 } : s
+        s.uid === student.uid ? { ...s, isPending: false } : s
       ));
     } catch (error) {
       console.error('Error approving:', error);
-      alert('حدث خطأ أثناء الاعتماد');
+      setApprovalMessage('حدث خطأ أثناء الاعتماد');
     } finally {
       setProcessingUid(null);
     }
@@ -364,7 +444,7 @@ const StudentProgress = () => {
                       {student.trackType === 'arabic_reading' && ' · 📖 قراءة عربية'}
                     </p>
                     <p className="sp-pending-card-target">
-                      ➡️ الانتقال إلى: <strong>المستوى التالي</strong>
+                      ➡️ الانتقال إلى: <strong>{student.pendingStageName || (student.pendingLevelUp ? 'المستوى التالي' : 'المرحلة التالية')}</strong>
                     </p>
                   </div>
                   <button
@@ -522,6 +602,37 @@ const StudentProgress = () => {
               </>
             );
           })()}
+        </div>
+      )}
+      {/* Confirmation Modal */}
+      {confirmStudent && (
+        <div className="modal-overlay" onClick={() => setConfirmStudent(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '450px', textAlign: 'center' }}>
+            <h3 style={{ marginBottom: '16px' }}>تأكيد الاعتماد</h3>
+            <p style={{ marginBottom: '20px', fontSize: '1.05rem' }}>
+              هل أنت متأكد من اعتماد انتقال الطالب <strong>{confirmStudent.name}</strong> إلى <strong>{confirmStudent.pendingStageName || (confirmStudent.pendingLevelUp ? 'المستوى التالي' : 'المرحلة التالية')}</strong>؟
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+              <button className="sp-approve-btn" onClick={executeApproval} style={{ padding: '10px 30px' }}>
+                ✅ اعتماد
+              </button>
+              <button onClick={() => setConfirmStudent(null)} style={{ padding: '10px 30px', background: '#9e9e9e', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Approval Message Box */}
+      {approvalMessage && (
+        <div className="modal-overlay" onClick={() => setApprovalMessage(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center' }}>
+            <p style={{ fontSize: '1.1rem', marginBottom: '20px', padding: '10px' }}>{approvalMessage}</p>
+            <button onClick={() => setApprovalMessage(null)} style={{ padding: '10px 40px', background: '#4caf50', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 'bold' }}>
+              حسناً
+            </button>
+          </div>
         </div>
       )}
     </section>

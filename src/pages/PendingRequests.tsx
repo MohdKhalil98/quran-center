@@ -350,18 +350,7 @@ const PendingRequests = () => {
             completedLevels: (student.completedLevels || 0) + 1,
             totalPoints: (student.totalPoints || 0) + 200
           });
-          // Also sync to studentPeriodStatuses
-          const statusSnap = await getDocs(query(collection(db, 'studentPeriodStatuses'), where('studentId', '==', student.uid)));
-          if (!statusSnap.empty) {
-            const statusDoc = statusSnap.docs[statusSnap.docs.length - 1];
-            await updateDoc(doc(db, 'studentPeriodStatuses', statusDoc.id), {
-              currentLevelId: nextLevel.id,
-              currentLevelName: nextLevel.name,
-              currentStageId: firstStage.id,
-              currentStageName: firstStage.name,
-              status: 'in-progress',
-            });
-          }
+          // users document is the single source of truth for level/stage data
           showMessage('success', 'تم الاعتماد', `تم اعتماد انتقال الطالب ${student.name} للمستوى التالي بنجاح`);
         } else {
           // Finished all levels

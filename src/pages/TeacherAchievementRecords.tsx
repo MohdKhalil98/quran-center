@@ -46,6 +46,9 @@ const TeacherAchievementRecords = () => {
   const [filterDateTo, setFilterDateTo] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Sorting
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
   // Delete
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmAction, setConfirmAction] = useState<() => void>(() => {});
@@ -151,6 +154,9 @@ const TeacherAchievementRecords = () => {
     })
     .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
 
+  // Sorting
+  const toggleSort = () => setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+
   // Apply filters
   const filteredAchievements = achievements.filter(a => {
     // Group filter
@@ -172,6 +178,13 @@ const TeacherAchievementRecords = () => {
       if (!name.includes(searchTerm.trim()) && !(a.challengeContent || '').includes(searchTerm.trim())) return false;
     }
     return true;
+  });
+
+  // Sort filtered results
+  const sortedAchievements = [...filteredAchievements].sort((a, b) => {
+    const dateA = new Date(a.date).getTime();
+    const dateB = new Date(b.date).getTime();
+    return sortDir === 'desc' ? dateB - dateA : dateA - dateB;
   });
 
   if (!isTeacher) {
@@ -278,8 +291,10 @@ const TeacherAchievementRecords = () => {
               <table className="achievements-table records-table">
                 <thead>
                   <tr>
+                    <th className="sortable" onClick={toggleSort} style={{ cursor: 'pointer' }}>
+                      التاريخ {sortDir === 'desc' ? '▼' : '▲'}
+                    </th>
                     <th>الطالب</th>
-                    <th>التاريخ</th>
                     <th>النوع</th>
                     <th>المحتوى</th>
                     <th>الآيات</th>
@@ -290,10 +305,10 @@ const TeacherAchievementRecords = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredAchievements.map(a => (
+                  {sortedAchievements.map(a => (
                     <tr key={a.id} className={a.challengePassed ? 'passed' : 'failed'}>
-                      <td className="student-name-cell">{a.studentName || studentMap.get(a.studentId)?.name || '-'}</td>
                       <td>{new Date(a.date).toLocaleDateString('ar-SA')}</td>
+                      <td className="student-name-cell">{a.studentName || studentMap.get(a.studentId)?.name || '-'}</td>
                       <td>{getTypeLabel(a.challengeType)}</td>
                       <td>{a.challengeContent || a.portion || '-'}</td>
                       <td>{a.fromAya && a.toAya ? `${a.fromAya} - ${a.toAya}` : '-'}</td>

@@ -35,6 +35,7 @@ export interface UserProfile {
   status?: 'pending_registration' | 'interview_scheduled' | 'waiting_teacher_approval' | 'approved' | 'rejected'; // للطلاب - حالة الموافقة
   
   // Progress Tracking - New Firebase-based curriculum
+  trackType?: 'quran' | 'arabic_reading'; // نوع المساق
   levelId?: string; // Firebase document ID for level
   levelName?: string;
   stageId?: string; // Firebase document ID for stage

@@ -71,9 +71,12 @@ const Students = () => {
     phone: '',
     levelId: '',
     levelName: '',
+    stageId: '',
+    stageName: '',
     groupId: '',
     centerId: ''
   });
+  const [editStages, setEditStages] = useState<{ id: string; name: string }[]>([]);
   const [editFilteredGroups, setEditFilteredGroups] = useState<Group[]>([]);
   const [saving, setSaving] = useState(false);
   // فلاتر جديدة
@@ -299,12 +302,27 @@ const Students = () => {
     const studentCenterId = student.centerId || '';
     const filteredGroupsForEdit = groups.filter(g => g.centerId === studentCenterId);
     setEditFilteredGroups(filteredGroupsForEdit);
-    
+
+    // تحميل المراحل الحالية للمستوى
+    if (student.levelId) {
+      if (isArabicReading) {
+        const levelData = arabicReadingCurriculum.find(l => l.id === student.levelId);
+        setEditStages(levelData?.lessons?.map(l => ({ id: l.id, name: l.name })) || []);
+      } else {
+        const levelData = quranCurriculum.find(l => l.id === student.levelId);
+        setEditStages(levelData?.stages?.map(s => ({ id: s.id, name: s.name })) || []);
+      }
+    } else {
+      setEditStages([]);
+    }
+
     setEditFormData({
       email: student.email || '',
       phone: student.phone || '',
       levelId: student.levelId || '',
       levelName: student.levelName || '',
+      stageId: student.stageId || '',
+      stageName: student.stageName || '',
       groupId: student.groupId || '',
       centerId: studentCenterId
     });
@@ -314,8 +332,9 @@ const Students = () => {
   const handleCloseEditModal = () => {
     setEditingStudent(null);
     setIsEditModalOpen(false);
-    setEditFormData({ email: '', phone: '', levelId: '', levelName: '', groupId: '', centerId: '' });
+    setEditFormData({ email: '', phone: '', levelId: '', levelName: '', stageId: '', stageName: '', groupId: '', centerId: '' });
     setEditFilteredGroups([]);
+    setEditStages([]);
   };
 
   // تحديث الحلقات عند تغيير المركز في نموذج التعديل
@@ -337,30 +356,43 @@ const Students = () => {
       const updateData: { [key: string]: string } = {};
       
       // المعلم والمشرف يمكنهم تعديل المستوى
-      if (editFormData.levelId && editFormData.levelId !== editingStudent.levelId) {
+      const levelChanged = editFormData.levelId && editFormData.levelId !== editingStudent.levelId;
+      if (levelChanged) {
         const selectedLevel = levels.find(l => l.id === editFormData.levelId);
         updateData.levelId = editFormData.levelId;
         updateData.levelName = selectedLevel?.name || '';
-        
-        // تحديد المرحلة الأولى بناءً على نوع المساق
-        let firstStage: { id: string; name: string };
-        if (currentTrackType === 'arabic_reading') {
-          const levelData = arabicReadingCurriculum.find(level => level.id === editFormData.levelId);
-          if (levelData && levelData.lessons && levelData.lessons.length > 0) {
-            firstStage = { id: levelData.lessons[0].id, name: levelData.lessons[0].name };
-            updateData.stageId = firstStage.id;
-            updateData.stageName = firstStage.name;
+
+        // إذا المشرف اختار مرحلة معينة، استخدمها. وإلا استخدم المرحلة الأولى
+        if ((isSupervisor || isAdmin) && editFormData.stageId) {
+          const selectedStage = editStages.find(s => s.id === editFormData.stageId);
+          if (selectedStage) {
+            updateData.stageId = selectedStage.id;
+            updateData.stageName = selectedStage.name;
           }
         } else {
-          const levelData = quranCurriculum.find(juz => juz.id === editFormData.levelId);
-          if (levelData && levelData.stages && levelData.stages.length > 0) {
-            const firstSurah = levelData.stages[0].surahs[0];
-            if (firstSurah) {
-              firstStage = { id: levelData.stages[0].id, name: levelData.stages[0].name };
-              updateData.stageId = firstStage.id;
-              updateData.stageName = firstStage.name;
+          // تحديد المرحلة الأولى بناءً على نوع المساق
+          if (currentTrackType === 'arabic_reading') {
+            const levelData = arabicReadingCurriculum.find(level => level.id === editFormData.levelId);
+            if (levelData && levelData.lessons && levelData.lessons.length > 0) {
+              updateData.stageId = levelData.lessons[0].id;
+              updateData.stageName = levelData.lessons[0].name;
+            }
+          } else {
+            const levelData = quranCurriculum.find(juz => juz.id === editFormData.levelId);
+            if (levelData && levelData.stages && levelData.stages.length > 0) {
+              updateData.stageId = levelData.stages[0].id;
+              updateData.stageName = levelData.stages[0].name;
             }
           }
+        }
+      }
+
+      // المشرف يمكنه تعديل المرحلة بدون تغيير المستوى
+      if (!levelChanged && (isSupervisor || isAdmin) && editFormData.stageId && editFormData.stageId !== editingStudent.stageId) {
+        const selectedStage = editStages.find(s => s.id === editFormData.stageId);
+        if (selectedStage) {
+          updateData.stageId = selectedStage.id;
+          updateData.stageName = selectedStage.name;
         }
       }
       
@@ -1239,8 +1271,28 @@ const Students = () => {
                 <p><strong>رقم الهاتف:</strong> {selectedStudent.phone || '-'}</p>
                 <p><strong>الحلقة:</strong> {selectedStudent.groupName}</p>
                 <p><strong>المركز:</strong> {selectedStudent.centerName || 'غير محدد'}</p>
+                <p><strong>نوع المساق:</strong> {
+                  selectedStudent.trackType === 'arabic_reading' ? '📖 تأسيس القراءة العربية' :
+                  selectedStudent.trackType === 'quran' ? '📗 حفظ القرآن الكريم' :
+                  'غير محدد'
+                }</p>
+                <p><strong>المستوى:</strong> {selectedStudent.levelName || 'غير محدد'}</p>
+                <p><strong>المرحلة:</strong> {selectedStudent.stageName || 'غير محدد'}</p>
+                <p><strong>حالة المستوى:</strong>
+                  <span style={{
+                    marginRight: '10px',
+                    backgroundColor: selectedStudent.levelStatus === 'pending_supervisor' ? '#ff9800' : selectedStudent.levelStatus === 'completed' ? '#4caf50' : '#2196f3',
+                    color: 'white',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    fontSize: '0.85rem',
+                    display: 'inline-block'
+                  }}>
+                    {selectedStudent.levelStatus === 'pending_supervisor' ? '⏳ بانتظار موافقة المشرف' : selectedStudent.levelStatus === 'completed' ? '✅ مكتمل' : '📘 قيد الدراسة'}
+                  </span>
+                </p>
                 <p><strong>حالة التفعيل:</strong> <span className={`status-badge ${selectedStudent.active ? 'active' : 'inactive'}`}>{selectedStudent.active ? '✅ نشط' : '⏸️ معطل'}</span></p>
-                <p><strong>حالة التسجيل:</strong> 
+                <p><strong>حالة التسجيل:</strong>
                   <span style={{
                     marginRight: '10px',
                     backgroundColor: selectedStudent.status === 'approved' ? '#4caf50' : selectedStudent.status === 'waiting_teacher_approval' ? '#ff9800' : selectedStudent.status === 'pending_registration' ? '#2196f3' : '#9e9e9e',
@@ -1253,7 +1305,7 @@ const Students = () => {
                     {selectedStudent.status === 'approved' ? '✅ معتمد' : selectedStudent.status === 'waiting_teacher_approval' ? '⏳ بانتظار الموافقة' : selectedStudent.status === 'pending_registration' ? '📝 قيد التسجيل' : selectedStudent.status || 'غير محدد'}
                   </span>
                 </p>
-                <p><strong>تاريخ التسجيل:</strong> {new Date(selectedStudent.createdAt).toLocaleDateString('ar-EG')}</p>
+                <p><strong>تاريخ التسجيل:</strong> {selectedStudent.createdAt ? new Date(selectedStudent.createdAt).toLocaleDateString('ar-EG') : 'غير محدد'}</p>
               </div>
             </div>
             <div className="modal-footer">
@@ -1506,10 +1558,27 @@ const Students = () => {
                   value={editFormData.levelId}
                   onChange={(e) => {
                     const selectedLevel = levels.find(l => l.id === e.target.value);
-                    setEditFormData({ 
-                      ...editFormData, 
-                      levelId: e.target.value,
-                      levelName: selectedLevel?.name || ''
+                    const newLevelId = e.target.value;
+
+                    // تحديث المراحل بناءً على المستوى الجديد
+                    let newStages: { id: string; name: string }[] = [];
+                    if (newLevelId) {
+                      if (currentTrackType === 'arabic_reading') {
+                        const levelData = arabicReadingCurriculum.find(l => l.id === newLevelId);
+                        newStages = levelData?.lessons?.map(l => ({ id: l.id, name: l.name })) || [];
+                      } else {
+                        const levelData = quranCurriculum.find(l => l.id === newLevelId);
+                        newStages = levelData?.stages?.map(s => ({ id: s.id, name: s.name })) || [];
+                      }
+                    }
+                    setEditStages(newStages);
+
+                    setEditFormData({
+                      ...editFormData,
+                      levelId: newLevelId,
+                      levelName: selectedLevel?.name || '',
+                      stageId: newStages.length > 0 ? newStages[0].id : '',
+                      stageName: newStages.length > 0 ? newStages[0].name : ''
                     });
                   }}
                 >
@@ -1520,10 +1589,41 @@ const Students = () => {
                     </option>
                   ))}
                 </select>
-                <small className="help-text">
-                  💡 عند تغيير المستوى، سيتم البدء من المرحلة الأولى في المستوى الجديد
-                </small>
+                {!(isSupervisor || isAdmin) && (
+                  <small className="help-text">
+                    💡 عند تغيير المستوى، سيتم البدء من المرحلة الأولى في المستوى الجديد
+                  </small>
+                )}
               </div>
+
+              {/* المشرف فقط يمكنه تعديل المرحلة */}
+              {(isSupervisor || isAdmin) && editStages.length > 0 && (
+                <div className="form-group">
+                  <label>📋 المرحلة الحالية:</label>
+                  <select
+                    className="form-control"
+                    value={editFormData.stageId}
+                    onChange={(e) => {
+                      const selectedStage = editStages.find(s => s.id === e.target.value);
+                      setEditFormData({
+                        ...editFormData,
+                        stageId: e.target.value,
+                        stageName: selectedStage?.name || ''
+                      });
+                    }}
+                  >
+                    <option value="">-- اختر المرحلة --</option>
+                    {editStages.map((stage) => (
+                      <option key={stage.id} value={stage.id}>
+                        {stage.name}
+                      </option>
+                    ))}
+                  </select>
+                  <small className="help-text">
+                    💡 يمكنك تغيير المرحلة التي يدرسها الطالب حالياً
+                  </small>
+                </div>
+              )}
               
               {isTeacher && (
                 <div style={{ 

@@ -708,18 +708,20 @@ const StudentAchievements = ({ embedded, externalStudents, externalSessionDate, 
     }
 
     if (selectedRecitationType === 'far_review') {
-      // Show ALL memorized surahs from ALL levels/stages
-      const allMemorized: QuranSurah[] = [];
+      // Show ALL surahs from previous levels/stages up to and including student's current stage
+      if (!studentLevel || !studentStageGroup) return currentSurahs;
+      const previousSurahs: QuranSurah[] = [];
       for (const level of quranCurriculum) {
+        if (level.order > studentLevel.order) break;
         for (const stage of level.stages) {
+          // إذا كنا في نفس مستوى الطالب، توقف عند مرحلته (شاملة)
+          if (level.id === studentLevel.id && stage.order > studentStageGroup.order) break;
           for (const surah of stage.surahs) {
-            if (isSurahFullyMemorized(selectedStudent, surah.id)) {
-              allMemorized.push(surah);
-            }
+            previousSurahs.push(surah);
           }
         }
       }
-      return allMemorized;
+      return previousSurahs;
     }
 
     // near_review: show current stage surahs (default)

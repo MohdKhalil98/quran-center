@@ -105,12 +105,15 @@
   border-radius: 12px;
   overflow-x: auto;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  -webkit-overflow-scrolling: touch;
 }
 
 .sa-table {
   width: 100%;
+  min-width: 900px;
   border-collapse: collapse;
-  font-size: 0.9rem;
+  font-size: 0.88rem;
+  table-layout: auto;
 }
 
 .sa-table thead {
@@ -118,19 +121,21 @@
 }
 
 .sa-table th {
-  padding: 14px 16px;
+  padding: 14px 14px;
   color: #fff;
   font-weight: 600;
   text-align: right;
   white-space: nowrap;
-  font-size: 0.88rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.01em;
 }
 
 .sa-table td {
-  padding: 12px 16px;
+  padding: 11px 14px;
   border-bottom: 1px solid #f1f5f9;
   color: #334155;
   vertical-align: middle;
+  line-height: 1.5;
 }
 
 .sa-table tbody tr:hover {
@@ -139,6 +144,14 @@
 
 .sa-table tbody tr:last-child td {
   border-bottom: none;
+}
+
+.sa-table tbody tr:nth-child(even) {
+  background: #fafbfc;
+}
+
+.sa-table tbody tr:nth-child(even):hover {
+  background: #f1f5f9;
 }
 
 /* Sortable headers */
@@ -155,23 +168,47 @@
 /* Cell styles */
 .sa-date-cell {
   white-space: nowrap;
-  font-weight: 500;
+  font-weight: 600;
   color: #6366f1;
+  font-size: 0.84rem;
+  min-width: 110px;
 }
 
 .sa-name-cell {
   font-weight: 600;
   color: #1e293b;
+  white-space: nowrap;
+  min-width: 120px;
 }
 
 .sa-ward-cell {
-  max-width: 280px;
+  min-width: 180px;
+  max-width: 320px;
+  line-height: 1.6;
+  font-size: 0.85rem;
+}
+
+.sa-result-cell {
+  white-space: nowrap;
+  text-align: center;
+}
+
+.sa-rating-cell {
+  white-space: nowrap;
+  text-align: center;
+  min-width: 70px;
+}
+
+.sa-group-cell,
+.sa-teacher-cell {
+  white-space: nowrap;
+  font-size: 0.84rem;
 }
 
 .sa-notes-cell {
-  max-width: 200px;
+  max-width: 180px;
   color: #94a3b8;
-  font-size: 0.83rem;
+  font-size: 0.82rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -261,20 +298,21 @@
   }
 
   .sa-table {
-    font-size: 0.82rem;
+    font-size: 0.8rem;
+    min-width: 750px;
   }
 
   .sa-table th,
   .sa-table td {
-    padding: 10px 10px;
+    padding: 9px 8px;
   }
 
   .sa-ward-cell {
-    max-width: 180px;
+    max-width: 160px;
   }
 
   .sa-notes-cell {
-    max-width: 120px;
+    max-width: 100px;
   }
 }
 

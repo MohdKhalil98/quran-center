@@ -5,7 +5,6 @@ import { db, secondaryAuth } from '../firebase';
 import { useAuth, UserProfile } from '../context/AuthContext';
 import { Navigate } from 'react-router-dom';
 import MessageBox from '../components/MessageBox';
-import quranCurriculum from '../data/quranCurriculum';
 import '../styles/PendingRequests.css';
 
 // New curriculum interfaces from Firebase
@@ -50,7 +49,6 @@ const PendingRequests = () => {
   const { isSupervisor, userProfile, getSupervisorCenterIds } = useAuth();
   const [pendingStudents, setPendingStudents] = useState<PendingStudent[]>([]);
   const [interviewStudents, setInterviewStudents] = useState<PendingStudent[]>([]);
-  const [pendingLevelApprovals, setPendingLevelApprovals] = useState<PendingStudent[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [curriculumLevels, setCurriculumLevels] = useState<CurriculumLevel[]>([]);
@@ -309,76 +307,10 @@ const PendingRequests = () => {
       const interviewScheduled = allStudents.filter(s => s.status === 'interview_scheduled');
       setInterviewStudents(interviewScheduled);
 
-      // Filter for Stage/Level Advancement Requests (either stageStatus OR levelStatus)
-      const stageRequests = allStudents.filter(s => s.stageStatus === 'pending_supervisor' || s.levelStatus === 'pending_supervisor');
-      setPendingLevelApprovals(stageRequests);
-
     } catch (error) {
       console.error('Error fetching students:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleLevelApprove = async (student: PendingStudent) => {
-    const isLevelUp = student.pendingLevelUp === true;
-    const message = isLevelUp 
-      ? 'هل أنت متأكد من اعتماد انتقال الطالب للمستوى التالي؟'
-      : 'هل أنت متأكد من اعتماد انتقال الطالب للمرحلة التالية؟';
-    
-    if (!window.confirm(message)) return;
-    
-    setProcessing(student.uid);
-    try {
-      if (isLevelUp) {
-        // Level advancement - Find next level from hardcoded curriculum
-        const currentLevel = quranCurriculum.find(l => l.id === student.levelId);
-        const currentLevelOrder = currentLevel?.order || 1;
-        const nextLevel = quranCurriculum.find(l => l.order === currentLevelOrder + 1);
-        
-        if (nextLevel && nextLevel.stages && nextLevel.stages.length > 0) {
-          const firstStage = nextLevel.stages.sort((a, b) => a.order - b.order)[0];
-          await updateDoc(doc(db, 'users', student.uid), {
-            levelId: nextLevel.id,
-            levelName: nextLevel.name,
-            stageId: firstStage.id,
-            stageName: firstStage.name,
-            levelStatus: 'in-progress',
-            stageStatus: null,
-            pendingLevelUp: null,
-            currentChallenge: 'memorization',
-            completedLevels: (student.completedLevels || 0) + 1,
-            totalPoints: (student.totalPoints || 0) + 200
-          });
-          // users document is the single source of truth for level/stage data
-          showMessage('success', 'تم الاعتماد', `تم اعتماد انتقال الطالب ${student.name} للمستوى التالي بنجاح`);
-        } else {
-          // Finished all levels
-          await updateDoc(doc(db, 'users', student.uid), {
-            levelStatus: 'completed',
-            stageStatus: null,
-            pendingLevelUp: null,
-            completedLevels: quranCurriculum.length,
-            totalPoints: (student.totalPoints || 0) + 500
-          });
-          showMessage('success', 'مبارك!', `أتم الطالب ${student.name} جميع المستويات بنجاح!\nهذا إنجاز عظيم!`);
-        }
-      } else {
-        // Stage advancement (within same level) - should not happen anymore
-        // Stages now transition automatically, only levels need approval
-        await updateDoc(doc(db, 'users', student.uid), {
-          stageStatus: null,
-          pendingLevelUp: null
-        });
-        showMessage('success', 'تم الاعتماد', 'تم اعتماد الطلب بنجاح');
-      }
-      
-      setPendingLevelApprovals(prev => prev.filter(s => s.uid !== student.uid));
-    } catch (error) {
-      console.error('Error approving:', error);
-      showMessage('error', 'خطأ', 'حدث خطأ أثناء الاعتماد. يرجى المحاولة مرة أخرى.');
-    } finally {
-      setProcessing(null);
     }
   };
 
@@ -1193,66 +1125,6 @@ const PendingRequests = () => {
           </>
         )}
       </div>
-
-      {/* Level/Stage Approvals Section */}
-      {pendingLevelApprovals.length > 0 && (
-        <div className="requests-section" style={{ marginTop: '2rem' }}>
-          <h2>🎓 طلبات الانتقال للمرحلة/المستوى التالي</h2>
-          
-          <div className="pending-count">
-            <span className="count-badge">{pendingLevelApprovals.length}</span>
-            طلب انتقال
-          </div>
-
-          <div className="pending-list">
-            {pendingLevelApprovals.map((student) => (
-              <div key={student.uid} className="pending-card">
-                <div className="pending-card-header">
-                  <div className="student-avatar">
-                    {student.name.charAt(0)}
-                  </div>
-                  <div className="student-info">
-                    <h3>{student.name}</h3>
-                    <span className="student-email">{student.personalId || 'غير محدد'}</span>
-                  </div>
-                  <span className="status-badge pending">بانتظار الاعتماد</span>
-                </div>
-
-                <div className="pending-card-body">
-                  <div className="info-row">
-                    <span className="info-label">📚 المستوى الحالي:</span>
-                    <span className="info-value">{student.levelName || 'المستوى الأول'}</span>
-                  </div>
-                  <div className="info-row">
-                    <span className="info-label">📖 المرحلة الحالية:</span>
-                    <span className="info-value">{student.stageName || 'غير محددة'}</span>
-                  </div>
-                  <div className="info-row">
-                    <span className="info-label">➡️ الانتقال إلى:</span>
-                    <span className="info-value" style={{ color: '#4caf50', fontWeight: 'bold' }}>
-                      {student.pendingLevelUp ? 'المستوى التالي' : 'المرحلة التالية'}
-                    </span>
-                  </div>
-                  <div className="info-row">
-                    <span className="info-label">⭐ النقاط:</span>
-                    <span className="info-value">{student.totalPoints || 0}</span>
-                  </div>
-                </div>
-
-                <div className="pending-card-actions">
-                  <button
-                    className="btn btn-approve"
-                    onClick={() => handleLevelApprove(student)}
-                    disabled={processing === student.uid}
-                  >
-                    {processing === student.uid ? '...' : (student.pendingLevelUp ? '✓ اعتماد للمستوى التالي' : '✓ اعتماد للمرحلة التالية')}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       </div>
 

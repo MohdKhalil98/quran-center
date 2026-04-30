@@ -392,15 +392,16 @@ const SupervisorAchievements = () => {
             <thead>
               <tr>
                 <th className="sa-sortable" onClick={() => handleSort('date')}>
-                  تاريخ التحصيل{getSortIcon('date')}
+                  التاريخ{getSortIcon('date')}
                 </th>
                 <th className="sa-sortable" onClick={() => handleSort('name')}>
-                  اسم الطالب{getSortIcon('name')}
+                  الطالب{getSortIcon('name')}
                 </th>
                 <th className="sa-sortable" onClick={() => handleSort('ward')}>
                   الورد المسجل{getSortIcon('ward')}
                 </th>
                 <th>النتيجة</th>
+                <th>التقييم</th>
                 <th>الحلقة</th>
                 <th>المعلم</th>
                 {centers.length > 1 && <th>المركز</th>}
@@ -413,11 +414,12 @@ const SupervisorAchievements = () => {
                   <td className="sa-date-cell">{formatDate(a.date)}</td>
                   <td className="sa-name-cell">{a.studentName}</td>
                   <td className="sa-ward-cell">{getFullWardDisplay(a)}</td>
-                  <td>{getPassedBadge(a.challengePassed)}</td>
-                  <td>{a.groupName}</td>
-                  <td>{a.teacherName}</td>
+                  <td className="sa-result-cell">{getPassedBadge(a.challengePassed)}</td>
+                  <td className="sa-rating-cell">{getRatingStars(a.rating) || '-'}</td>
+                  <td className="sa-group-cell">{a.groupName}</td>
+                  <td className="sa-teacher-cell">{a.teacherName}</td>
                   {centers.length > 1 && <td>{a.centerName}</td>}
-                  <td className="sa-notes-cell">{a.notes || '-'}</td>
+                  <td className="sa-notes-cell" title={a.notes || ''}>{a.notes || '-'}</td>
                 </tr>
               ))}
             </tbody>
